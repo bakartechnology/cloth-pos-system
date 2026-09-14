@@ -79,6 +79,53 @@ export interface BillItem {
   subtotal: number;
 }
 
+export interface ReturnItemDetail {
+  productId: string;
+  productName: string;
+  sku: string;
+  unit: UnitType;
+  quantityReturned: number;
+  originalPrice: number;
+  refundAmount: number;
+}
+
+export interface ReturnTransaction {
+  id: string;
+  originalInvoiceNumber: string;
+  date: string;
+  items: ReturnItemDetail[];
+  totalRefundAmount: number;
+  reason: string;
+  staffId: string;
+  staffName: string;
+  customerName?: string;
+  notes?: string;
+}
+
+export interface ExchangeTransaction {
+  id: string;
+  originalInvoiceNumber: string;
+  date: string;
+  returnedItem: {
+    productId: string;
+    productName: string;
+    quantity: number;
+    price: number;
+  };
+  newItem: {
+    productId: string;
+    productName: string;
+    quantity: number;
+    price: number;
+  };
+  priceDifference: number; // positive: customer pays, negative: refund due, 0: even
+  amountPaidOrRefunded: number;
+  staffId: string;
+  staffName: string;
+  customerName?: string;
+  notes?: string;
+}
+
 export interface Bill {
   id: string;
   invoiceNumber: string;
@@ -92,6 +139,7 @@ export interface Bill {
   paymentMethod: PaymentMethod;
   amountReceived: number;
   changeDue: number;
+  cardTransactionId?: string;
   staffId: string;
   staffName: string;
   customerId?: string;
@@ -99,7 +147,36 @@ export interface Bill {
   customerPhone?: string;
   customerBusiness?: string;
   notes?: string;
-  status: 'Completed' | 'Returned' | 'Draft';
+  status: 'Completed' | 'Returned' | 'Draft' | 'Partially Returned' | 'Exchanged';
+  returns?: ReturnTransaction[];
+  exchanges?: ExchangeTransaction[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type HardwareStatusType = 'connected' | 'ready' | 'simulated' | 'error' | 'disconnected';
+
+export interface HardwareStatus {
+  barcodeScanner: {
+    status: HardwareStatusType;
+    label: string;
+    description: string;
+  };
+  receiptPrinter: {
+    status: HardwareStatusType;
+    label: string;
+    description: string;
+  };
+  cashDrawer: {
+    status: HardwareStatusType;
+    label: string;
+    description: string;
+  };
+  cardTerminal: {
+    status: HardwareStatusType;
+    label: string;
+    description: string;
+  };
 }
 
 export type KhataTransactionType = 'DEBIT' | 'CREDIT';

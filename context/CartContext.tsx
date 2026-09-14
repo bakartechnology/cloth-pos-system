@@ -12,6 +12,7 @@ interface CartContextType {
   updateRetailQuantity: (productId: string, quantity: number) => void;
   updateRetailDiscount: (productId: string, discountPercent: number) => void;
   clearRetailCart: () => void;
+  restoreRetailCart: (items: CartItem[]) => void;
   retailSubtotal: number;
   retailDiscountTotal: number;
   retailGrandTotal: number;
@@ -158,6 +159,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setRetailCart([]);
   };
 
+  const restoreRetailCart = (items: CartItem[]) => {
+    setRetailCart(items);
+  };
+
   // ---------------- Wholesale Cart Operations ----------------
   const addToWholesaleCart = (product: Product, quantity = 1) => {
     if (product.stock <= 0) {
@@ -292,6 +297,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         updateRetailQuantity,
         updateRetailDiscount,
         clearRetailCart,
+        restoreRetailCart,
         retailSubtotal,
         retailDiscountTotal,
         retailGrandTotal,

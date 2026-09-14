@@ -21,6 +21,9 @@ const KEYS = {
   MOVEMENTS: 'anf_pos_stock_mov_v1',
   SETTINGS: 'anf_pos_settings_v1',
   ACTIVE_STAFF_ID: 'anf_pos_active_staff_id_v1',
+  RETAIL_INVOICE_SEQ: 'anf_pos_retail_invoice_seq_v1',
+  RETURNS: 'anf_pos_returns_v1',
+  EXCHANGES: 'anf_pos_exchanges_v1',
 };
 
 class StorageService {
@@ -130,6 +133,39 @@ class StorageService {
 
   setActiveStaffId(id: string) {
     this.setItem(KEYS.ACTIVE_STAFF_ID, id);
+  }
+
+  getNextRetailInvoiceNumber(): string {
+    const currentYear = new Date().getFullYear();
+    const currentSeq = this.getItem<number>(KEYS.RETAIL_INVOICE_SEQ, 1245);
+    const nextSeq = currentSeq + 1;
+    this.setItem(KEYS.RETAIL_INVOICE_SEQ, nextSeq);
+    const padded = String(nextSeq).padStart(6, '0');
+    return `RET-${currentYear}-${padded}`;
+  }
+
+  peekNextRetailInvoiceNumber(): string {
+    const currentYear = new Date().getFullYear();
+    const currentSeq = this.getItem<number>(KEYS.RETAIL_INVOICE_SEQ, 1245);
+    const nextSeq = currentSeq + 1;
+    const padded = String(nextSeq).padStart(6, '0');
+    return `RET-${currentYear}-${padded}`;
+  }
+
+  getReturns() {
+    return this.getItem(KEYS.RETURNS, []);
+  }
+
+  setReturns(data: unknown[]) {
+    this.setItem(KEYS.RETURNS, data);
+  }
+
+  getExchanges() {
+    return this.getItem(KEYS.EXCHANGES, []);
+  }
+
+  setExchanges(data: unknown[]) {
+    this.setItem(KEYS.EXCHANGES, data);
   }
 
   resetAllData() {

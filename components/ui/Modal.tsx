@@ -45,21 +45,21 @@ export function Modal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto no-print">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto print:static print:inset-auto print:p-0 print:overflow-visible">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity animate-in fade-in"
+        className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity animate-in fade-in no-print"
         onClick={onClose}
       />
 
       {/* Modal Surface */}
       <div
-        className={`relative w-full ${maxWidths[maxWidth]} bg-white rounded-2xl shadow-2xl border border-slate-200/80 z-10 my-auto overflow-hidden animate-in fade-in zoom-in-95 duration-150`}
+        className={`relative w-full ${maxWidths[maxWidth]} bg-white rounded-2xl shadow-2xl border border-slate-200/80 z-10 my-auto overflow-hidden animate-in fade-in zoom-in-95 duration-150 print:border-none print:shadow-none print:rounded-none print:static print:w-auto print:max-w-none print:m-0 print:overflow-visible`}
         role="dialog"
         aria-modal="true"
       >
         {(title || showCloseButton) && (
-          <div className="flex items-start justify-between px-6 pt-5 pb-4 border-b border-slate-100">
+          <div className="flex items-start justify-between px-6 pt-5 pb-4 border-b border-slate-100 no-print">
             <div>
               {title && <h2 className="text-lg font-bold text-slate-900 tracking-tight">{title}</h2>}
               {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
@@ -76,7 +76,7 @@ export function Modal({
           </div>
         )}
 
-        <div className="p-6 max-h-[80vh] overflow-y-auto">{children}</div>
+        <div className="p-6 max-h-[80vh] overflow-y-auto print:max-h-none print:p-0 print:overflow-visible">{children}</div>
       </div>
     </div>
   );

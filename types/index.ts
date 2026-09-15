@@ -146,6 +146,18 @@ export interface Bill {
   customerName?: string;
   customerPhone?: string;
   customerBusiness?: string;
+  clientId?: string;
+  clientName?: string;
+  bankDetails?: {
+    bankId: string;
+    bankName: string;
+    accountTitle: string;
+    accountNumber: string;
+    iban: string;
+    confirmedByStaffId: string;
+    confirmedByStaffName: string;
+    confirmedAt: string;
+  };
   notes?: string;
   status: 'Completed' | 'Returned' | 'Draft' | 'Partially Returned' | 'Exchanged';
   returns?: ReturnTransaction[];
@@ -283,6 +295,16 @@ export interface StockMovement {
   notes?: string;
 }
 
+export interface BankAccount {
+  id: string;
+  bankName: string;
+  accountTitle: string;
+  accountNumber: string;
+  iban: string;
+  branchName?: string;
+  isActive: boolean;
+}
+
 export interface StoreSettings {
   storeName: string;
   storeTagline: string;
@@ -297,4 +319,22 @@ export interface StoreSettings {
   lowStockThreshold: number;
   receiptFooterMessage: string;
   dataRetentionYears: number;
+  bankAccounts?: BankAccount[];
 }
+
+export interface WholesaleSessionDraft {
+  id: string;
+  staffId: string;
+  timestamp: string;
+  customerName?: string;
+  selectedClient?: Customer | null;
+  cartItems: CartItem[];
+  paymentMethod: PaymentMethod;
+  amountReceived: number;
+  selectedBankId?: string;
+  bankPaymentConfirmed?: boolean;
+  notes?: string;
+  subtotal: number;
+  grandTotal: number;
+}
+

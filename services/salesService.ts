@@ -33,10 +33,12 @@ export const salesService = {
     if (type === 'Retail') {
       return storageService.getNextRetailInvoiceNumber();
     }
-    const prefix = type === 'Wholesale' ? 'WHL' : 'KHT';
+    if (type === 'Wholesale') {
+      return storageService.getNextWholesaleInvoiceNumber();
+    }
+    const currentYear = new Date().getFullYear();
     const random = Math.floor(10000 + Math.random() * 90000);
-    const dateStr = new Date().toISOString().slice(2, 7).replace('-', '');
-    return `${prefix}-${dateStr}-${random}`;
+    return `KHT-${currentYear}-${random}`;
   },
 
   /**
@@ -46,8 +48,10 @@ export const salesService = {
     if (type === 'Retail') {
       return storageService.peekNextRetailInvoiceNumber();
     }
-    const prefix = type === 'Wholesale' ? 'WHL' : 'KHT';
-    return `${prefix}-${new Date().getFullYear()}-000000`;
+    if (type === 'Wholesale') {
+      return storageService.peekNextWholesaleInvoiceNumber();
+    }
+    return `KHT-${new Date().getFullYear()}-000000`;
   },
 
   /**
@@ -65,7 +69,9 @@ export const salesService = {
         : true;
 
       const matchesCustomer = query.customerName
-        ? (bill.customerName || '').toLowerCase().includes(query.customerName.toLowerCase().trim())
+        ? ((bill.customerName || '').toLowerCase().includes(query.customerName.toLowerCase().trim()) ||
+           (bill.clientName || '').toLowerCase().includes(query.customerName.toLowerCase().trim()) ||
+           (bill.customerBusiness || '').toLowerCase().includes(query.customerName.toLowerCase().trim()))
         : true;
 
       // If both filters are provided, match either or both
@@ -91,7 +97,10 @@ export const salesService = {
     customer?: Customer;
     customerName?: string;
     customerPhone?: string;
+    clientId?: string;
+    clientName?: string;
     cardTransactionId?: string;
+    bankDetails?: Bill['bankDetails'];
     notes?: string;
   }): Bill {
     const subtotal = params.cartItems.reduce((sum, item) => sum + item.lineTotal, 0);
@@ -110,8 +119,10 @@ export const salesService = {
       subtotal: item.lineTotal,
     }));
 
-    const finalCustomerName = params.customer?.name || params.customerName?.trim() || undefined;
-    const finalCustomerPhone = params.customer?.phone || params.customerPhone?.trim() || undefined;
+    const finalCustomerName = params.customerName?.trim() || params.customer?.name || undefined;
+    const finalCustomerPhone = params.customerPhone?.trim() || params.customer?.phone || undefined;
+    const finalClientId = params.clientId || params.customer?.id;
+    const finalClientName = params.clientName || params.customer?.businessName || params.customer?.name;
 
     const bill: Bill = {
       id: `bil-${Date.now().toString().slice(-6)}`,
@@ -127,12 +138,15 @@ export const salesService = {
       amountReceived: params.amountReceived,
       changeDue,
       cardTransactionId: params.cardTransactionId,
+      bankDetails: params.bankDetails,
       staffId: params.staffId,
       staffName: params.staffName,
       customerId: params.customer?.id,
       customerName: finalCustomerName,
       customerPhone: finalCustomerPhone,
       customerBusiness: params.customer?.businessName,
+      clientId: finalClientId,
+      clientName: finalClientName,
       notes: params.notes,
       status: 'Completed',
       createdAt: new Date().toISOString(),

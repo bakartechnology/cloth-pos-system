@@ -44,6 +44,44 @@ export const INITIAL_SETTINGS: StoreSettings = {
   lowStockThreshold: 10,
   receiptFooterMessage: 'Thank you for choosing Al-Noor Fabrics. Goods once cut or sold cannot be returned without original receipt within 7 days.',
   dataRetentionYears: 5,
+  bankAccounts: [
+    {
+      id: 'bnk-001',
+      bankName: 'Meezan Bank Limited',
+      accountTitle: 'AL-NOOR FABRICS & TEXTILES',
+      accountNumber: '02190104829102',
+      iban: 'PK62MEZN0002190104829102',
+      branchName: 'Liberty Market Branch, Lahore',
+      isActive: true,
+    },
+    {
+      id: 'bnk-002',
+      bankName: 'Habib Bank Limited (HBL)',
+      accountTitle: 'AL-NOOR FABRICS WHOLESALE',
+      accountNumber: '10489920194012',
+      iban: 'PK36HABB0010489920194012',
+      branchName: 'Main Gulberg Branch, Lahore',
+      isActive: true,
+    },
+    {
+      id: 'bnk-003',
+      bankName: 'United Bank Limited (UBL)',
+      accountTitle: 'AL-NOOR FABRICS',
+      accountNumber: '22091847192831',
+      iban: 'PK55UNIL0022091847192831',
+      branchName: 'Model Town Branch, Lahore',
+      isActive: true,
+    },
+    {
+      id: 'bnk-004',
+      bankName: 'Allied Bank Limited (ABL)',
+      accountTitle: 'AL-NOOR TEXTILES',
+      accountNumber: '00100482910291',
+      iban: 'PK89ABPA0000100482910291',
+      branchName: 'Anarkali Branch, Lahore',
+      isActive: true,
+    },
+  ],
 };
 
 export const INITIAL_STAFF: Staff[] = [

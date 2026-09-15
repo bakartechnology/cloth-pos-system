@@ -90,9 +90,15 @@ body {
     display: none !important;
   }
 
-  /* Only printable receipt container and its descendants remain visible */
+  /* Only printable documents and their descendants remain visible */
   #printable-receipt,
-  #printable-receipt * {
+  #printable-receipt *,
+  #printable-wholesale-invoice,
+  #printable-wholesale-invoice *,
+  #printable-wholesale-return,
+  #printable-wholesale-return *,
+  #printable-wholesale-exchange,
+  #printable-wholesale-exchange * {
     visibility: visible !important;
   }
 
@@ -123,9 +129,27 @@ body {
     font-size: 11px !important;
   }
 
+  /* Dedicated A4 Commercial Invoices & Vouchers */
+  #printable-wholesale-invoice,
+  #printable-wholesale-return,
+  #printable-wholesale-exchange {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 10mm !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 12px !important;
+  }
+
   @page {
     size: auto;
-    margin: 0;
+    margin: 6mm;
   }
 }
 

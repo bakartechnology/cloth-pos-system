@@ -22,6 +22,9 @@ const KEYS = {
   SETTINGS: 'anf_pos_settings_v1',
   ACTIVE_STAFF_ID: 'anf_pos_active_staff_id_v1',
   RETAIL_INVOICE_SEQ: 'anf_pos_retail_invoice_seq_v1',
+  WHOLESALE_INVOICE_SEQ: 'anf_pos_wholesale_invoice_seq_v1',
+  WHOLESALE_RETURN_SEQ: 'anf_pos_wholesale_return_seq_v1',
+  WHOLESALE_EXCHANGE_SEQ: 'anf_pos_wholesale_exchange_seq_v1',
   RETURNS: 'anf_pos_returns_v1',
   EXCHANGES: 'anf_pos_exchanges_v1',
 };
@@ -152,6 +155,41 @@ class StorageService {
     return `RET-${currentYear}-${padded}`;
   }
 
+  getNextWholesaleInvoiceNumber(): string {
+    const currentYear = new Date().getFullYear();
+    const currentSeq = this.getItem<number>(KEYS.WHOLESALE_INVOICE_SEQ, 1000);
+    const nextSeq = currentSeq + 1;
+    this.setItem(KEYS.WHOLESALE_INVOICE_SEQ, nextSeq);
+    const padded = String(nextSeq).padStart(6, '0');
+    return `WHO-${currentYear}-${padded}`;
+  }
+
+  peekNextWholesaleInvoiceNumber(): string {
+    const currentYear = new Date().getFullYear();
+    const currentSeq = this.getItem<number>(KEYS.WHOLESALE_INVOICE_SEQ, 1000);
+    const nextSeq = currentSeq + 1;
+    const padded = String(nextSeq).padStart(6, '0');
+    return `WHO-${currentYear}-${padded}`;
+  }
+
+  getNextWholesaleReturnNumber(): string {
+    const currentYear = new Date().getFullYear();
+    const currentSeq = this.getItem<number>(KEYS.WHOLESALE_RETURN_SEQ, 100);
+    const nextSeq = currentSeq + 1;
+    this.setItem(KEYS.WHOLESALE_RETURN_SEQ, nextSeq);
+    const padded = String(nextSeq).padStart(6, '0');
+    return `RET-WHO-${currentYear}-${padded}`;
+  }
+
+  getNextWholesaleExchangeNumber(): string {
+    const currentYear = new Date().getFullYear();
+    const currentSeq = this.getItem<number>(KEYS.WHOLESALE_EXCHANGE_SEQ, 100);
+    const nextSeq = currentSeq + 1;
+    this.setItem(KEYS.WHOLESALE_EXCHANGE_SEQ, nextSeq);
+    const padded = String(nextSeq).padStart(6, '0');
+    return `EXC-WHO-${currentYear}-${padded}`;
+  }
+
   getReturns() {
     return this.getItem(KEYS.RETURNS, []);
   }
@@ -180,6 +218,10 @@ class StorageService {
     localStorage.removeItem(KEYS.MOVEMENTS);
     localStorage.removeItem(KEYS.SETTINGS);
     localStorage.removeItem(KEYS.ACTIVE_STAFF_ID);
+    localStorage.removeItem(KEYS.RETAIL_INVOICE_SEQ);
+    localStorage.removeItem(KEYS.WHOLESALE_INVOICE_SEQ);
+    localStorage.removeItem(KEYS.WHOLESALE_RETURN_SEQ);
+    localStorage.removeItem(KEYS.WHOLESALE_EXCHANGE_SEQ);
     window.location.reload();
   }
 }

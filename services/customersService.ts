@@ -14,6 +14,67 @@ export const customersService = {
     return storageService.getCustomers().filter(c => c.type === type);
   },
 
+  searchWholesaleClients(query: string): Customer[] {
+    const clients = storageService.getCustomers().filter(c => c.type === 'Wholesale' || c.type === 'Khata');
+    const q = (query || '').toLowerCase().trim();
+    if (!q) return clients;
+
+    return clients.filter(c =>
+      (c.businessName && c.businessName.toLowerCase().includes(q)) ||
+      c.name.toLowerCase().includes(q) ||
+      (c.phone && c.phone.includes(q)) ||
+      (c.city && c.city.toLowerCase().includes(q))
+    );
+  },
+
+  searchCustomers(query: string): Customer[] {
+    const all = storageService.getCustomers();
+    const q = (query || '').toLowerCase().trim();
+    if (!q) return all;
+
+    return all.filter(c =>
+      c.name.toLowerCase().includes(q) ||
+      (c.phone && c.phone.includes(q)) ||
+      (c.businessName && c.businessName.toLowerCase().includes(q)) ||
+      (c.city && c.city.toLowerCase().includes(q))
+    );
+  },
+
+  findOrCreateCustomerByName(name: string, phone?: string): Customer {
+    const cleanName = (name || '').trim();
+    if (!cleanName) {
+      throw new Error('Customer name cannot be empty');
+    }
+
+    const customers = storageService.getCustomers();
+    const existing = customers.find(c => c.name.toLowerCase().trim() === cleanName.toLowerCase());
+    if (existing) {
+      // If phone provided and wasn't set, update phone
+      if (phone && !existing.phone) {
+        return this.update(existing.id, { phone }) || existing;
+      }
+      return existing;
+    }
+
+    // Create new customer record persistently without duplicates
+    const newCustomer: Customer = {
+      id: `cst-${Date.now().toString().slice(-6)}`,
+      name: cleanName,
+      phone: phone || '',
+      address: 'Counter Walk-in / Wholesale Collector',
+      city: 'Lahore',
+      type: 'Retail',
+      creditLimit: 0,
+      currentBalance: 0,
+      totalPurchased: 0,
+      totalPaid: 0,
+      createdAt: new Date().toISOString().split('T')[0],
+    };
+
+    storageService.setCustomers([newCustomer, ...customers]);
+    return newCustomer;
+  },
+
   add(customerData: Omit<Customer, 'id' | 'createdAt' | 'currentBalance' | 'totalPurchased' | 'totalPaid'>): Customer {
     const customers = storageService.getCustomers();
     const newCustomer: Customer = {

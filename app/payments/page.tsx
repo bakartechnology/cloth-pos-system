@@ -378,7 +378,7 @@ export default function PaymentCollectionPage() {
         >
           {receiptRecord && (
             <div className="space-y-4 text-xs font-mono">
-              <div className="p-4 border border-dashed border-slate-300 rounded-xl bg-slate-50/50 space-y-2 text-slate-900">
+              <div id="printable-payment-receipt" className="printable-area p-4 border border-dashed border-slate-300 rounded-xl bg-slate-50/50 space-y-2 text-slate-900 print:border-none print:p-2">
                 <div className="text-center pb-2 border-b border-dashed border-slate-300">
                   <h3 className="font-bold text-sm">AL-NOOR FABRICS</h3>
                   <p className="text-[10px] text-slate-500">Official Field Recovery Voucher</p>

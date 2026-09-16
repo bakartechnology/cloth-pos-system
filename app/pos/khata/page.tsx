@@ -8,6 +8,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 import { KhataStatementPrint } from '@/components/print/KhataStatementPrint';
+import { WholesaleInvoicePrint } from '@/components/print/WholesaleInvoicePrint';
 import {
   BookOpen,
   Search,
@@ -27,7 +28,7 @@ import { productsService } from '@/services/productsService';
 import { salesService } from '@/services/salesService';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
-import { Customer, Product, KhataTransaction, CartItem } from '@/types';
+import { Customer, Product, KhataTransaction, CartItem, Bill } from '@/types';
 
 export default function KhataPOSPage() {
   const { currentStaff } = useAuth();
@@ -43,6 +44,7 @@ export default function KhataPOSPage() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [notes, setNotes] = useState('');
   const [isStatementModalOpen, setIsStatementModalOpen] = useState(false);
+  const [selectedBillForPrint, setSelectedBillForPrint] = useState<Bill | null>(null);
 
   const selectedCustomer = khataCustomers.find(c => c.id === selectedCustomerId) || khataCustomers[0];
   const transactions = selectedCustomer
@@ -153,7 +155,7 @@ export default function KhataPOSPage() {
     }
 
     // Complete sale on Khata credit
-    salesService.completeSale({
+    const bill = salesService.completeSale({
       saleType: 'Khata',
       cartItems: cart,
       paymentMethod: 'Credit/Khata',
@@ -178,6 +180,8 @@ export default function KhataPOSPage() {
     const clients = customersService.getAll().filter(c => c.type === 'Khata' || c.creditLimit > 0);
     setKhataCustomers(clients);
     setProducts(productsService.getAll());
+    // Prompt to view and print customer bill
+    setSelectedBillForPrint(bill);
   };
 
   return (
@@ -484,8 +488,30 @@ export default function KhataPOSPage() {
                             year: 'numeric',
                           })}
                         </td>
-                        <td className="py-3 px-4 font-mono font-semibold text-blue-600">
-                          {tx.invoiceId || 'RECOVERY'}
+                        <td className="py-3 px-4 font-mono font-semibold">
+                          {tx.invoiceId ? (
+                            <button
+                              onClick={() => {
+                                const b = salesService.getBillById(tx.invoiceId!);
+                                if (b) {
+                                  setSelectedBillForPrint(b);
+                                } else {
+                                  toast({
+                                    title: 'Invoice Record',
+                                    description: `Invoice ${tx.invoiceId} ledger entry.`,
+                                    type: 'info',
+                                  });
+                                }
+                              }}
+                              className="text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 cursor-pointer"
+                              title="Click to view and print customer bill"
+                            >
+                              <Receipt className="w-3.5 h-3.5" />
+                              {tx.invoiceId}
+                            </button>
+                          ) : (
+                            <span className="text-slate-500">RECOVERY</span>
+                          )}
                         </td>
                         <td className="py-3 px-4 text-slate-800">{tx.description}</td>
                         <td className="py-3 px-4 text-right font-bold text-rose-600">
@@ -519,6 +545,21 @@ export default function KhataPOSPage() {
               customer={selectedCustomer}
               transactions={transactions}
               onClose={() => setIsStatementModalOpen(false)}
+            />
+          )}
+        </Modal>
+
+        {/* Modal: Customer Bill Invoice Print */}
+        <Modal
+          isOpen={!!selectedBillForPrint}
+          onClose={() => setSelectedBillForPrint(null)}
+          title="Customer Invoice / Bill"
+          maxWidth="4xl"
+        >
+          {selectedBillForPrint && (
+            <WholesaleInvoicePrint
+              bill={selectedBillForPrint}
+              onClose={() => setSelectedBillForPrint(null)}
             />
           )}
         </Modal>

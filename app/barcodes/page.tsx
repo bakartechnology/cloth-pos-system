@@ -28,6 +28,7 @@ export default function BarcodesPage() {
   const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [barcodeType, setBarcodeType] = useState<'retail' | 'wholesale'>('retail');
   const [labelCount, setLabelCount] = useState<number>(12);
+  const [includePrice, setIncludePrice] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [copied, setCopied] = useState(false);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
@@ -210,26 +211,40 @@ export default function BarcodesPage() {
                       {barcodeValue}
                     </div>
 
-                    <div className="text-base font-black text-slate-950 mt-2">
-                      Rs. {priceValue.toLocaleString()}
-                    </div>
+                    {includePrice && (
+                      <div className="text-base font-black text-slate-950 mt-2">
+                        {priceValue.toLocaleString()}
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 {/* Print Config & Copy Actions */}
                 <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="text-slate-500 font-medium">Sheet Multi-Label Count:</span>
-                    <select
-                      value={labelCount}
-                      onChange={e => setLabelCount(parseInt(e.target.value, 10))}
-                      className="border border-slate-200 rounded-lg px-2.5 py-1.5 bg-slate-50 font-bold text-slate-800 focus:outline-none"
-                    >
-                      <option value={6}>6 Labels (Sample Sheet)</option>
-                      <option value={12}>12 Labels (Standard Sheet)</option>
-                      <option value={24}>24 Labels (Full A4 Sheet)</option>
-                      <option value={48}>48 Labels (Bulk Roll)</option>
-                    </select>
+                  <div className="flex flex-wrap items-center gap-3 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-500 font-medium">Labels:</span>
+                      <select
+                        value={labelCount}
+                        onChange={e => setLabelCount(parseInt(e.target.value, 10))}
+                        className="border border-slate-200 rounded-lg px-2.5 py-1.5 bg-slate-50 font-bold text-slate-800 focus:outline-none"
+                      >
+                        <option value={6}>6 Labels (Sample Sheet)</option>
+                        <option value={12}>12 Labels (Standard Sheet)</option>
+                        <option value={24}>24 Labels (Full A4 Sheet)</option>
+                        <option value={48}>48 Labels (Bulk Roll)</option>
+                      </select>
+                    </div>
+
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none text-slate-600 font-medium">
+                      <input
+                        type="checkbox"
+                        checked={includePrice}
+                        onChange={e => setIncludePrice(e.target.checked)}
+                        className="rounded text-blue-600 focus:ring-blue-500"
+                      />
+                      <span>Print Price Number</span>
+                    </label>
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -265,6 +280,7 @@ export default function BarcodesPage() {
               product={selectedProduct}
               type={barcodeType}
               count={labelCount}
+              initialPriceMode="with-rs"
               onClose={() => setIsPrintModalOpen(false)}
             />
           )}

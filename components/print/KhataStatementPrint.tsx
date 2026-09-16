@@ -45,7 +45,10 @@ export function KhataStatementPrint({
       </div>
 
       {/* Statement Container */}
-      <div className="invoice-a4-container w-full bg-white p-8 sm:p-12 border border-slate-200 rounded-xl shadow-sm text-slate-900">
+      <div
+        id="printable-khata-statement"
+        className="printable-area invoice-a4-container w-full bg-white p-8 sm:p-12 border border-slate-200 rounded-xl shadow-sm text-slate-900 print:p-0 print:border-none print:shadow-none"
+      >
         {/* Top Branding */}
         <div className="flex justify-between items-start border-b border-slate-200 pb-6 mb-6">
           <div>

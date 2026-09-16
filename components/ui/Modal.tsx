@@ -54,7 +54,7 @@ export function Modal({
 
       {/* Modal Surface */}
       <div
-        className={`relative w-full ${maxWidths[maxWidth]} bg-white rounded-2xl shadow-2xl border border-slate-200/80 z-10 my-auto overflow-hidden animate-in fade-in zoom-in-95 duration-150 print:border-none print:shadow-none print:rounded-none print:static print:w-auto print:max-w-none print:m-0 print:overflow-visible`}
+        className={`relative w-full ${maxWidths[maxWidth]} bg-white rounded-2xl shadow-2xl border border-slate-200/80 z-10 my-auto overflow-hidden animate-in fade-in zoom-in-95 duration-150 print:border-none print:shadow-none print:rounded-none print:static print:w-auto print:max-w-none print:m-0 print:overflow-visible print:transform-none`}
         role="dialog"
         aria-modal="true"
       >

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Badge } from '@/components/ui/Badge';
-import { Lock, Save, Sparkles, AlertCircle } from 'lucide-react';
+import { Lock, Save } from 'lucide-react';
 import { productsService } from '@/services/productsService';
 import { inventoryService } from '@/services/inventoryService';
 import { useAuth } from '@/context/AuthContext';

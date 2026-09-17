@@ -16,11 +16,7 @@ import {
   Barcode,
   Trash2,
   Edit2,
-  Filter,
   ArrowUpDown,
-  Download,
-  Printer,
-  Sparkles,
   Tag,
 } from 'lucide-react';
 import Link from 'next/link';

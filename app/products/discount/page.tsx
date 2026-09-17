@@ -13,10 +13,8 @@ import {
   ArrowLeft,
   CheckCircle2,
   Search,
-  Sparkles,
   SlidersHorizontal,
   X,
-  Package,
 } from 'lucide-react';
 import Link from 'next/link';
 import { productsService } from '@/services/productsService';

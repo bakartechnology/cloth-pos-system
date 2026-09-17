@@ -119,6 +119,25 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
     },
   ];
 
+  const allNavHrefs = navSections.flatMap(s => s.items.map(i => i.href));
+
+  const isItemActive = (itemHref: string): boolean => {
+    if (pathname === itemHref) return true;
+    if (allNavHrefs.includes(pathname)) return false;
+
+    if (itemHref !== '/dashboard' && pathname.startsWith(itemHref + '/')) {
+      const otherLongerMatch = allNavHrefs.some(
+        other =>
+          other !== itemHref &&
+          other.length > itemHref.length &&
+          pathname.startsWith(other + '/')
+      );
+      return !otherLongerMatch;
+    }
+
+    return false;
+  };
+
   const sidebarContent = (
     <div className="flex flex-col h-full bg-slate-950 text-slate-200 border-r border-slate-800 select-none">
       {/* Brand Header */}
@@ -174,9 +193,7 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
               )}
               <div className="space-y-1">
                 {visibleItems.map((item, iIdx) => {
-                  const isActive =
-                    pathname === item.href ||
-                    (item.href !== '/dashboard' && pathname.startsWith(item.href));
+                  const isActive = isItemActive(item.href);
                   const Icon = item.icon;
 
                   return (

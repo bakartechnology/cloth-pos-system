@@ -7,14 +7,10 @@ import { Button } from '@/components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import {
-  Layers,
   Search,
   AlertTriangle,
-  Package,
   TrendingUp,
   Plus,
-  RefreshCw,
-  Sparkles,
   Edit2,
   Tag,
 } from 'lucide-react';

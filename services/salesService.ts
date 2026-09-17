@@ -109,9 +109,10 @@ export const salesService = {
     // Line totals sum is already net of product discounts: sum((price - discountPerUnit) * quantity)
     const lineTotalsSum = params.cartItems.reduce((sum, item) => sum + item.lineTotal, 0);
     // Total discount across the entire cart
-    const discountTotal = params.discountTotal !== undefined && params.discountTotal >= 0
+    const calculatedDiscount = Math.max(0, subtotal - lineTotalsSum);
+    const discountTotal = params.discountTotal !== undefined && params.discountTotal > 0
       ? params.discountTotal
-      : Math.max(0, subtotal - lineTotalsSum);
+      : calculatedDiscount;
     // Grand total: lineTotalsSum + taxTotal (eliminates double discount deduction)
     const grandTotal = Math.max(0, lineTotalsSum + params.taxTotal);
     const changeDue = params.paymentMethod === 'Cash' ? Math.max(0, params.amountReceived - grandTotal) : 0;
@@ -141,7 +142,7 @@ export const salesService = {
       date: new Date().toISOString(),
       items: billItems,
       subtotal,
-      discountTotal: params.discountTotal,
+      discountTotal,
       taxTotal: params.taxTotal,
       grandTotal,
       paymentMethod: params.paymentMethod,

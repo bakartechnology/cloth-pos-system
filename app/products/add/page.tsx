@@ -9,12 +9,10 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import {
-  PackagePlus,
   Barcode as BarcodeIcon,
   Sparkles,
   ArrowLeft,
   CheckCircle2,
-  Image as ImageIcon,
 } from 'lucide-react';
 import Link from 'next/link';
 import { productsService } from '@/services/productsService';

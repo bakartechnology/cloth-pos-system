@@ -79,16 +79,21 @@ export default function KhataPOSPage() {
       return;
     }
 
+    const discountPerUnit = prod.wholesaleDiscount || 0;
+    const netUnitPrice = Math.max(0, prod.wholesalePrice - discountPerUnit);
+
     setCart(prev => {
       const idx = prev.findIndex(i => i.product.id === prod.id);
       if (idx !== -1) {
         const item = prev[idx];
         const newQty = item.quantity + 1;
         const updated = [...prev];
+        const itemDiscount = item.discountPerUnit || 0;
+        const itemNet = Math.max(0, item.price - itemDiscount);
         updated[idx] = {
           ...item,
           quantity: newQty,
-          lineTotal: item.price * newQty,
+          lineTotal: itemNet * newQty,
         };
         return updated;
       } else {
@@ -98,8 +103,9 @@ export default function KhataPOSPage() {
             product: prod,
             quantity: 1,
             price: prod.wholesalePrice, // Khata commercial clients receive wholesale pricing
+            discountPerUnit,
             discountPercent: 0,
-            lineTotal: prod.wholesalePrice,
+            lineTotal: netUnitPrice,
           },
         ];
       }
@@ -107,7 +113,10 @@ export default function KhataPOSPage() {
 
     toast({
       title: 'Added to Khata Bill',
-      description: `${prod.name} added at wholesale rate Rs. ${prod.wholesalePrice.toLocaleString()}`,
+      description:
+        discountPerUnit > 0
+          ? `${prod.name} added at Rs. ${prod.wholesalePrice.toLocaleString()} (-Rs. ${discountPerUnit.toLocaleString()} disc => Rs. ${netUnitPrice.toLocaleString()})`
+          : `${prod.name} added at wholesale rate Rs. ${prod.wholesalePrice.toLocaleString()}`,
       type: 'success',
     });
   };
@@ -123,10 +132,12 @@ export default function KhataPOSPage() {
           if (i.product.id === prodId) {
             const newQty = i.quantity + delta;
             if (newQty <= 0) return null;
+            const itemDiscount = i.discountPerUnit || 0;
+            const itemNet = Math.max(0, i.price - itemDiscount);
             return {
               ...i,
               quantity: newQty,
-              lineTotal: i.price * newQty,
+              lineTotal: itemNet * newQty,
             };
           }
           return i;
@@ -135,7 +146,9 @@ export default function KhataPOSPage() {
     );
   };
 
+  const subtotal = cart.reduce((sum, i) => sum + i.price * i.quantity, 0);
   const cartTotal = cart.reduce((sum, i) => sum + i.lineTotal, 0);
+  const discountTotal = Math.max(0, subtotal - cartTotal);
 
   // Remaining credit limit check
   const availableCredit = selectedCustomer
@@ -160,7 +173,7 @@ export default function KhataPOSPage() {
       cartItems: cart,
       paymentMethod: 'Credit/Khata',
       amountReceived: 0,
-      discountTotal: 0,
+      discountTotal,
       taxTotal: 0,
       staffId: currentStaff.id,
       staffName: currentStaff.name,
@@ -362,9 +375,16 @@ export default function KhataPOSPage() {
                         </div>
                       </div>
                       <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-slate-100">
-                        <span className="font-black text-amber-700">
-                          Rs. {prod.wholesalePrice.toLocaleString()}
-                        </span>
+                        <div>
+                          <span className="font-black text-amber-700">
+                            Rs. {Math.max(0, prod.wholesalePrice - (prod.wholesaleDiscount || 0)).toLocaleString()}
+                          </span>
+                          {(prod.wholesaleDiscount || 0) > 0 && (
+                            <span className="text-[10px] text-emerald-600 block font-medium">
+                              Save Rs. {(prod.wholesaleDiscount || 0).toLocaleString()}
+                            </span>
+                          )}
+                        </div>
                         <span className="w-5 h-5 rounded-md bg-amber-50 text-amber-700 flex items-center justify-center font-bold">
                           +
                         </span>

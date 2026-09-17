@@ -1,5 +1,6 @@
 import {
   Bill,
+  BillItem,
   CartItem,
   SaleType,
   PaymentMethod,
@@ -103,18 +104,27 @@ export const salesService = {
     bankDetails?: Bill['bankDetails'];
     notes?: string;
   }): Bill {
-    const subtotal = params.cartItems.reduce((sum, item) => sum + item.lineTotal, 0);
-    const grandTotal = Math.max(0, subtotal - params.discountTotal + params.taxTotal);
+    // Original subtotal (sum of original unit price * quantity)
+    const subtotal = params.cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    // Line totals sum is already net of product discounts: sum((price - discountPerUnit) * quantity)
+    const lineTotalsSum = params.cartItems.reduce((sum, item) => sum + item.lineTotal, 0);
+    // Total discount across the entire cart
+    const discountTotal = params.discountTotal !== undefined && params.discountTotal >= 0
+      ? params.discountTotal
+      : Math.max(0, subtotal - lineTotalsSum);
+    // Grand total: lineTotalsSum + taxTotal (eliminates double discount deduction)
+    const grandTotal = Math.max(0, lineTotalsSum + params.taxTotal);
     const changeDue = params.paymentMethod === 'Cash' ? Math.max(0, params.amountReceived - grandTotal) : 0;
     const invoiceNumber = this.generateInvoiceNumber(params.saleType);
 
-    const billItems = params.cartItems.map(item => ({
+    const billItems: BillItem[] = params.cartItems.map(item => ({
       productId: item.product.id,
       productName: item.product.name,
       sku: item.product.sku,
       unit: item.product.unit,
       quantity: item.quantity,
       price: item.price,
+      discountPerUnit: item.discountPerUnit || 0,
       discountPercent: item.discountPercent,
       subtotal: item.lineTotal,
     }));

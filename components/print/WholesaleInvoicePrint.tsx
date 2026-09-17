@@ -127,7 +127,7 @@ export function WholesaleInvoicePrint({ bill, onClose }: WholesaleInvoicePrintPr
               <th className="py-2.5 px-2 font-bold uppercase tracking-wider">Unit</th>
               <th className="py-2.5 px-2 font-bold uppercase tracking-wider text-center">Qty</th>
               <th className="py-2.5 px-2 font-bold uppercase tracking-wider text-right">Wholesale Rate</th>
-              <th className="py-2.5 px-2 font-bold uppercase tracking-wider text-right">Disc %</th>
+              <th className="py-2.5 px-2 font-bold uppercase tracking-wider text-right">Disc</th>
               <th className="py-2.5 px-2 font-bold uppercase tracking-wider text-right">Net Amount</th>
             </tr>
           </thead>
@@ -141,7 +141,11 @@ export function WholesaleInvoicePrint({ bill, onClose }: WholesaleInvoicePrintPr
                 <td className="py-3 px-2 text-center font-bold text-slate-900">{item.quantity}</td>
                 <td className="py-3 px-2 text-right font-mono">Rs. {item.price.toLocaleString()}</td>
                 <td className="py-3 px-2 text-right text-slate-500 font-mono">
-                  {item.discountPercent > 0 ? `${item.discountPercent}%` : '—'}
+                  {item.discountPerUnit && item.discountPerUnit > 0
+                    ? `-Rs. ${item.discountPerUnit.toLocaleString()}`
+                    : item.discountPercent > 0
+                    ? `${item.discountPercent}%`
+                    : '—'}
                 </td>
                 <td className="py-3 px-2 text-right font-mono font-bold text-slate-900">
                   Rs. {item.subtotal.toLocaleString()}
@@ -265,7 +269,7 @@ export function WholesaleInvoicePrint({ bill, onClose }: WholesaleInvoicePrintPr
 
               {bill.discountTotal > 0 && (
                 <div className="flex justify-between text-emerald-700">
-                  <span>Volume Trade Discount:</span>
+                  <span>Wholesale Discount:</span>
                   <span className="font-mono font-bold">-Rs. {bill.discountTotal.toLocaleString()}</span>
                 </div>
               )}

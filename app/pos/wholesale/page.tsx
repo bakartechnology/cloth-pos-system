@@ -295,8 +295,8 @@ export default function WholesalePOSPage() {
           title: `Scanned: ${matched.name}`,
           description:
             discount > 0
-              ? `Wholesale Price Rs. ${matched.wholesalePrice.toLocaleString()} − Wholesale Discount Rs. ${discount.toLocaleString()} = Rs. ${finalPrice.toLocaleString()}`
-              : `Wholesale Price: Rs. ${matched.wholesalePrice.toLocaleString()}`,
+              ? `Price: Rs. ${matched.wholesalePrice.toLocaleString()} | Discount: − Rs. ${discount.toLocaleString()} | Total: Rs. ${finalPrice.toLocaleString()}`
+              : `Price: Rs. ${matched.wholesalePrice.toLocaleString()}`,
           type: 'success',
         });
       }
@@ -675,17 +675,19 @@ export default function WholesalePOSPage() {
 
                       <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between">
                         <div>
-                          <div className="text-[9px] text-slate-400 line-through">
-                            Retail: Rs. {prod.retailPrice.toLocaleString()}
-                          </div>
-                          <div className="text-xs font-black text-cyan-700">
+                          <div className="text-xs font-black text-cyan-900 font-mono">
                             Rs. {finalWholesale.toLocaleString()}
                           </div>
-                          {hasDiscount && (
-                            <div className="text-[9px] text-emerald-600 font-medium">
-                              Disc: -Rs. {(prod.wholesaleDiscount || 0).toLocaleString()}
+                          {hasDiscount ? (
+                            <div className="flex items-center gap-1.5 text-[10px] mt-0.5">
+                              <span className="text-slate-400 line-through font-mono">
+                                Rs. {prod.wholesalePrice.toLocaleString()}
+                              </span>
+                              <span className="text-emerald-600 font-bold font-mono">
+                                − Rs. {(prod.wholesaleDiscount || 0).toLocaleString()}
+                              </span>
                             </div>
-                          )}
+                          ) : null}
                         </div>
                         <div
                           className={`w-6 h-6 rounded-md flex items-center justify-center text-xs transition-colors ${
@@ -742,7 +744,7 @@ export default function WholesalePOSPage() {
                   const netUnit = Math.max(0, item.price - unitDiscount);
 
                   return (
-                    <div key={item.product.id} className="py-2.5 space-y-1.5">
+                    <div key={item.product.id} className="p-3 bg-slate-50/70 border border-slate-200/80 rounded-xl space-y-2 mb-2">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5 flex-wrap">
@@ -759,35 +761,55 @@ export default function WholesalePOSPage() {
                               {itemSeason === 'Winter' ? '❄️ Winter' : '☀️ Summer'}
                             </span>
                           </div>
-                          <div className="text-[10px] text-cyan-700 font-semibold mt-0.5">
-                            Rs. {item.price.toLocaleString()} wholesale / {item.product.unit}
-                          </div>
-                          {unitDiscount > 0 && (
-                            <div className="text-[10px] text-emerald-600 font-semibold">
-                              Wholesale Discount: -Rs. {unitDiscount.toLocaleString()} (Net: Rs. {netUnit.toLocaleString()})
+
+                          {/* Wholesale Price & Discount Breakdown */}
+                          <div className="mt-1 space-y-0.5 text-[11px] font-mono">
+                            <div className="text-slate-600">
+                              Price: <span className="font-semibold text-slate-900">Rs. {item.price.toLocaleString()}</span>
+                              <span className="text-[10px] text-slate-400 font-sans ml-1">/{item.product.unit}</span>
                             </div>
-                          )}
+                            {unitDiscount > 0 && (
+                              <>
+                                <div className="text-emerald-600 font-semibold">
+                                  Discount{item.quantity > 1 ? ' (per unit)' : ''}: − Rs. {unitDiscount.toLocaleString()}
+                                </div>
+                                {item.quantity > 1 && (
+                                  <div className="text-emerald-700 text-[10px]">
+                                    Total Discount ({item.quantity} units): − Rs. {(unitDiscount * item.quantity).toLocaleString()}
+                                  </div>
+                                )}
+                                <div className="text-cyan-800 font-bold text-[10px]">
+                                  Final Unit Price: Rs. {netUnit.toLocaleString()}
+                                </div>
+                              </>
+                            )}
+                          </div>
                         </div>
-                        <div className="text-xs font-black text-slate-900 shrink-0 font-mono">
-                          Rs. {item.lineTotal.toLocaleString()}
-                        </div>
+
+                        <button
+                          onClick={() => removeFromWholesaleCart(item.product.id)}
+                          className="text-slate-400 hover:text-rose-500 p-1 rounded"
+                          title="Remove Line"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
 
-                      {/* Quantity & Line Discount */}
-                      <div className="flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-1 border border-slate-200 rounded-lg p-0.5 bg-slate-50">
+                      {/* Quantity & Extra % & Line Total */}
+                      <div className="flex items-center justify-between pt-1.5 border-t border-slate-200/60 text-xs">
+                        <div className="flex items-center gap-1 border border-slate-200 rounded-lg p-0.5 bg-white">
                           <button
                             onClick={() => updateWholesaleQuantity(item.product.id, item.quantity - 1)}
-                            className="w-5 h-5 flex items-center justify-center rounded text-slate-600 hover:bg-white"
+                            className="w-5 h-5 flex items-center justify-center rounded text-slate-600 hover:bg-slate-100"
                           >
                             <Minus className="w-3 h-3" />
                           </button>
-                          <span className="font-bold text-slate-900 text-xs px-2 min-w-[24px] text-center">
+                          <span className="font-bold text-slate-900 text-xs px-2 min-w-[24px] text-center font-mono">
                             {item.quantity}
                           </span>
                           <button
                             onClick={() => updateWholesaleQuantity(item.product.id, item.quantity + 1)}
-                            className="w-5 h-5 flex items-center justify-center rounded text-slate-600 hover:bg-white"
+                            className="w-5 h-5 flex items-center justify-center rounded text-slate-600 hover:bg-slate-100"
                           >
                             <Plus className="w-3 h-3" />
                           </button>
@@ -804,17 +826,18 @@ export default function WholesalePOSPage() {
                             onChange={e =>
                               updateWholesaleDiscount(item.product.id, parseInt(e.target.value, 10) || 0)
                             }
-                            className="w-12 h-6 text-center text-xs border border-slate-200 rounded bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-cyan-500 font-mono font-bold"
+                            className="w-12 h-6 text-center text-xs border border-slate-200 rounded bg-white focus:bg-white focus:outline-none focus:ring-1 focus:ring-cyan-500 font-mono font-bold"
                           />
                         </div>
 
-                        <button
-                          onClick={() => removeFromWholesaleCart(item.product.id)}
-                          className="text-slate-400 hover:text-rose-500 p-1 rounded"
-                          title="Remove Line"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="text-right">
+                          <div className="text-[10px] text-slate-400 font-medium">
+                            {item.quantity > 1 ? 'Line Total:' : 'Total:'}
+                          </div>
+                          <div className="text-xs font-black text-slate-900 font-mono">
+                            Rs. {item.lineTotal.toLocaleString()}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   );
@@ -823,20 +846,20 @@ export default function WholesalePOSPage() {
             </div>
 
             {/* Calculations & Submit Button */}
-            <div className="p-4 border-t border-slate-200 bg-slate-50/90 space-y-2 text-xs">
+            <div className="p-4 border-t border-slate-200 bg-slate-50 space-y-2.5 text-xs">
               <div className="flex justify-between text-slate-600">
-                <span>Wholesale Subtotal:</span>
-                <span className="font-semibold font-mono">Rs. {wholesaleSubtotal.toLocaleString()}</span>
+                <span>Subtotal:</span>
+                <span className="font-mono font-bold">Rs. {wholesaleSubtotal.toLocaleString()}</span>
               </div>
               {wholesaleDiscountTotal > 0 && (
-                <div className="flex justify-between text-emerald-700">
-                  <span>Volume Trade Discount:</span>
-                  <span className="font-semibold font-mono">-Rs. {wholesaleDiscountTotal.toLocaleString()}</span>
+                <div className="flex justify-between text-emerald-700 font-semibold">
+                  <span>Total Wholesale Discounts:</span>
+                  <span className="font-mono font-bold">− Rs. {wholesaleDiscountTotal.toLocaleString()}</span>
                 </div>
               )}
-              <div className="flex justify-between text-base font-black text-slate-900 pt-2 border-t border-slate-200">
-                <span>Invoice Total:</span>
-                <span className="text-cyan-800 font-mono">Rs. {wholesaleGrandTotal.toLocaleString()}</span>
+              <div className="flex justify-between text-sm font-black text-slate-900 pt-1.5 border-t border-slate-200">
+                <span>FINAL TOTAL:</span>
+                <span className="text-cyan-800 font-mono text-base font-black">Rs. {wholesaleGrandTotal.toLocaleString()}</span>
               </div>
 
               <Button

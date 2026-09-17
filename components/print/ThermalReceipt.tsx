@@ -149,6 +149,11 @@ export function ThermalReceipt({ bill, onClose }: ThermalReceiptProps) {
                 <div className="flex-1 pr-1">
                   <div className="font-medium truncate max-w-[34mm]">{item.productName}</div>
                   <div className="text-[9px] text-slate-500">{item.unit}</div>
+                  {item.discountPerUnit && item.discountPerUnit > 0 ? (
+                    <div className="text-[8px] text-emerald-700">
+                      Disc: -Rs. {item.discountPerUnit.toLocaleString()}/unit
+                    </div>
+                  ) : null}
                 </div>
                 <div className="w-7 text-center">{item.quantity}</div>
                 <div className="w-12 text-right">{item.price.toLocaleString()}</div>
@@ -166,7 +171,7 @@ export function ThermalReceipt({ bill, onClose }: ThermalReceiptProps) {
           </div>
           {bill.discountTotal > 0 && (
             <div className="flex justify-between text-emerald-700">
-              <span>Discount:</span>
+              <span>Total Discount:</span>
               <span>-Rs. {bill.discountTotal.toLocaleString()}</span>
             </div>
           )}

@@ -15,14 +15,18 @@ import {
   Plus,
   RefreshCw,
   Sparkles,
+  Edit2,
+  Tag,
 } from 'lucide-react';
 import Link from 'next/link';
 import { productsService } from '@/services/productsService';
 import { inventoryService } from '@/services/inventoryService';
+import { EditProductModal } from '@/components/products/EditProductModal';
 import { Product, UnitType } from '@/types';
 
 export default function StockOverviewPage() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [valuation, setValuation] = useState({
     totalItems: 0,
     totalStockCount: 0,
@@ -35,10 +39,14 @@ export default function StockOverviewPage() {
   const [selectedUnit, setSelectedUnit] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Low' | 'Out'>('All');
 
-  useEffect(() => {
+  const refreshData = () => {
     setProducts(productsService.getAll());
     setValuation(inventoryService.getInventoryValuation());
     setCategoryBreakdown(inventoryService.getCategoryBreakdown());
+  };
+
+  useEffect(() => {
+    refreshData();
   }, []);
 
   const units: (string | UnitType)[] = [
@@ -87,6 +95,11 @@ export default function StockOverviewPage() {
             </div>
 
             <div className="flex items-center gap-2">
+              <Link href="/products/discount">
+                <Button variant="outline" size="md" className="gap-1.5 text-amber-700 bg-amber-50 hover:bg-amber-100 border-amber-200 font-semibold">
+                  <Tag className="w-4 h-4" /> Discounts
+                </Button>
+              </Link>
               <Link href="/inventory/stock-history">
                 <Button variant="outline" size="md" className="gap-1.5">
                   <TrendingUp className="w-4 h-4" /> Movement Audit Log
@@ -239,6 +252,7 @@ export default function StockOverviewPage() {
                       <th className="py-3 px-4 text-right">Wholesale Rate</th>
                       <th className="py-3 px-4 text-right">Stock Valuation</th>
                       <th className="py-3 px-4 text-center">Status</th>
+                      <th className="py-3 px-4 text-center">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -246,10 +260,24 @@ export default function StockOverviewPage() {
                       const isOut = prod.stock <= 0;
                       const isLow = prod.stock <= prod.minStockAlert;
                       const stockValuation = prod.stock * prod.retailPrice;
+                      const season = prod.seasonCategory || (['Khaddar', 'Wash & Wear'].includes(prod.category) ? 'Winter' : 'Summer');
 
                       return (
                         <tr key={prod.id} className="hover:bg-slate-50/60 transition-colors">
-                          <td className="py-3 px-4 font-bold text-slate-900 max-w-xs">{prod.name}</td>
+                          <td className="py-3 px-4 max-w-xs">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-bold text-slate-900">{prod.name}</span>
+                              <span
+                                className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                  season === 'Winter'
+                                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                    : 'bg-amber-50 text-amber-700 border-amber-200'
+                                }`}
+                              >
+                                {season === 'Winter' ? '❄️ Winter' : '☀️ Summer'}
+                              </span>
+                            </div>
+                          </td>
                           <td className="py-3 px-4 font-mono text-slate-600">{prod.sku}</td>
                           <td className="py-3 px-4">
                             <Badge size="sm" variant="secondary">
@@ -262,9 +290,21 @@ export default function StockOverviewPage() {
                             </span>
                           </td>
                           <td className="py-3 px-4 text-slate-500">{prod.unit}</td>
-                          <td className="py-3 px-4 text-right font-medium">Rs. {prod.retailPrice.toLocaleString()}</td>
-                          <td className="py-3 px-4 text-right font-bold text-cyan-700">
-                            Rs. {prod.wholesalePrice.toLocaleString()}
+                          <td className="py-3 px-4 text-right">
+                            <div className="font-medium text-slate-900">Rs. {prod.retailPrice.toLocaleString()}</div>
+                            {(prod.retailDiscount || 0) > 0 && (
+                              <div className="text-[10px] text-emerald-600 font-semibold">
+                                -Rs. {(prod.retailDiscount || 0).toLocaleString()} (Net: Rs. {(prod.retailPrice - (prod.retailDiscount || 0)).toLocaleString()})
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <div className="font-bold text-cyan-700">Rs. {prod.wholesalePrice.toLocaleString()}</div>
+                            {(prod.wholesaleDiscount || 0) > 0 && (
+                              <div className="text-[10px] text-emerald-600 font-semibold">
+                                -Rs. {(prod.wholesaleDiscount || 0).toLocaleString()} (Net: Rs. {(prod.wholesalePrice - (prod.wholesaleDiscount || 0)).toLocaleString()})
+                              </div>
+                            )}
                           </td>
                           <td className="py-3 px-4 text-right font-black text-slate-900">
                             Rs. {stockValuation.toLocaleString()}
@@ -284,6 +324,16 @@ export default function StockOverviewPage() {
                               </Badge>
                             )}
                           </td>
+                          <td className="py-3 px-4 text-center">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setEditingProduct(prod)}
+                              className="gap-1 text-xs font-semibold text-blue-700 hover:bg-blue-50 border-blue-200"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" /> Edit
+                            </Button>
+                          </td>
                         </tr>
                       );
                     })}
@@ -292,6 +342,19 @@ export default function StockOverviewPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Edit Product Modal */}
+          {editingProduct && (
+            <EditProductModal
+              product={editingProduct}
+              isOpen={!!editingProduct}
+              onClose={() => setEditingProduct(null)}
+              onSuccess={() => {
+                refreshData();
+                setEditingProduct(null);
+              }}
+            />
+          )}
         </div>
       </AppShell>
     </ProtectedRoute>

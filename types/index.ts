@@ -17,16 +17,21 @@ export type ProductCategory =
   | 'Thaan'
   | 'Silk & Chiffon';
 
+export type SeasonCategory = 'Summer' | 'Winter';
+
 export interface Product {
   id: string;
   name: string;
   sku: string;
   category: ProductCategory;
+  seasonCategory?: SeasonCategory;
   subcategory: string;
   unit: UnitType;
   retailPrice: number;
   wholesalePrice: number;
-  costPrice: number;
+  costPrice?: number;
+  retailDiscount?: number;
+  wholesaleDiscount?: number;
   stock: number;
   minStockAlert: number;
   supplier: string;
@@ -64,6 +69,7 @@ export interface CartItem {
   product: Product;
   quantity: number;
   price: number; // retailPrice or wholesalePrice depending on POS mode
+  discountPerUnit?: number; // fixed discount in Rs per unit
   discountPercent: number;
   lineTotal: number;
 }
@@ -75,6 +81,7 @@ export interface BillItem {
   unit: UnitType;
   quantity: number;
   price: number;
+  discountPerUnit?: number;
   discountPercent: number;
   subtotal: number;
 }

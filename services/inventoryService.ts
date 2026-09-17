@@ -45,7 +45,7 @@ export const inventoryService = {
       totalStockCount += p.stock;
       totalRetailValue += p.stock * p.retailPrice;
       totalWholesaleValue += p.stock * p.wholesalePrice;
-      totalCostValue += p.stock * p.costPrice;
+      totalCostValue += p.stock * (p.costPrice || 0);
     });
 
     return {

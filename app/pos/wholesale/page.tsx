@@ -267,12 +267,15 @@ export default function WholesalePOSPage() {
     const code = barcodeInput.trim();
     if (!code) return;
 
-    const matched = products.find(
-      p =>
-        p.wholesaleBarcode === code ||
-        p.barcode === code ||
-        p.sku.toLowerCase() === code.toLowerCase()
-    );
+    // Use live persistent productsService lookup to avoid stale data
+    const matched =
+      productsService.getByBarcodeOrSku(code) ||
+      products.find(
+        p =>
+          p.wholesaleBarcode === code ||
+          p.barcode === code ||
+          p.sku.toLowerCase() === code.toLowerCase()
+      );
 
     if (matched) {
       if (matched.stock <= 0) {
@@ -283,11 +286,17 @@ export default function WholesalePOSPage() {
           type: 'error',
         });
       } else {
+        const discount = matched.wholesaleDiscount || 0;
+        const finalPrice = Math.max(0, matched.wholesalePrice - discount);
+
         addToWholesaleCart(matched);
         barcodeScannerService.playSuccessBeep();
         toast({
-          title: 'Barcode Scanned',
-          description: `Added "${matched.name}" at wholesale rate Rs. ${matched.wholesalePrice.toLocaleString()}`,
+          title: `Scanned: ${matched.name}`,
+          description:
+            discount > 0
+              ? `Wholesale Price Rs. ${matched.wholesalePrice.toLocaleString()} − Wholesale Discount Rs. ${discount.toLocaleString()} = Rs. ${finalPrice.toLocaleString()}`
+              : `Wholesale Price: Rs. ${matched.wholesalePrice.toLocaleString()}`,
           type: 'success',
         });
       }
@@ -623,6 +632,9 @@ export default function WholesalePOSPage() {
                 {filteredProducts.map(prod => {
                   const inCart = wholesaleCart.find(i => i.product.id === prod.id);
                   const isOutOfStock = prod.stock <= 0;
+                  const season = prod.seasonCategory || (['Khaddar', 'Wash & Wear'].includes(prod.category) ? 'Winter' : 'Summer');
+                  const hasDiscount = (prod.wholesaleDiscount || 0) > 0;
+                  const finalWholesale = Math.max(0, prod.wholesalePrice - (prod.wholesaleDiscount || 0));
 
                   return (
                     <div
@@ -647,7 +659,18 @@ export default function WholesalePOSPage() {
                         <h3 className="text-xs font-bold text-slate-900 line-clamp-2 leading-snug group-hover:text-cyan-600 transition-colors">
                           {prod.name}
                         </h3>
-                        <div className="text-[10px] text-slate-400 mt-0.5">{prod.unit}</div>
+                        <div className="flex items-center gap-1 mt-1">
+                          <span
+                            className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${
+                              season === 'Winter'
+                                ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                : 'bg-amber-50 text-amber-700 border-amber-200'
+                            }`}
+                          >
+                            {season === 'Winter' ? '❄️ Winter' : '☀️ Summer'}
+                          </span>
+                          <span className="text-[10px] text-slate-400">{prod.unit}</span>
+                        </div>
                       </div>
 
                       <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between">
@@ -656,8 +679,13 @@ export default function WholesalePOSPage() {
                             Retail: Rs. {prod.retailPrice.toLocaleString()}
                           </div>
                           <div className="text-xs font-black text-cyan-700">
-                            Rs. {prod.wholesalePrice.toLocaleString()}
+                            Rs. {finalWholesale.toLocaleString()}
                           </div>
+                          {hasDiscount && (
+                            <div className="text-[9px] text-emerald-600 font-medium">
+                              Disc: -Rs. {(prod.wholesaleDiscount || 0).toLocaleString()}
+                            </div>
+                          )}
                         </div>
                         <div
                           className={`w-6 h-6 rounded-md flex items-center justify-center text-xs transition-colors ${
@@ -708,67 +736,89 @@ export default function WholesalePOSPage() {
                   </p>
                 </div>
               ) : (
-                wholesaleCart.map(item => (
-                  <div key={item.product.id} className="py-2.5 space-y-1.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="text-xs font-bold text-slate-900 leading-tight truncate">
-                          {item.product.name}
+                wholesaleCart.map(item => {
+                  const itemSeason = item.product.seasonCategory || (['Khaddar', 'Wash & Wear'].includes(item.product.category) ? 'Winter' : 'Summer');
+                  const unitDiscount = item.discountPerUnit ?? item.product.wholesaleDiscount ?? 0;
+                  const netUnit = Math.max(0, item.price - unitDiscount);
+
+                  return (
+                    <div key={item.product.id} className="py-2.5 space-y-1.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-bold text-slate-900 leading-tight truncate">
+                              {item.product.name}
+                            </span>
+                            <span
+                              className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${
+                                itemSeason === 'Winter'
+                                  ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                  : 'bg-amber-50 text-amber-700 border-amber-200'
+                              }`}
+                            >
+                              {itemSeason === 'Winter' ? '❄️ Winter' : '☀️ Summer'}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-cyan-700 font-semibold mt-0.5">
+                            Rs. {item.price.toLocaleString()} wholesale / {item.product.unit}
+                          </div>
+                          {unitDiscount > 0 && (
+                            <div className="text-[10px] text-emerald-600 font-semibold">
+                              Wholesale Discount: -Rs. {unitDiscount.toLocaleString()} (Net: Rs. {netUnit.toLocaleString()})
+                            </div>
+                          )}
                         </div>
-                        <div className="text-[10px] text-cyan-700 font-semibold">
-                          Rs. {item.price.toLocaleString()} wholesale / {item.product.unit}
+                        <div className="text-xs font-black text-slate-900 shrink-0 font-mono">
+                          Rs. {item.lineTotal.toLocaleString()}
                         </div>
                       </div>
-                      <div className="text-xs font-black text-slate-900 shrink-0 font-mono">
-                        Rs. {item.lineTotal.toLocaleString()}
+
+                      {/* Quantity & Line Discount */}
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-1 border border-slate-200 rounded-lg p-0.5 bg-slate-50">
+                          <button
+                            onClick={() => updateWholesaleQuantity(item.product.id, item.quantity - 1)}
+                            className="w-5 h-5 flex items-center justify-center rounded text-slate-600 hover:bg-white"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                          <span className="font-bold text-slate-900 text-xs px-2 min-w-[24px] text-center">
+                            {item.quantity}
+                          </span>
+                          <button
+                            onClick={() => updateWholesaleQuantity(item.product.id, item.quantity + 1)}
+                            className="w-5 h-5 flex items-center justify-center rounded text-slate-600 hover:bg-white"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] text-slate-400">Extra%:</span>
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={item.discountPercent || ''}
+                            placeholder="0"
+                            onChange={e =>
+                              updateWholesaleDiscount(item.product.id, parseInt(e.target.value, 10) || 0)
+                            }
+                            className="w-12 h-6 text-center text-xs border border-slate-200 rounded bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-cyan-500 font-mono font-bold"
+                          />
+                        </div>
+
+                        <button
+                          onClick={() => removeFromWholesaleCart(item.product.id)}
+                          className="text-slate-400 hover:text-rose-500 p-1 rounded"
+                          title="Remove Line"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
-
-                    {/* Quantity & Line Discount */}
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-1 border border-slate-200 rounded-lg p-0.5 bg-slate-50">
-                        <button
-                          onClick={() => updateWholesaleQuantity(item.product.id, item.quantity - 1)}
-                          className="w-5 h-5 flex items-center justify-center rounded text-slate-600 hover:bg-white"
-                        >
-                          <Minus className="w-3 h-3" />
-                        </button>
-                        <span className="font-bold text-slate-900 text-xs px-2 min-w-[24px] text-center">
-                          {item.quantity}
-                        </span>
-                        <button
-                          onClick={() => updateWholesaleQuantity(item.product.id, item.quantity + 1)}
-                          className="w-5 h-5 flex items-center justify-center rounded text-slate-600 hover:bg-white"
-                        >
-                          <Plus className="w-3 h-3" />
-                        </button>
-                      </div>
-
-                      <div className="flex items-center gap-1">
-                        <span className="text-[10px] text-slate-400">Disc%:</span>
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          value={item.discountPercent || ''}
-                          placeholder="0"
-                          onChange={e =>
-                            updateWholesaleDiscount(item.product.id, parseInt(e.target.value, 10) || 0)
-                          }
-                          className="w-12 h-6 text-center text-xs border border-slate-200 rounded bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-cyan-500 font-mono font-bold"
-                        />
-                      </div>
-
-                      <button
-                        onClick={() => removeFromWholesaleCart(item.product.id)}
-                        className="text-slate-400 hover:text-rose-500 p-1 rounded"
-                        title="Remove Line"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
 

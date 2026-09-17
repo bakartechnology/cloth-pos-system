@@ -21,7 +21,7 @@ import { productsService } from '@/services/productsService';
 import { inventoryService } from '@/services/inventoryService';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
-import { ProductCategory, UnitType } from '@/types';
+import { ProductCategory, UnitType, SeasonCategory } from '@/types';
 
 export default function AddProductPage() {
   const router = useRouter();
@@ -31,11 +31,13 @@ export default function AddProductPage() {
   const [name, setName] = useState('');
   const [sku, setSku] = useState('');
   const [category, setCategory] = useState<ProductCategory>('Lawn');
+  const [seasonCategory, setSeasonCategory] = useState<SeasonCategory>('Summer');
   const [subcategory, setSubcategory] = useState('');
   const [unit, setUnit] = useState<UnitType>('Unstitched Box');
   const [retailPrice, setRetailPrice] = useState<number>(4500);
   const [wholesalePrice, setWholesalePrice] = useState<number>(3600);
-  const [costPrice, setCostPrice] = useState<number>(2900);
+  const [retailDiscount, setRetailDiscount] = useState<number>(0);
+  const [wholesaleDiscount, setWholesaleDiscount] = useState<number>(0);
   const [initialStock, setInitialStock] = useState<number>(30);
   const [minStockAlert, setMinStockAlert] = useState<number>(8);
   const [supplier, setSupplier] = useState('Gul Ahmed Textiles');
@@ -77,11 +79,13 @@ export default function AddProductPage() {
       name,
       sku: finalSku,
       category,
+      seasonCategory,
       subcategory: subcategory || `${category} Collection`,
       unit,
-      retailPrice,
-      wholesalePrice,
-      costPrice,
+      retailPrice: Math.max(0, retailPrice),
+      wholesalePrice: Math.max(0, wholesalePrice),
+      retailDiscount: Math.max(0, retailDiscount),
+      wholesaleDiscount: Math.max(0, wholesaleDiscount),
       stock: initialStock,
       minStockAlert,
       supplier: supplier || 'Local Mill',
@@ -180,6 +184,17 @@ export default function AddProductPage() {
 
                   <div>
                     <Select
+                      label="Summer / Winter Category *"
+                      value={seasonCategory}
+                      onChange={e => setSeasonCategory(e.target.value as SeasonCategory)}
+                    >
+                      <option value="Summer">☀️ Summer</option>
+                      <option value="Winter">❄️ Winter</option>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Select
                       label="Fabric Category *"
                       value={category}
                       onChange={e => setCategory(e.target.value as ProductCategory)}
@@ -236,35 +251,61 @@ export default function AddProductPage() {
               {/* Pricing */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-sm font-bold">Pricing Setup (PKR / Rs.)</CardTitle>
-                  <CardDescription>Define retail walk-in and wholesale bulk prices.</CardDescription>
+                  <CardTitle className="text-sm font-bold">Pricing & Discounts Setup (PKR / Rs.)</CardTitle>
+                  <CardDescription>Define walk-in retail & wholesale rates with fixed rupee discounts.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <Input
-                    label="Retail Price (Rs.) *"
-                    type="number"
-                    min="0"
-                    value={retailPrice}
-                    onChange={e => setRetailPrice(parseFloat(e.target.value) || 0)}
-                    required
-                  />
+                  <div className="space-y-3 p-3 rounded-xl bg-blue-50/40 border border-blue-100">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <Input
+                        label="Retail Price (Rs.) *"
+                        type="number"
+                        min="0"
+                        value={retailPrice}
+                        onChange={e => setRetailPrice(parseFloat(e.target.value) || 0)}
+                        required
+                      />
+                      <Input
+                        label="Retail Discount (Rs.)"
+                        type="number"
+                        min="0"
+                        value={retailDiscount}
+                        onChange={e => setRetailDiscount(parseFloat(e.target.value) || 0)}
+                      />
+                    </div>
+                    <div className="flex justify-between items-center text-xs pt-1 border-t border-blue-200/50">
+                      <span className="text-slate-600 font-medium">Final Retail:</span>
+                      <span className="font-mono font-bold text-blue-700">
+                        Rs. {Math.max(0, retailPrice - retailDiscount).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
 
-                  <Input
-                    label="Wholesale Price (Rs.) *"
-                    type="number"
-                    min="0"
-                    value={wholesalePrice}
-                    onChange={e => setWholesalePrice(parseFloat(e.target.value) || 0)}
-                    required
-                  />
-
-                  <Input
-                    label="Cost Price (Rs.)"
-                    type="number"
-                    min="0"
-                    value={costPrice}
-                    onChange={e => setCostPrice(parseFloat(e.target.value) || 0)}
-                  />
+                  <div className="space-y-3 p-3 rounded-xl bg-cyan-50/40 border border-cyan-100">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <Input
+                        label="Wholesale Price (Rs.) *"
+                        type="number"
+                        min="0"
+                        value={wholesalePrice}
+                        onChange={e => setWholesalePrice(parseFloat(e.target.value) || 0)}
+                        required
+                      />
+                      <Input
+                        label="Wholesale Discount (Rs.)"
+                        type="number"
+                        min="0"
+                        value={wholesaleDiscount}
+                        onChange={e => setWholesaleDiscount(parseFloat(e.target.value) || 0)}
+                      />
+                    </div>
+                    <div className="flex justify-between items-center text-xs pt-1 border-t border-cyan-200/50">
+                      <span className="text-slate-600 font-medium">Final Wholesale:</span>
+                      <span className="font-mono font-bold text-cyan-700">
+                        Rs. {Math.max(0, wholesalePrice - wholesaleDiscount).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
 

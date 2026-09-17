@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Product, CartItem } from '@/types';
+import { productsService } from '@/services/productsService';
 import { useToast } from './ToastContext';
 
 interface CartContextType {
@@ -36,34 +37,44 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [retailCart, setRetailCart] = useState<CartItem[]>([]);
   const [wholesaleCart, setWholesaleCart] = useState<CartItem[]>([]);
 
-  // Calculate line item total
-  const computeLineTotal = (price: number, qty: number, discountPercent: number) => {
-    const raw = price * qty;
-    const discount = (raw * discountPercent) / 100;
-    return Math.max(0, Math.round(raw - discount));
+  // Calculate line item total with unit price, per-unit rupee discount, and manual percent discount
+  const computeLineTotal = (
+    price: number,
+    discountPerUnit: number,
+    qty: number,
+    discountPercent = 0
+  ) => {
+    const netUnitPrice = Math.max(0, price - discountPerUnit);
+    const baseTotal = netUnitPrice * qty;
+    const manualDiscount = (baseTotal * discountPercent) / 100;
+    return Math.max(0, Math.round(baseTotal - manualDiscount));
   };
 
   // ---------------- Retail Cart Operations ----------------
   const addToRetailCart = (product: Product, quantity = 1) => {
-    if (product.stock <= 0) {
+    // Always fetch latest product record to avoid stale price or discount
+    const freshProduct = productsService.getById(product.id) || product;
+
+    if (freshProduct.stock <= 0) {
       toast({
         title: 'Out of Stock',
-        description: `${product.name} is currently out of stock!`,
+        description: `${freshProduct.name} is currently out of stock!`,
         type: 'error',
       });
       return;
     }
 
-    const existingIndex = retailCart.findIndex(item => item.product.id === product.id);
+    const unitDiscount = freshProduct.retailDiscount || 0;
+    const existingIndex = retailCart.findIndex(item => item.product.id === freshProduct.id);
 
     if (existingIndex !== -1) {
       const existing = retailCart[existingIndex];
       const newQty = existing.quantity + quantity;
 
-      if (newQty > product.stock) {
+      if (newQty > freshProduct.stock) {
         toast({
           title: 'Stock Limit Reached',
-          description: `Only ${product.stock} ${product.unit}(s) available in stock.`,
+          description: `Only ${freshProduct.stock} ${freshProduct.unit}(s) available in stock.`,
           type: 'warning',
         });
         return;
@@ -71,12 +82,20 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
       setRetailCart(prev => {
         const updated = [...prev];
-        const idx = updated.findIndex(item => item.product.id === product.id);
+        const idx = updated.findIndex(item => item.product.id === freshProduct.id);
         if (idx !== -1) {
           updated[idx] = {
             ...updated[idx],
+            product: freshProduct,
+            price: freshProduct.retailPrice,
+            discountPerUnit: unitDiscount,
             quantity: newQty,
-            lineTotal: computeLineTotal(updated[idx].price, newQty, updated[idx].discountPercent),
+            lineTotal: computeLineTotal(
+              freshProduct.retailPrice,
+              unitDiscount,
+              newQty,
+              updated[idx].discountPercent
+            ),
           };
         }
         return updated;
@@ -84,22 +103,26 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
       toast({
         title: 'Quantity Updated',
-        description: `${product.name} quantity increased to ${newQty}`,
+        description: `${freshProduct.name} quantity increased to ${newQty}`,
         type: 'info',
       });
     } else {
       const item: CartItem = {
-        product,
+        product: freshProduct,
         quantity,
-        price: product.retailPrice,
+        price: freshProduct.retailPrice,
+        discountPerUnit: unitDiscount,
         discountPercent: 0,
-        lineTotal: computeLineTotal(product.retailPrice, quantity, 0),
+        lineTotal: computeLineTotal(freshProduct.retailPrice, unitDiscount, quantity, 0),
       };
       setRetailCart(prev => [...prev, item]);
 
+      const finalPrice = Math.max(0, freshProduct.retailPrice - unitDiscount);
       toast({
-        title: 'Added to Cart',
-        description: `${product.name} added to retail cart.`,
+        title: 'Added to Retail Cart',
+        description: `${freshProduct.name} — Retail: Rs. ${freshProduct.retailPrice.toLocaleString()}${
+          unitDiscount > 0 ? ` (Disc: -Rs. ${unitDiscount.toLocaleString()} => Final: Rs. ${finalPrice.toLocaleString()})` : ''
+        }`,
         type: 'success',
       });
     }
@@ -131,7 +154,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           return {
             ...item,
             quantity,
-            lineTotal: computeLineTotal(item.price, quantity, item.discountPercent),
+            lineTotal: computeLineTotal(
+              item.price,
+              item.discountPerUnit || 0,
+              quantity,
+              item.discountPercent
+            ),
           };
         }
         return item;
@@ -147,7 +175,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           return {
             ...item,
             discountPercent: validDiscount,
-            lineTotal: computeLineTotal(item.price, item.quantity, validDiscount),
+            lineTotal: computeLineTotal(
+              item.price,
+              item.discountPerUnit || 0,
+              item.quantity,
+              validDiscount
+            ),
           };
         }
         return item;
@@ -165,25 +198,28 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   // ---------------- Wholesale Cart Operations ----------------
   const addToWholesaleCart = (product: Product, quantity = 1) => {
-    if (product.stock <= 0) {
+    const freshProduct = productsService.getById(product.id) || product;
+
+    if (freshProduct.stock <= 0) {
       toast({
         title: 'Out of Stock',
-        description: `${product.name} is currently out of stock!`,
+        description: `${freshProduct.name} is currently out of stock!`,
         type: 'error',
       });
       return;
     }
 
-    const existingIndex = wholesaleCart.findIndex(item => item.product.id === product.id);
+    const unitDiscount = freshProduct.wholesaleDiscount || 0;
+    const existingIndex = wholesaleCart.findIndex(item => item.product.id === freshProduct.id);
 
     if (existingIndex !== -1) {
       const existing = wholesaleCart[existingIndex];
       const newQty = existing.quantity + quantity;
 
-      if (newQty > product.stock) {
+      if (newQty > freshProduct.stock) {
         toast({
-          title: 'Stock Limit Reached',
-          description: `Only ${product.stock} ${product.unit}(s) available in stock.`,
+          title: 'Stock Limit Reach',
+          description: `Only ${freshProduct.stock} ${freshProduct.unit}(s) available in stock.`,
           type: 'warning',
         });
         return;
@@ -191,12 +227,20 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
       setWholesaleCart(prev => {
         const updated = [...prev];
-        const idx = updated.findIndex(item => item.product.id === product.id);
+        const idx = updated.findIndex(item => item.product.id === freshProduct.id);
         if (idx !== -1) {
           updated[idx] = {
             ...updated[idx],
+            product: freshProduct,
+            price: freshProduct.wholesalePrice,
+            discountPerUnit: unitDiscount,
             quantity: newQty,
-            lineTotal: computeLineTotal(updated[idx].price, newQty, updated[idx].discountPercent),
+            lineTotal: computeLineTotal(
+              freshProduct.wholesalePrice,
+              unitDiscount,
+              newQty,
+              updated[idx].discountPercent
+            ),
           };
         }
         return updated;
@@ -204,22 +248,26 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
       toast({
         title: 'Quantity Updated',
-        description: `${product.name} wholesale quantity increased to ${newQty}`,
+        description: `${freshProduct.name} wholesale quantity increased to ${newQty}`,
         type: 'info',
       });
     } else {
       const item: CartItem = {
-        product,
+        product: freshProduct,
         quantity,
-        price: product.wholesalePrice,
+        price: freshProduct.wholesalePrice,
+        discountPerUnit: unitDiscount,
         discountPercent: 0,
-        lineTotal: computeLineTotal(product.wholesalePrice, quantity, 0),
+        lineTotal: computeLineTotal(freshProduct.wholesalePrice, unitDiscount, quantity, 0),
       };
       setWholesaleCart(prev => [...prev, item]);
 
+      const finalPrice = Math.max(0, freshProduct.wholesalePrice - unitDiscount);
       toast({
         title: 'Added to Wholesale Bill',
-        description: `${product.name} added at wholesale rate Rs. ${product.wholesalePrice.toLocaleString()}`,
+        description: `${freshProduct.name} — Wholesale: Rs. ${freshProduct.wholesalePrice.toLocaleString()}${
+          unitDiscount > 0 ? ` (Disc: -Rs. ${unitDiscount.toLocaleString()} => Final: Rs. ${finalPrice.toLocaleString()})` : ''
+        }`,
         type: 'success',
       });
     }
@@ -251,7 +299,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           return {
             ...item,
             quantity,
-            lineTotal: computeLineTotal(item.price, quantity, item.discountPercent),
+            lineTotal: computeLineTotal(
+              item.price,
+              item.discountPerUnit || 0,
+              quantity,
+              item.discountPercent
+            ),
           };
         }
         return item;
@@ -267,7 +320,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           return {
             ...item,
             discountPercent: validDiscount,
-            lineTotal: computeLineTotal(item.price, item.quantity, validDiscount),
+            lineTotal: computeLineTotal(
+              item.price,
+              item.discountPerUnit || 0,
+              item.quantity,
+              validDiscount
+            ),
           };
         }
         return item;

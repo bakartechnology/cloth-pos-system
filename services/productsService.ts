@@ -62,15 +62,78 @@ export const productsService = {
     const index = products.findIndex(p => p.id === id);
     if (index === -1) return null;
 
-    const updatedProduct = {
+    // Never change an existing product's barcode or ID when editing it
+    const {
+      id: _ignoredId,
+      barcode: _ignoredBarcode,
+      wholesaleBarcode: _ignoredWholesaleBarcode,
+      createdAt: _ignoredCreatedAt,
+      ...allowedUpdates
+    } = updates;
+
+    const updatedProduct: Product = {
       ...products[index],
-      ...updates,
+      ...allowedUpdates,
+      id: products[index].id,
+      barcode: products[index].barcode,
+      wholesaleBarcode: products[index].wholesaleBarcode,
       updatedAt: new Date().toISOString().split('T')[0],
     };
 
     products[index] = updatedProduct;
     storageService.setProducts([...products]);
     return updatedProduct;
+  },
+
+  applyBulkDiscount(params: {
+    saleType: 'Retail' | 'Wholesale';
+    category: 'All' | 'Summer' | 'Winter';
+    discountAmount: number;
+    productId?: string;
+  }): { count: number; updatedProducts: Product[] } {
+    const products = storageService.getProducts();
+    const cleanDiscount = Math.max(0, params.discountAmount);
+    let count = 0;
+    const updatedProducts: Product[] = [];
+
+    const updated = products.map(p => {
+      // If productId is provided, only update that product
+      if (params.productId) {
+        if (p.id === params.productId) {
+          count++;
+          const modified: Product = {
+            ...p,
+            retailDiscount: params.saleType === 'Retail' ? cleanDiscount : (p.retailDiscount || 0),
+            wholesaleDiscount: params.saleType === 'Wholesale' ? cleanDiscount : (p.wholesaleDiscount || 0),
+            updatedAt: new Date().toISOString().split('T')[0],
+          };
+          updatedProducts.push(modified);
+          return modified;
+        }
+        return p;
+      }
+
+      // Otherwise match category (All, Summer, or Winter)
+      const season = p.seasonCategory || (['Khaddar', 'Wash & Wear'].includes(p.category) ? 'Winter' : 'Summer');
+      const matchesCategory = params.category === 'All' || season === params.category;
+
+      if (matchesCategory) {
+        count++;
+        const modified: Product = {
+          ...p,
+          retailDiscount: params.saleType === 'Retail' ? cleanDiscount : (p.retailDiscount || 0),
+          wholesaleDiscount: params.saleType === 'Wholesale' ? cleanDiscount : (p.wholesaleDiscount || 0),
+          updatedAt: new Date().toISOString().split('T')[0],
+        };
+        updatedProducts.push(modified);
+        return modified;
+      }
+
+      return p;
+    });
+
+    storageService.setProducts(updated);
+    return { count, updatedProducts };
   },
 
   delete(id: string): boolean {

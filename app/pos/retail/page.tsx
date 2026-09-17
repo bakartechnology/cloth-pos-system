@@ -214,9 +214,22 @@ export default function RetailPOSPage() {
 
     const matched = productsService.getByBarcodeOrSku(query);
     if (matched) {
+      const discount = matched.retailDiscount || 0;
+      const finalPrice = Math.max(0, matched.retailPrice - discount);
+
       addToRetailCart(matched);
       barcodeScannerService.playSuccessBeep();
       setBarcodeInput('');
+
+      toast({
+        title: `Scanned: ${matched.name}`,
+        description:
+          discount > 0
+            ? `Retail Price Rs. ${matched.retailPrice.toLocaleString()} − Retail Discount Rs. ${discount.toLocaleString()} = Rs. ${finalPrice.toLocaleString()}`
+            : `Retail Price: Rs. ${matched.retailPrice.toLocaleString()}`,
+        type: 'success',
+      });
+
       // Continuous scanner: keep focus on barcode field
       setTimeout(() => {
         barcodeInputRef.current?.focus();
@@ -515,6 +528,9 @@ export default function RetailPOSPage() {
                   {filteredProducts.map(prod => {
                     const inCart = retailCart.find(i => i.product.id === prod.id);
                     const isOutOfStock = prod.stock <= 0;
+                    const season = prod.seasonCategory || (['Khaddar', 'Wash & Wear'].includes(prod.category) ? 'Winter' : 'Summer');
+                    const hasDiscount = (prod.retailDiscount || 0) > 0;
+                    const finalRetail = Math.max(0, prod.retailPrice - (prod.retailDiscount || 0));
 
                     return (
                       <div
@@ -540,15 +556,35 @@ export default function RetailPOSPage() {
                             </span>
                           </div>
 
-                          <h3 className="text-xs font-bold text-slate-900 line-clamp-2 leading-snug group-hover:text-blue-600 transition-colors">
-                            {prod.name}
-                          </h3>
-                          <div className="text-[10px] text-slate-400 mt-0.5">{prod.subcategory}</div>
+                          <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                            <h3 className="text-xs font-bold text-slate-900 line-clamp-2 leading-snug group-hover:text-blue-600 transition-colors">
+                              {prod.name}
+                            </h3>
+                          </div>
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <span
+                              className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${
+                                season === 'Winter'
+                                  ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                  : 'bg-amber-50 text-amber-700 border-amber-200'
+                              }`}
+                            >
+                              {season === 'Winter' ? '❄️ Winter' : '☀️ Summer'}
+                            </span>
+                            <span className="text-[10px] text-slate-400">{prod.subcategory}</span>
+                          </div>
                         </div>
 
                         <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between">
-                          <div className="text-xs font-black text-slate-900 font-mono">
-                            Rs. {prod.retailPrice.toLocaleString()}
+                          <div>
+                            <div className="text-xs font-black text-slate-900 font-mono">
+                              Rs. {finalRetail.toLocaleString()}
+                            </div>
+                            {hasDiscount && (
+                              <div className="text-[9px] text-emerald-600 font-medium">
+                                Disc: -Rs. {(prod.retailDiscount || 0).toLocaleString()}
+                              </div>
+                            )}
                           </div>
                           <div
                             className={`w-6 h-6 rounded-md flex items-center justify-center text-xs transition-colors ${
@@ -638,65 +674,87 @@ export default function RetailPOSPage() {
                     </p>
                   </div>
                 ) : (
-                  retailCart.map(item => (
-                    <div
-                      key={item.product.id}
-                      className="p-3 bg-slate-50/70 border border-slate-200/80 rounded-xl space-y-2"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <h4 className="text-xs font-bold text-slate-900 truncate leading-snug">
-                            {item.product.name}
-                          </h4>
-                          <div className="text-[10px] text-slate-400 font-mono">
-                            Rs. {item.price.toLocaleString()} / {item.product.unit}
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeFromRetailCart(item.product.id)}
-                          className="text-slate-400 hover:text-rose-600 p-1"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                  retailCart.map(item => {
+                    const itemSeason = item.product.seasonCategory || (['Khaddar', 'Wash & Wear'].includes(item.product.category) ? 'Winter' : 'Summer');
+                    const unitDiscount = item.discountPerUnit ?? item.product.retailDiscount ?? 0;
+                    const netUnit = Math.max(0, item.price - unitDiscount);
 
-                      {/* Quantity & Discount Controls */}
-                      <div className="flex items-center justify-between pt-1 border-t border-slate-200/60">
-                        <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg p-0.5">
+                    return (
+                      <div
+                        key={item.product.id}
+                        className="p-3 bg-slate-50/70 border border-slate-200/80 rounded-xl space-y-2"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <h4 className="text-xs font-bold text-slate-900 truncate leading-snug">
+                                {item.product.name}
+                              </h4>
+                              <span
+                                className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${
+                                  itemSeason === 'Winter'
+                                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                    : 'bg-amber-50 text-amber-700 border-amber-200'
+                                }`}
+                              >
+                                {itemSeason === 'Winter' ? '❄️ Winter' : '☀️ Summer'}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                              Retail: Rs. {item.price.toLocaleString()} / {item.product.unit}
+                            </div>
+                            {unitDiscount > 0 && (
+                              <div className="text-[10px] text-emerald-600 font-semibold">
+                                Retail Discount: -Rs. {unitDiscount.toLocaleString()} (Net: Rs. {netUnit.toLocaleString()})
+                              </div>
+                            )}
+                          </div>
                           <button
                             type="button"
-                            onClick={() => updateRetailQuantity(item.product.id, item.quantity - 1)}
-                            className="w-5 h-5 rounded flex items-center justify-center hover:bg-slate-100 text-slate-600"
+                            onClick={() => removeFromRetailCart(item.product.id)}
+                            className="text-slate-400 hover:text-rose-600 p-1"
                           >
-                            <Minus className="w-3 h-3" />
-                          </button>
-                          <span className="w-6 text-center text-xs font-black font-mono">
-                            {item.quantity}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => updateRetailQuantity(item.product.id, item.quantity + 1)}
-                            className="w-5 h-5 rounded flex items-center justify-center hover:bg-slate-100 text-slate-600"
-                          >
-                            <Plus className="w-3 h-3" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
 
-                        {/* Item Line Total */}
-                        <div className="text-right">
-                          <div className="text-xs font-black text-slate-900 font-mono">
-                            Rs. {item.lineTotal.toLocaleString()}
-                          </div>
-                          {item.discountPercent > 0 && (
-                            <span className="text-[9px] text-emerald-600 font-bold">
-                              {item.discountPercent}% Off
+                        {/* Quantity & Discount Controls */}
+                        <div className="flex items-center justify-between pt-1 border-t border-slate-200/60">
+                          <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg p-0.5">
+                            <button
+                              type="button"
+                              onClick={() => updateRetailQuantity(item.product.id, item.quantity - 1)}
+                              className="w-5 h-5 rounded flex items-center justify-center hover:bg-slate-100 text-slate-600"
+                            >
+                              <Minus className="w-3 h-3" />
+                            </button>
+                            <span className="w-6 text-center text-xs font-black font-mono">
+                              {item.quantity}
                             </span>
-                          )}
+                            <button
+                              type="button"
+                              onClick={() => updateRetailQuantity(item.product.id, item.quantity + 1)}
+                              className="w-5 h-5 rounded flex items-center justify-center hover:bg-slate-100 text-slate-600"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          </div>
+
+                          {/* Item Line Total */}
+                          <div className="text-right">
+                            <div className="text-xs font-black text-slate-900 font-mono">
+                              Rs. {item.lineTotal.toLocaleString()}
+                            </div>
+                            {item.discountPercent > 0 && (
+                              <span className="text-[9px] text-emerald-600 font-bold">
+                                {item.discountPercent}% Extra Off
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
 

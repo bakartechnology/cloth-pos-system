@@ -1,3 +1,4 @@
+import { Product } from '@/types';
 import {
   INITIAL_PRODUCTS,
   INITIAL_CUSTOMERS,
@@ -58,11 +59,17 @@ class StorageService {
   }
 
   // Domain accessors with default seeding
-  getProducts() {
-    return this.getItem(KEYS.PRODUCTS, INITIAL_PRODUCTS);
+  getProducts(): Product[] {
+    const products = this.getItem<Product[]>(KEYS.PRODUCTS, INITIAL_PRODUCTS);
+    return products.map(p => ({
+      ...p,
+      seasonCategory: p.seasonCategory || (['Khaddar', 'Wash & Wear'].includes(p.category) ? 'Winter' : 'Summer'),
+      retailDiscount: typeof p.retailDiscount === 'number' ? p.retailDiscount : 0,
+      wholesaleDiscount: typeof p.wholesaleDiscount === 'number' ? p.wholesaleDiscount : 0,
+    }));
   }
 
-  setProducts(data: typeof INITIAL_PRODUCTS) {
+  setProducts(data: Product[]) {
     this.setItem(KEYS.PRODUCTS, data);
   }
 

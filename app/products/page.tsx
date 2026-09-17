@@ -21,15 +21,18 @@ import {
   Download,
   Printer,
   Sparkles,
+  Tag,
 } from 'lucide-react';
 import Link from 'next/link';
 import { productsService } from '@/services/productsService';
 import { useToast } from '@/context/ToastContext';
+import { EditProductModal } from '@/components/products/EditProductModal';
 import { Product, ProductCategory, UnitType } from '@/types';
 
 export default function ProductsPage() {
   const { toast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedUnit, setSelectedUnit] = useState<string>('All');
@@ -40,8 +43,12 @@ export default function ProductsPage() {
   const [barcodeProduct, setBarcodeProduct] = useState<Product | null>(null);
   const [barcodeType, setBarcodeType] = useState<'retail' | 'wholesale'>('retail');
 
-  useEffect(() => {
+  const refreshProducts = () => {
     setProducts(productsService.getAll());
+  };
+
+  useEffect(() => {
+    refreshProducts();
   }, []);
 
   const categories: (string | ProductCategory)[] = [
@@ -120,6 +127,11 @@ export default function ProductsPage() {
             </div>
 
             <div className="flex items-center gap-2.5">
+              <Link href="/products/discount">
+                <Button variant="outline" size="md" className="gap-2 font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border-amber-200">
+                  <Tag className="w-4 h-4" /> Discount
+                </Button>
+              </Link>
               <Link href="/products/add">
                 <Button variant="primary" size="md" className="gap-2 font-bold shadow-sm">
                   <Plus className="w-4 h-4" /> Add New Fabric
@@ -227,12 +239,24 @@ export default function ProductsPage() {
                       {filteredProducts.map(prod => {
                         const isLow = prod.stock <= prod.minStockAlert;
                         const isOut = prod.stock <= 0;
+                        const season = prod.seasonCategory || (['Khaddar', 'Wash & Wear'].includes(prod.category) ? 'Winter' : 'Summer');
 
                         return (
                           <tr key={prod.id} className="hover:bg-slate-50/60 transition-colors">
                             <td className="py-3 px-4 max-w-xs">
-                              <div className="font-bold text-slate-900 leading-tight">
-                                {prod.name}
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-bold text-slate-900 leading-tight">
+                                  {prod.name}
+                                </span>
+                                <span
+                                  className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                    season === 'Winter'
+                                      ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                      : 'bg-amber-50 text-amber-700 border-amber-200'
+                                  }`}
+                                >
+                                  {season === 'Winter' ? '❄️ Winter' : '☀️ Summer'}
+                                </span>
                               </div>
                               <div className="text-[11px] text-slate-500 mt-0.5">
                                 {prod.supplier}
@@ -252,12 +276,26 @@ export default function ProductsPage() {
 
                             <td className="py-3 px-4 text-slate-600">{prod.unit}</td>
 
-                            <td className="py-3 px-4 text-right font-black text-slate-900">
-                              Rs. {prod.retailPrice.toLocaleString()}
+                            <td className="py-3 px-4 text-right">
+                              <div className="font-black text-slate-900">
+                                Rs. {prod.retailPrice.toLocaleString()}
+                              </div>
+                              {(prod.retailDiscount || 0) > 0 && (
+                                <div className="text-[10px] text-emerald-600 font-semibold">
+                                  -Rs. {(prod.retailDiscount || 0).toLocaleString()} (Net: Rs. {(prod.retailPrice - (prod.retailDiscount || 0)).toLocaleString()})
+                                </div>
+                              )}
                             </td>
 
-                            <td className="py-3 px-4 text-right font-bold text-cyan-700">
-                              Rs. {prod.wholesalePrice.toLocaleString()}
+                            <td className="py-3 px-4 text-right">
+                              <div className="font-bold text-cyan-700">
+                                Rs. {prod.wholesalePrice.toLocaleString()}
+                              </div>
+                              {(prod.wholesaleDiscount || 0) > 0 && (
+                                <div className="text-[10px] text-emerald-600 font-semibold">
+                                  -Rs. {(prod.wholesaleDiscount || 0).toLocaleString()} (Net: Rs. {(prod.wholesalePrice - (prod.wholesaleDiscount || 0)).toLocaleString()})
+                                </div>
+                              )}
                             </td>
 
                             <td className="py-3 px-4 text-center font-bold">
@@ -284,6 +322,13 @@ export default function ProductsPage() {
 
                             <td className="py-3 px-4 text-right">
                               <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  onClick={() => setEditingProduct(prod)}
+                                  className="p-1 text-slate-400 hover:text-blue-600 rounded transition-colors"
+                                  title="Edit Product & Stock"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
                                 <button
                                   onClick={() => {
                                     setBarcodeProduct(prod);
@@ -313,6 +358,19 @@ export default function ProductsPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Edit Product Modal */}
+        {editingProduct && (
+          <EditProductModal
+            product={editingProduct}
+            isOpen={!!editingProduct}
+            onClose={() => setEditingProduct(null)}
+            onSuccess={() => {
+              refreshProducts();
+              setEditingProduct(null);
+            }}
+          />
+        )}
 
         {/* Barcode Label Sheet Print Modal */}
         <Modal

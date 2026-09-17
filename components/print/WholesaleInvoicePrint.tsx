@@ -140,9 +140,11 @@ export function WholesaleInvoicePrint({ bill, onClose }: WholesaleInvoicePrintPr
                 <td className="py-3 px-2 text-slate-600">{item.unit}</td>
                 <td className="py-3 px-2 text-center font-bold text-slate-900">{item.quantity}</td>
                 <td className="py-3 px-2 text-right font-mono">Rs. {item.price.toLocaleString()}</td>
-                <td className="py-3 px-2 text-right text-slate-500 font-mono">
+                <td className="py-3 px-2 text-right text-slate-500 font-mono text-[11px]">
                   {item.discountPerUnit && item.discountPerUnit > 0
-                    ? `-Rs. ${item.discountPerUnit.toLocaleString()}`
+                    ? item.quantity > 1
+                      ? `-Rs. ${item.discountPerUnit.toLocaleString()} (-Rs. ${(item.discountPerUnit * item.quantity).toLocaleString()})`
+                      : `-Rs. ${item.discountPerUnit.toLocaleString()}`
                     : item.discountPercent > 0
                     ? `${item.discountPercent}%`
                     : '—'}

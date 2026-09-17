@@ -27,6 +27,8 @@ export const ALL_PERMISSIONS: { key: PermissionKey; label: string; group: string
   { key: 'staff_view', label: 'Staff Management & Matrix', group: 'Staff' },
   { key: 'attendance_view', label: 'Staff Attendance & Timesheets', group: 'Staff' },
   { key: 'payment_collection', label: 'Field Payment Collection', group: 'Khata & Finance' },
+  { key: 'staff_khata', label: 'Staff Khata & Outstation Recovery', group: 'Khata & Finance' },
+  { key: 'cheque_notifications', label: 'Field Cheque Due Notifications', group: 'Khata & Finance' },
   { key: 'settings_view', label: 'Store & System Settings', group: 'Administration' },
 ];
 

@@ -63,7 +63,50 @@ export interface Customer {
 
 export type SaleType = 'Retail' | 'Wholesale' | 'Khata';
 
-export type PaymentMethod = 'Cash' | 'Card' | 'Bank Transfer' | 'Credit/Khata' | 'Other';
+export type PaymentMethod = 'Cash' | 'Card' | 'Bank Transfer' | 'Credit/Khata' | 'Cheque' | 'Other';
+
+export interface ChequeItem {
+  id: string;
+  chequeAmount: number;
+  clearingDate: string; // YYYY-MM-DD
+  chequeNumber?: string;
+  bankName?: string;
+  status?: 'Pending' | 'Passed' | 'Bounced';
+  passedAt?: string;
+}
+
+export interface ChequeDetails {
+  chequeCount?: number;
+  chequeNumber?: string;
+  chequeAmount?: number;
+  clearingDate?: string; // Date cheque is scheduled to clear / pass
+  bankName?: string;
+}
+
+export interface StaffKhataCheque {
+  id: string;
+  amount: number;
+  chequeNumber?: string;
+  bankName?: string;
+  passingDate?: string;
+}
+
+export interface StaffKhataRecord {
+  id: string;
+  recordNumber: string;
+  staffId?: string;
+  staffName: string;
+  cities: string[];
+  date: string;
+  cashAmount: number;
+  cheques: StaffKhataCheque[];
+  chequeCount: number;
+  totalChequeAmount: number;
+  grandTotal: number;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface CartItem {
   product: Product;
@@ -240,6 +283,8 @@ export type PermissionKey =
   | 'staff_view'
   | 'attendance_view'
   | 'payment_collection'
+  | 'staff_khata'
+  | 'cheque_notifications'
   | 'settings_view';
 
 export interface Staff {
@@ -280,11 +325,15 @@ export interface PaymentCollectionRecord {
   staffName: string;
   previousBalance: number;
   amountCollected: number;
+  cashAmount?: number;
+  chequeAmount?: number;
+  cheques?: ChequeItem[];
   newBalance: number;
   paymentMethod: PaymentMethod;
   date: string;
   notes?: string;
   receiptNumber: string;
+  chequeDetails?: ChequeDetails;
 }
 
 export interface StockMovement {

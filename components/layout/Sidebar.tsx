@@ -22,6 +22,7 @@ import {
   ChevronRight,
   Sparkles,
   TrendingUp,
+  Briefcase,
   X,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
@@ -95,6 +96,7 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
         { label: 'Customers CRM', href: '/customers', icon: Users, permission: 'customers_view' },
         { label: 'Khata Ledgers', href: '/customers/khata', icon: BookOpen, permission: 'customers_view' },
         { label: 'Field Recovery', href: '/payments', icon: Banknote, permission: 'payment_collection' },
+        { label: 'Staff Khata', href: '/staff-khata', icon: Briefcase, permission: 'staff_khata', badge: 'Outstation' },
       ],
     },
     {

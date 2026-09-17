@@ -13,12 +13,13 @@ export const productsService = {
 
   getByBarcodeOrSku(query: string): Product | undefined {
     const clean = query.trim().toLowerCase();
+    if (!clean) return undefined;
     const products = storageService.getProducts();
     return products.find(
       p =>
-        p.barcode.toLowerCase() === clean ||
-        p.wholesaleBarcode.toLowerCase() === clean ||
-        p.sku.toLowerCase() === clean
+        (p.barcode || '').toLowerCase() === clean ||
+        (p.wholesaleBarcode || '').toLowerCase() === clean ||
+        (p.sku || '').toLowerCase() === clean
     );
   },
 
@@ -34,12 +35,12 @@ export const productsService = {
 
     return products.filter(
       p =>
-        p.name.toLowerCase().includes(clean) ||
-        p.sku.toLowerCase().includes(clean) ||
-        p.barcode.includes(clean) ||
-        p.wholesaleBarcode.includes(clean) ||
-        p.category.toLowerCase().includes(clean) ||
-        p.subcategory.toLowerCase().includes(clean)
+        (p.name || '').toLowerCase().includes(clean) ||
+        (p.sku || '').toLowerCase().includes(clean) ||
+        (p.barcode || '').toLowerCase().includes(clean) ||
+        (p.wholesaleBarcode || '').toLowerCase().includes(clean) ||
+        (p.category || '').toLowerCase().includes(clean) ||
+        (p.subcategory || '').toLowerCase().includes(clean)
     );
   },
 

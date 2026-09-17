@@ -151,7 +151,7 @@ export function ThermalReceipt({ bill, onClose }: ThermalReceiptProps) {
                   <div className="text-[9px] text-slate-500">{item.unit}</div>
                   {item.discountPerUnit && item.discountPerUnit > 0 ? (
                     <div className="text-[8px] text-emerald-700">
-                      Disc: -Rs. {item.discountPerUnit.toLocaleString()}/unit
+                      Disc: -Rs. {item.discountPerUnit.toLocaleString()}/unit (Net: Rs. {(item.price - item.discountPerUnit).toLocaleString()})
                     </div>
                   ) : null}
                 </div>

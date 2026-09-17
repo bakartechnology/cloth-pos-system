@@ -19,6 +19,7 @@ import { useAuth } from '@/context/AuthContext';
 import { StaffRole } from '@/types';
 import { inventoryService } from '@/services/inventoryService';
 import { storageService } from '@/services/storageService';
+import { paymentsService } from '@/services/paymentsService';
 import { useToast } from '@/context/ToastContext';
 import Link from 'next/link';
 
@@ -28,13 +29,19 @@ interface HeaderProps {
 }
 
 export function Header({ onOpenMobileMenu, onOpenSearch }: HeaderProps) {
-  const { currentStaff, switchRole } = useAuth();
+  const { currentStaff, switchRole, hasPermission } = useAuth();
   const { toast } = useToast();
   const [timeString, setTimeString] = useState('');
   const [dateString, setDateString] = useState('');
   const [isRoleMenuOpen, setIsRoleMenuOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [lowStockCount, setLowStockCount] = useState(0);
+  const [dueCheques, setDueCheques] = useState<ReturnType<typeof paymentsService.getDueCheques>>([]);
+
+  const canViewChequeNotifs =
+    currentStaff?.role === 'Admin' ||
+    hasPermission('cheque_notifications') ||
+    hasPermission('payment_collection');
 
   // Live Clock
   useEffect(() => {
@@ -62,11 +69,30 @@ export function Header({ onOpenMobileMenu, onOpenSearch }: HeaderProps) {
     return () => clearInterval(interval);
   }, []);
 
-  // Check low stock count
+  // Check low stock count & due cheques
   useEffect(() => {
     const low = inventoryService.getLowStockProducts(10);
     setLowStockCount(low.length);
-  }, []);
+
+    if (canViewChequeNotifs) {
+      const due = paymentsService.getDueCheques();
+      setDueCheques(due);
+
+      if (due.length > 0) {
+        const todayStr = new Date().toISOString().split('T')[0];
+        const toastKey = `anf_cheque_due_notified_${todayStr}_${due.length}`;
+        if (!sessionStorage.getItem(toastKey)) {
+          sessionStorage.setItem(toastKey, 'true');
+          const firstDue = due[0];
+          toast({
+            title: 'Cheque Due Today',
+            description: `Cheque of Rs. ${firstDue.cheque.chequeAmount.toLocaleString()} is due to pass today. Customer/Staff: ${firstDue.customerName}. Recorded by: ${firstDue.staffName}.`,
+            type: 'warning',
+          });
+        }
+      }
+    }
+  }, [canViewChequeNotifs]);
 
   const roles: StaffRole[] = [
     'Admin',
@@ -160,20 +186,56 @@ export function Header({ onOpenMobileMenu, onOpenSearch }: HeaderProps) {
             aria-label="View notifications"
           >
             <Bell className="w-4 h-4" />
-            {lowStockCount > 0 && (
+            {(lowStockCount > 0 || dueCheques.length > 0) && (
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white"></span>
             )}
           </button>
 
           {isNotifOpen && (
-            <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-slate-200/80 p-4 z-40 animate-in fade-in zoom-in-95 duration-150">
+            <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-xl border border-slate-200/80 p-4 z-40 animate-in fade-in zoom-in-95 duration-150">
               <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                 <div className="font-bold text-xs text-slate-900 uppercase tracking-wider">Store Notifications</div>
                 <span className="text-[10px] font-semibold bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
                   Live
                 </span>
               </div>
-              <div className="py-2 space-y-2.5 max-h-60 overflow-y-auto">
+              <div className="py-2 space-y-2.5 max-h-72 overflow-y-auto">
+                {dueCheques.length > 0 && canViewChequeNotifs && (
+                  <div className="space-y-2">
+                    {dueCheques.map(item => (
+                      <div
+                        key={`${item.collectionId}-${item.cheque.id}`}
+                        className="p-2.5 rounded-xl bg-amber-50/90 border border-amber-300/80 text-xs space-y-1.5 shadow-2xs"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-amber-900 flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                            Cheque Due Today
+                          </span>
+                          <span className="font-mono text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
+                            Rs. {item.cheque.chequeAmount.toLocaleString()}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-amber-800 leading-relaxed">
+                          Cheque of Rs. {item.cheque.chequeAmount.toLocaleString()} is due to pass today. Customer/Staff: <span className="font-semibold">{item.customerName}</span>. Recorded by: <span className="font-medium">{item.staffName}</span>.
+                        </p>
+                        <div className="flex items-center justify-between pt-1 border-t border-amber-200/60 text-[10px]">
+                          <span className="text-amber-700 font-mono">
+                            {item.cheque.chequeNumber ? `CHQ #${item.cheque.chequeNumber}` : item.receiptNumber}
+                          </span>
+                          <Link
+                            href="/payments"
+                            onClick={() => setIsNotifOpen(false)}
+                            className="font-bold text-blue-700 hover:text-blue-800 hover:underline"
+                          >
+                            Open Field Recovery →
+                          </Link>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {lowStockCount > 0 && (
                   <div className="flex items-start gap-2.5 p-2 rounded-lg bg-amber-50/80 border border-amber-200/60 text-xs">
                     <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />

@@ -64,6 +64,7 @@ export default function RetailPOSPage() {
     retailSubtotal,
     retailDiscountTotal,
     retailGrandTotal,
+    syncWithLatestProducts,
   } = useCart();
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -104,10 +105,15 @@ export default function RetailPOSPage() {
 
   const barcodeInputRef = useRef<HTMLInputElement>(null);
 
-  // Clock ticker & initial sequence lookup
+  // Clock ticker & initial sequence lookup + live storage/focus sync
   useEffect(() => {
-    setProducts(productsService.getAll());
-    setNextInvoiceNumber(salesService.peekNextInvoiceNumber('Retail'));
+    const refreshData = () => {
+      setProducts(productsService.getAll());
+      setNextInvoiceNumber(salesService.peekNextInvoiceNumber('Retail'));
+      syncWithLatestProducts();
+    };
+
+    refreshData();
 
     // Check for unfinished draft session
     const draft = posSessionService.getDraft();
@@ -123,7 +129,15 @@ export default function RetailPOSPage() {
     };
     updateClock();
     const interval = setInterval(updateClock, 1000);
-    return () => clearInterval(interval);
+
+    window.addEventListener('focus', refreshData);
+    window.addEventListener('storage', refreshData);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', refreshData);
+      window.removeEventListener('storage', refreshData);
+    };
   }, []);
 
   // Auto-save active cart draft
@@ -576,19 +590,19 @@ export default function RetailPOSPage() {
                         </div>
 
                         <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between">
-                          <div>
-                            <div className="text-xs font-black text-slate-900 font-mono">
-                              Rs. {finalRetail.toLocaleString()}
+                          <div className="space-y-0.5">
+                            <div className="text-xs font-bold text-slate-900 font-mono">
+                              Price: Rs. {prod.retailPrice.toLocaleString()}
                             </div>
                             {hasDiscount ? (
-                              <div className="flex items-center gap-1.5 text-[10px] mt-0.5">
-                                <span className="text-slate-400 line-through font-mono">
-                                  Rs. {prod.retailPrice.toLocaleString()}
-                                </span>
-                                <span className="text-emerald-600 font-bold font-mono">
-                                  − Rs. {(prod.retailDiscount || 0).toLocaleString()}
-                                </span>
-                              </div>
+                              <>
+                                <div className="text-[11px] font-semibold text-emerald-600 font-mono">
+                                  Discount: − Rs. {(prod.retailDiscount || 0).toLocaleString()}
+                                </div>
+                                <div className="text-xs font-black text-blue-700 font-mono">
+                                  Total: Rs. {finalRetail.toLocaleString()}
+                                </div>
+                              </>
                             ) : null}
                           </div>
                           <div
@@ -709,13 +723,14 @@ export default function RetailPOSPage() {
                             {/* Item Price & Discount Breakdown */}
                             <div className="mt-1 space-y-0.5 text-[11px] font-mono">
                               <div className="text-slate-600">
-                                Price: <span className="font-semibold text-slate-900">Rs. {item.price.toLocaleString()}</span>
+                                {item.quantity > 1 ? 'Original Unit Price:' : 'Original Price:'}{' '}
+                                <span className="font-semibold text-slate-900">Rs. {item.price.toLocaleString()}</span>
                                 <span className="text-[10px] text-slate-400 font-sans ml-1">/{item.product.unit}</span>
                               </div>
-                              {unitDiscount > 0 && (
+                              {unitDiscount > 0 ? (
                                 <>
                                   <div className="text-emerald-600 font-semibold">
-                                    Discount{item.quantity > 1 ? ' (per unit)' : ''}: − Rs. {unitDiscount.toLocaleString()}
+                                    {item.quantity > 1 ? 'Discount per unit:' : 'Discount:'} − Rs. {unitDiscount.toLocaleString()}
                                   </div>
                                   {item.quantity > 1 && (
                                     <div className="text-emerald-700 text-[10px]">
@@ -726,7 +741,7 @@ export default function RetailPOSPage() {
                                     Final Unit Price: Rs. {netUnit.toLocaleString()}
                                   </div>
                                 </>
-                              )}
+                              ) : null}
                             </div>
                           </div>
                           <button
@@ -826,19 +841,31 @@ export default function RetailPOSPage() {
           maxWidth="lg"
         >
           <div className="space-y-4">
-            {/* Grand Total Highlight */}
-            <div className="p-4 bg-slate-900 text-white rounded-2xl flex items-center justify-between">
-              <div>
-                <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-                  Amount Due
-                </span>
-                <div className="text-2xl font-black font-mono text-blue-400">
-                  Rs. {retailGrandTotal.toLocaleString()}
-                </div>
+            {/* Grand Total Highlight with Breakdown */}
+            <div className="p-4 bg-slate-900 text-white rounded-2xl space-y-2">
+              <div className="flex items-center justify-between text-xs text-slate-400">
+                <span>Original Subtotal:</span>
+                <span className="font-mono font-bold text-slate-200">Rs. {retailSubtotal.toLocaleString()}</span>
               </div>
-              <span className="text-xs bg-slate-800 px-3 py-1 rounded-full text-slate-300 font-mono">
-                {retailCart.length} Item(s)
-              </span>
+              {retailDiscountTotal > 0 && (
+                <div className="flex items-center justify-between text-xs text-emerald-400">
+                  <span>Total Product Discounts:</span>
+                  <span className="font-mono font-bold">− Rs. {retailDiscountTotal.toLocaleString()}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between pt-2 border-t border-slate-800">
+                <div>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
+                    Final Payable Amount
+                  </span>
+                  <div className="text-2xl font-black font-mono text-blue-400">
+                    Rs. {retailGrandTotal.toLocaleString()}
+                  </div>
+                </div>
+                <span className="text-xs bg-slate-800 px-3 py-1 rounded-full text-slate-300 font-mono">
+                  {retailCart.length} Item(s)
+                </span>
+              </div>
             </div>
 
             {/* Optional Customer Information */}

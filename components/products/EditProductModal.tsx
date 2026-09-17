@@ -83,6 +83,17 @@ export function EditProductModal({
       return;
     }
 
+    const targetSku = sku.trim() || product.sku;
+    const existing = productsService.getAll();
+    if (existing.some(p => p.id !== product.id && p.sku.toLowerCase() === targetSku.toLowerCase())) {
+      toast({
+        title: 'Duplicate SKU',
+        description: `The SKU "${targetSku}" is already assigned to another fabric article. Please enter a unique SKU.`,
+        type: 'error',
+      });
+      return;
+    }
+
     const previousStock = product.stock;
     const newStock = Math.max(0, stock);
     const stockDiff = newStock - previousStock;
@@ -90,7 +101,7 @@ export function EditProductModal({
     // Update product strictly keeping the same ID and barcode
     const updated = productsService.update(product.id, {
       name: name.trim(),
-      sku: sku.trim() || product.sku,
+      sku: targetSku,
       category,
       seasonCategory,
       subcategory: subcategory.trim(),

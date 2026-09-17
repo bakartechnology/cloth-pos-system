@@ -43,13 +43,51 @@ export default function AddProductPage() {
   const [barcode, setBarcode] = useState('896400' + Math.floor(100000 + Math.random() * 900000));
   const [wholesaleBarcode, setWholesaleBarcode] = useState('896401' + Math.floor(100000 + Math.random() * 900000));
 
+  const [skuManuallyEdited, setSkuManuallyEdited] = useState(false);
+
+  // Helper to generate SKU from article name with guaranteed uniqueness
+  const generateSkuFromName = (articleName: string, cat: ProductCategory, packagingUnit: UnitType) => {
+    if (!articleName.trim()) return '';
+    const words = articleName
+      .trim()
+      .split(/[\s-]+/)
+      .filter(w => w.length > 0 && !['and', '&', 'the', 'piece', 'pc'].includes(w.toLowerCase()));
+
+    let acronym = words.map(w => w[0].toUpperCase()).slice(0, 4).join('');
+    if (acronym.length < 2) {
+      acronym = articleName.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase();
+    }
+    if (!acronym) acronym = 'FAB';
+
+    const catCode = cat.slice(0, 3).toUpperCase();
+    const baseSku = `${acronym}-${catCode}`;
+
+    // Verify uniqueness against existing inventory
+    const existing = productsService.getAll();
+    let counter = 1;
+    let candidate = `${baseSku}-${String(counter).padStart(2, '0')}`;
+    while (existing.some(p => p.sku.toLowerCase() === candidate.toLowerCase())) {
+      counter++;
+      candidate = `${baseSku}-${String(counter).padStart(2, '0')}`;
+    }
+    return candidate;
+  };
+
+  const handleNameChange = (val: string) => {
+    setName(val);
+    if (!skuManuallyEdited) {
+      setSku(generateSkuFromName(val, category, unit));
+    }
+  };
+
   // Auto-generate realistic SKU and Barcode
   const handleAutoGenerateSKU = () => {
-    const catCode = category.slice(0, 3).toUpperCase();
-    const unitCode = unit.slice(0, 3).toUpperCase();
-    const rand = Math.floor(100 + Math.random() * 900);
-    const newSku = `${catCode}-${unitCode}-${rand}`;
+    const newSku = name.trim()
+      ? generateSkuFromName(name, category, unit)
+      : `${category.slice(0, 3).toUpperCase()}-${unit.slice(0, 3).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`;
+
     setSku(newSku);
+    setSkuManuallyEdited(false);
 
     const newRetailBarcode = '896400' + Math.floor(100000 + Math.random() * 900000);
     const newWholesaleBarcode = '896401' + Math.floor(100000 + Math.random() * 900000);
@@ -57,7 +95,7 @@ export default function AddProductPage() {
     setWholesaleBarcode(newWholesaleBarcode);
 
     toast({
-      title: 'SKU & Barcodes Generated',
+      title: 'Unique SKU & Barcodes Generated',
       description: `Generated SKU: ${newSku}`,
       type: 'info',
     });
@@ -71,7 +109,21 @@ export default function AddProductPage() {
       return;
     }
 
-    const finalSku = sku.trim() || `FAB-${Date.now().toString().slice(-4)}`;
+    const finalSku = sku.trim() || generateSkuFromName(name, category, unit);
+
+    // Validate SKU uniqueness before saving
+    const existingProducts = productsService.getAll();
+    const duplicate = existingProducts.find(
+      p => p.sku.trim().toLowerCase() === finalSku.toLowerCase()
+    );
+    if (duplicate) {
+      toast({
+        title: 'SKU Already Exists',
+        description: `The SKU "${finalSku}" is already assigned to "${duplicate.name}". Please enter or generate a unique SKU.`,
+        type: 'error',
+      });
+      return;
+    }
 
     const newProduct = productsService.add({
       name,
@@ -157,17 +209,20 @@ export default function AddProductPage() {
                       label="Fabric / Article Name *"
                       placeholder="e.g. Al-Karam Luxury Digital Printed Lawn 3-Piece"
                       value={name}
-                      onChange={e => setName(e.target.value)}
+                      onChange={e => handleNameChange(e.target.value)}
                       required
                     />
                   </div>
 
                   <div>
                     <Input
-                      label="SKU Code"
+                      label="SKU Code (Auto-generated from Name)"
                       placeholder="e.g. AK-LAWN-3P-01"
                       value={sku}
-                      onChange={e => setSku(e.target.value)}
+                      onChange={e => {
+                        setSku(e.target.value);
+                        setSkuManuallyEdited(true);
+                      }}
                     />
                   </div>
 
@@ -195,7 +250,13 @@ export default function AddProductPage() {
                     <Select
                       label="Fabric Category *"
                       value={category}
-                      onChange={e => setCategory(e.target.value as ProductCategory)}
+                      onChange={e => {
+                        const newCat = e.target.value as ProductCategory;
+                        setCategory(newCat);
+                        if (!skuManuallyEdited && name.trim()) {
+                          setSku(generateSkuFromName(name, newCat, unit));
+                        }
+                      }}
                     >
                       <option value="Lawn">Lawn</option>
                       <option value="Cotton">Cotton</option>

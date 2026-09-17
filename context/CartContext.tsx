@@ -28,6 +28,9 @@ interface CartContextType {
   wholesaleSubtotal: number;
   wholesaleDiscountTotal: number;
   wholesaleGrandTotal: number;
+
+  // Sync
+  syncWithLatestProducts: () => void;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -139,10 +142,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
 
     const item = retailCart.find(i => i.product.id === productId);
-    if (item && quantity > item.product.stock) {
+    const fresh = productsService.getById(productId) || item?.product;
+    const currentStock = fresh?.stock ?? item?.product.stock ?? 9999;
+
+    if (item && quantity > currentStock) {
       toast({
         title: 'Stock Warning',
-        description: `Requested ${quantity}, but only ${item.product.stock} available.`,
+        description: `Requested ${quantity}, but only ${currentStock} available.`,
         type: 'warning',
       });
       return;
@@ -151,12 +157,18 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setRetailCart(prev =>
       prev.map(item => {
         if (item.product.id === productId) {
+          const freshProd = productsService.getById(productId) || item.product;
+          const freshPrice = freshProd.retailPrice;
+          const freshDiscount = freshProd.retailDiscount || 0;
           return {
             ...item,
+            product: freshProd,
+            price: freshPrice,
+            discountPerUnit: freshDiscount,
             quantity,
             lineTotal: computeLineTotal(
-              item.price,
-              item.discountPerUnit || 0,
+              freshPrice,
+              freshDiscount,
               quantity,
               item.discountPercent
             ),
@@ -193,7 +205,24 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   };
 
   const restoreRetailCart = (items: CartItem[]) => {
-    setRetailCart(items);
+    const refreshed = items.map(item => {
+      const fresh = productsService.getById(item.product.id);
+      if (!fresh) return item;
+      const unitDiscount = fresh.retailDiscount || 0;
+      return {
+        ...item,
+        product: fresh,
+        price: fresh.retailPrice,
+        discountPerUnit: unitDiscount,
+        lineTotal: computeLineTotal(
+          fresh.retailPrice,
+          unitDiscount,
+          item.quantity,
+          item.discountPercent
+        ),
+      };
+    });
+    setRetailCart(refreshed);
   };
 
   // ---------------- Wholesale Cart Operations ----------------
@@ -284,10 +313,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
 
     const item = wholesaleCart.find(i => i.product.id === productId);
-    if (item && quantity > item.product.stock) {
+    const fresh = productsService.getById(productId) || item?.product;
+    const currentStock = fresh?.stock ?? item?.product.stock ?? 9999;
+
+    if (item && quantity > currentStock) {
       toast({
         title: 'Stock Warning',
-        description: `Requested ${quantity}, but only ${item.product.stock} available.`,
+        description: `Requested ${quantity}, but only ${currentStock} available.`,
         type: 'warning',
       });
       return;
@@ -296,12 +328,18 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setWholesaleCart(prev =>
       prev.map(item => {
         if (item.product.id === productId) {
+          const freshProd = productsService.getById(productId) || item.product;
+          const freshPrice = freshProd.wholesalePrice;
+          const freshDiscount = freshProd.wholesaleDiscount || 0;
           return {
             ...item,
+            product: freshProd,
+            price: freshPrice,
+            discountPerUnit: freshDiscount,
             quantity,
             lineTotal: computeLineTotal(
-              item.price,
-              item.discountPerUnit || 0,
+              freshPrice,
+              freshDiscount,
               quantity,
               item.discountPercent
             ),
@@ -337,6 +375,49 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setWholesaleCart([]);
   };
 
+  // Sync active cart items with latest prices and discounts from productsService
+  const syncWithLatestProducts = () => {
+    setRetailCart(prev =>
+      prev.map(item => {
+        const fresh = productsService.getById(item.product.id);
+        if (!fresh) return item;
+        const freshDiscount = fresh.retailDiscount || 0;
+        return {
+          ...item,
+          product: fresh,
+          price: fresh.retailPrice,
+          discountPerUnit: freshDiscount,
+          lineTotal: computeLineTotal(
+            fresh.retailPrice,
+            freshDiscount,
+            item.quantity,
+            item.discountPercent
+          ),
+        };
+      })
+    );
+
+    setWholesaleCart(prev =>
+      prev.map(item => {
+        const fresh = productsService.getById(item.product.id);
+        if (!fresh) return item;
+        const freshDiscount = fresh.wholesaleDiscount || 0;
+        return {
+          ...item,
+          product: fresh,
+          price: fresh.wholesalePrice,
+          discountPerUnit: freshDiscount,
+          lineTotal: computeLineTotal(
+            fresh.wholesalePrice,
+            freshDiscount,
+            item.quantity,
+            item.discountPercent
+          ),
+        };
+      })
+    );
+  };
+
   // Computations
   const retailSubtotal = retailCart.reduce((sum, i) => sum + i.price * i.quantity, 0);
   const retailGrandTotal = retailCart.reduce((sum, i) => sum + i.lineTotal, 0);
@@ -369,6 +450,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         wholesaleSubtotal,
         wholesaleDiscountTotal,
         wholesaleGrandTotal,
+
+        syncWithLatestProducts,
       }}
     >
       {children}

@@ -77,6 +77,7 @@ export default function WholesalePOSPage() {
     wholesaleSubtotal,
     wholesaleDiscountTotal,
     wholesaleGrandTotal,
+    syncWithLatestProducts,
   } = useCart();
 
   // Products & Client Data
@@ -127,10 +128,15 @@ export default function WholesalePOSPage() {
 
   const barcodeInputRef = useRef<HTMLInputElement>(null);
 
-  // Initial Data Load & Sequence Peek
+  // Initial Data Load, Sequence Peek, and live focus/storage sync
   useEffect(() => {
-    setProducts(productsService.getAll());
-    setNextInvoiceNumber(salesService.peekNextInvoiceNumber('Wholesale'));
+    const refreshData = () => {
+      setProducts(productsService.getAll());
+      setNextInvoiceNumber(salesService.peekNextInvoiceNumber('Wholesale'));
+      syncWithLatestProducts();
+    };
+
+    refreshData();
 
     const settings = storageService.getSettings();
     const banks = settings.bankAccounts || [];
@@ -138,6 +144,14 @@ export default function WholesalePOSPage() {
     if (banks.length > 0) {
       setSelectedBank(banks[0]);
     }
+
+    window.addEventListener('focus', refreshData);
+    window.addEventListener('storage', refreshData);
+
+    return () => {
+      window.removeEventListener('focus', refreshData);
+      window.removeEventListener('storage', refreshData);
+    };
   }, []);
 
   // Staff-specific draft detection on mount / staff switch
@@ -674,19 +688,19 @@ export default function WholesalePOSPage() {
                       </div>
 
                       <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between">
-                        <div>
-                          <div className="text-xs font-black text-cyan-900 font-mono">
-                            Rs. {finalWholesale.toLocaleString()}
+                        <div className="space-y-0.5">
+                          <div className="text-xs font-bold text-slate-900 font-mono">
+                            Wholesale Price: Rs. {prod.wholesalePrice.toLocaleString()}
                           </div>
                           {hasDiscount ? (
-                            <div className="flex items-center gap-1.5 text-[10px] mt-0.5">
-                              <span className="text-slate-400 line-through font-mono">
-                                Rs. {prod.wholesalePrice.toLocaleString()}
-                              </span>
-                              <span className="text-emerald-600 font-bold font-mono">
-                                − Rs. {(prod.wholesaleDiscount || 0).toLocaleString()}
-                              </span>
-                            </div>
+                            <>
+                              <div className="text-[11px] font-semibold text-emerald-600 font-mono">
+                                Discount: − Rs. {(prod.wholesaleDiscount || 0).toLocaleString()}
+                              </div>
+                              <div className="text-xs font-black text-cyan-800 font-mono">
+                                Total: Rs. {finalWholesale.toLocaleString()}
+                              </div>
+                            </>
                           ) : null}
                         </div>
                         <div
@@ -765,13 +779,14 @@ export default function WholesalePOSPage() {
                           {/* Wholesale Price & Discount Breakdown */}
                           <div className="mt-1 space-y-0.5 text-[11px] font-mono">
                             <div className="text-slate-600">
-                              Price: <span className="font-semibold text-slate-900">Rs. {item.price.toLocaleString()}</span>
+                              {item.quantity > 1 ? 'Original Unit Price:' : 'Original Wholesale Price:'}{' '}
+                              <span className="font-semibold text-slate-900">Rs. {item.price.toLocaleString()}</span>
                               <span className="text-[10px] text-slate-400 font-sans ml-1">/{item.product.unit}</span>
                             </div>
-                            {unitDiscount > 0 && (
+                            {unitDiscount > 0 ? (
                               <>
                                 <div className="text-emerald-600 font-semibold">
-                                  Discount{item.quantity > 1 ? ' (per unit)' : ''}: − Rs. {unitDiscount.toLocaleString()}
+                                  {item.quantity > 1 ? 'Discount per unit:' : 'Discount:'} − Rs. {unitDiscount.toLocaleString()}
                                 </div>
                                 {item.quantity > 1 && (
                                   <div className="text-emerald-700 text-[10px]">
@@ -782,7 +797,7 @@ export default function WholesalePOSPage() {
                                   Final Unit Price: Rs. {netUnit.toLocaleString()}
                                 </div>
                               </>
-                            )}
+                            ) : null}
                           </div>
                         </div>
 
@@ -884,25 +899,39 @@ export default function WholesalePOSPage() {
           maxWidth="2xl"
         >
           <div className="space-y-4 text-xs">
-            {/* Customer & Amount Summary */}
-            <div className="p-4 rounded-2xl bg-cyan-50/80 border border-cyan-200 flex items-center justify-between">
-              <div>
-                <span className="text-slate-500 font-medium">Invoice Net Payable:</span>
-                <div className="text-2xl font-black text-cyan-950 font-mono mt-0.5">
-                  Rs. {wholesaleGrandTotal.toLocaleString()}
-                </div>
+            {/* Customer & Amount Summary with Detailed Breakdown */}
+            <div className="p-4 rounded-2xl bg-cyan-50/80 border border-cyan-200 space-y-2">
+              <div className="flex items-center justify-between text-xs text-slate-600">
+                <span>Wholesale Subtotal:</span>
+                <span className="font-mono font-bold text-slate-900">Rs. {wholesaleSubtotal.toLocaleString()}</span>
               </div>
-              {selectedCustomer && (
-                <div className="text-right">
-                  <span className="text-slate-500 font-medium">Billed To (Client):</span>
-                  <div className="font-bold text-slate-900 text-sm">
-                    {selectedCustomer.businessName || selectedCustomer.name}
-                  </div>
-                  <div className="text-[11px] text-slate-600">
-                    Shopper: <strong>{customerName || selectedCustomer.name}</strong> • City: {selectedCustomer.city}
-                  </div>
+              {wholesaleDiscountTotal > 0 && (
+                <div className="flex items-center justify-between text-xs text-emerald-700">
+                  <span>Total Wholesale Discounts:</span>
+                  <span className="font-mono font-bold">− Rs. {wholesaleDiscountTotal.toLocaleString()}</span>
                 </div>
               )}
+              <div className="flex items-center justify-between pt-2 border-t border-cyan-200/80">
+                <div>
+                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">
+                    Invoice Net Payable
+                  </span>
+                  <div className="text-2xl font-black text-cyan-950 font-mono mt-0.5">
+                    Rs. {wholesaleGrandTotal.toLocaleString()}
+                  </div>
+                </div>
+                {selectedCustomer && (
+                  <div className="text-right">
+                    <span className="text-slate-500 font-medium">Billed To (Client):</span>
+                    <div className="font-bold text-slate-900 text-sm">
+                      {selectedCustomer.businessName || selectedCustomer.name}
+                    </div>
+                    <div className="text-[11px] text-slate-600">
+                      Shopper: <strong>{customerName || selectedCustomer.name}</strong> • City: {selectedCustomer.city}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Payment Method Selector */}

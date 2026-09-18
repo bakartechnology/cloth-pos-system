@@ -18,13 +18,13 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const demoAccounts: { role: StaffRole; user: string; label: string }[] = [
-    { role: 'Admin', user: 'admin', label: 'Haji Abdul Rehman (Full Access)' },
-    { role: 'Retail Cashier', user: 'tariq.cashier', label: 'Tariq Mehmood (Counter 01)' },
-    { role: 'Wholesale Cashier', user: 'hamza.wholesale', label: 'Hamza Bilal (Counter 02)' },
-    { role: 'Khata Staff', user: 'zain.khata', label: 'Zain Ul Abideen (Accounts)' },
-    { role: 'Stock Manager', user: 'usman.stock', label: 'Muhammad Usman (Warehouse)' },
-    { role: 'Payment Collection Staff', user: 'rashid.recovery', label: 'Rashid Khan (Field)' },
+  const demoAccounts: { role: StaffRole; user: string }[] = [
+    { role: 'Admin', user: 'admin' },
+    { role: 'Retail Cashier', user: 'tariq.cashier' },
+    { role: 'Wholesale Cashier', user: 'hamza.wholesale' },
+    { role: 'Khata Staff', user: 'zain.khata' },
+    { role: 'Stock Manager', user: 'usman.stock' },
+    { role: 'Payment Collection Staff', user: 'rashid.recovery' },
   ];
 
   const handleLogin = (e?: React.FormEvent) => {
@@ -34,9 +34,23 @@ export default function LoginPage() {
 
     setTimeout(() => {
       const result = authService.login(username);
-      if (result.success) {
+      if (result.success && result.staff) {
         refreshStaff();
-        router.push('/dashboard');
+        if (authService.hasPermission('dashboard_view', result.staff)) {
+          router.push('/dashboard');
+        } else if (authService.hasPermission('pos_retail', result.staff)) {
+          router.push('/pos/retail');
+        } else if (authService.hasPermission('pos_wholesale', result.staff)) {
+          router.push('/pos/wholesale');
+        } else if (authService.hasPermission('pos_khata', result.staff)) {
+          router.push('/pos/khata');
+        } else if (authService.hasPermission('stock_view', result.staff)) {
+          router.push('/products');
+        } else if (authService.hasPermission('payment_collection', result.staff)) {
+          router.push('/payments');
+        } else {
+          router.push('/dashboard');
+        }
       } else {
         setError(result.error || 'Invalid credentials.');
         setIsLoading(false);
@@ -165,17 +179,14 @@ export default function LoginPage() {
                   key={demo.user}
                   type="button"
                   onClick={() => handleSelectDemo(demo.user)}
-                  className={`flex flex-col text-left p-2 rounded-lg border text-[11px] transition-all ${
+                  className={`flex items-center justify-between px-3 py-2 rounded-lg border text-xs font-semibold transition-all ${
                     username === demo.user
                       ? 'bg-blue-600/20 border-blue-500/50 text-white'
                       : 'bg-slate-950/50 border-slate-800/80 text-slate-300 hover:bg-slate-800 hover:text-white'
                   }`}
                 >
-                  <span className="font-semibold flex items-center justify-between">
-                    {demo.role}
-                    {username === demo.user && <CheckCircle2 className="w-3 h-3 text-cyan-400" />}
-                  </span>
-                  <span className="text-[10px] text-slate-400 truncate">{demo.label}</span>
+                  <span>{demo.role}</span>
+                  {username === demo.user && <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />}
                 </button>
               ))}
             </div>

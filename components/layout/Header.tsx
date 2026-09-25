@@ -275,8 +275,7 @@ export function Header({ onOpenMobileMenu, onOpenSearch }: HeaderProps) {
               )}
             </div>
             <div className="hidden sm:block text-left leading-tight">
-              <div className="text-[11px] text-slate-400 font-medium uppercase tracking-wider">Demo Role</div>
-              <div className="text-xs font-bold text-slate-900 truncate max-w-[120px]">
+              <div className="text-xs font-bold text-slate-900 truncate max-w-[140px]">
                 {currentStaff?.role || 'Admin'}
               </div>
             </div>
@@ -287,10 +286,10 @@ export function Header({ onOpenMobileMenu, onOpenSearch }: HeaderProps) {
             <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-200/80 p-2 z-40 animate-in fade-in zoom-in-95 duration-150">
               <div className="px-3 py-2 border-b border-slate-100">
                 <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                  Select Staff Persona
+                  Select Role
                 </div>
                 <div className="text-xs text-slate-500 mt-0.5">
-                  Test role-based menu hiding and route restrictions instantly.
+                  Switch active staff role profile.
                 </div>
               </div>
 

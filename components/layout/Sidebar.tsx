@@ -46,15 +46,57 @@ interface NavSection {
   items: NavItem[];
 }
 
+// Persistent in-memory and session storage across page component unmounts
+let cachedSidebarScroll = 0;
+
 export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
   const { hasPermission, currentStaff } = useAuth();
+  const scrollRef = React.useRef<HTMLDivElement>(null);
   const [isCollapsed, setIsCollapsed] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('anf_sidebar_collapsed') === 'true';
     }
     return false;
   });
+
+  // Restore sidebar scroll position across navigation and remounts
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = sessionStorage.getItem('anf_sidebar_scroll_v1');
+        if (saved) {
+          cachedSidebarScroll = parseInt(saved, 10) || 0;
+        }
+      } catch {}
+    }
+
+    if (scrollRef.current) {
+      if (cachedSidebarScroll > 0) {
+        scrollRef.current.scrollTop = cachedSidebarScroll;
+      }
+
+      // If active item is genuinely off-screen, bring into view gently
+      const activeEl = scrollRef.current.querySelector('[data-active="true"]');
+      if (activeEl) {
+        const containerRect = scrollRef.current.getBoundingClientRect();
+        const elRect = activeEl.getBoundingClientRect();
+        const isAbove = elRect.top < containerRect.top;
+        const isBelow = elRect.bottom > containerRect.bottom;
+        if (isAbove || isBelow) {
+          activeEl.scrollIntoView({ block: 'nearest' });
+          cachedSidebarScroll = scrollRef.current.scrollTop;
+        }
+      }
+    }
+  }, [pathname]);
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    cachedSidebarScroll = e.currentTarget.scrollTop;
+    try {
+      sessionStorage.setItem('anf_sidebar_scroll_v1', String(cachedSidebarScroll));
+    } catch {}
+  };
 
   const toggleCollapse = () => {
     const next = !isCollapsed;
@@ -177,7 +219,11 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
       </div>
 
       {/* Navigation Links Scrollable */}
-      <div className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto px-3 py-4 space-y-6 scrollbar-thin"
+      >
         {navSections.map((section, sIdx) => {
           // Filter items based on user's active permissions
           const visibleItems = section.items.filter(
@@ -202,6 +248,8 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
                     <Link
                       key={iIdx}
                       href={item.href}
+                      scroll={false}
+                      data-active={isActive ? 'true' : 'false'}
                       onClick={() => {
                         if (isMobileOpen) onMobileClose();
                       }}

@@ -164,10 +164,6 @@ export default function RetailPOSPage() {
         e.preventDefault();
         setSearchBillsMode('customer');
         setIsSearchBillsOpen(true);
-      } else if (e.key === 'F4') {
-        e.preventDefault();
-        setSearchBillsMode('invoice');
-        setIsSearchBillsOpen(true);
       } else if (e.key === 'F8') {
         e.preventDefault();
         if (retailCart.length > 0) {
@@ -425,13 +421,10 @@ export default function RetailPOSPage() {
                     setIsSearchBillsOpen(true);
                   }}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 transition-colors"
-                  title="Search past bills by Invoice Number (F4)"
+                  title="Search past bills by Invoice Number"
                 >
                   <FileText className="w-3.5 h-3.5 text-indigo-600" />
                   <span>Search Invoice</span>
-                  <kbd className="hidden md:inline px-1 py-0.2 bg-white rounded text-[10px] text-slate-500 font-mono">
-                    F4
-                  </kbd>
                 </button>
 
                 {/* Keyboard Shortcuts Help */}

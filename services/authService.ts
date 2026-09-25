@@ -43,14 +43,14 @@ export const authService = {
     const found = staffList.find(s => s.username.toLowerCase() === cleanUser);
 
     if (!found) {
-      return { success: false, error: 'Staff account not found. Try "admin", "tariq.cashier", or select a demo role.' };
+      return { success: false, error: 'Staff account not found. Please check your username.' };
     }
 
     if (found.status !== 'Active') {
       return { success: false, error: 'This staff account has been deactivated.' };
     }
 
-    if (password && found.password && found.password !== password) {
+    if (found.password && found.password !== (password || '')) {
       return { success: false, error: 'Incorrect password. Please verify your counter security credentials.' };
     }
 

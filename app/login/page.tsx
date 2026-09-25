@@ -2,33 +2,28 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShieldCheck, Eye, EyeOff, Lock, User, ArrowRight, Sparkles, CheckCircle2 } from 'lucide-react';
+import { Eye, EyeOff, Lock, User, ArrowRight } from 'lucide-react';
 import { authService } from '@/services/authService';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/Button';
-import { StaffRole } from '@/types';
 
 export default function LoginPage() {
   const router = useRouter();
   const { refreshStaff } = useAuth();
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('admin123');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const demoAccounts: { role: StaffRole; user: string }[] = [
-    { role: 'Admin', user: 'admin' },
-    { role: 'Retail Cashier', user: 'tariq.cashier' },
-    { role: 'Wholesale Cashier', user: 'hamza.wholesale' },
-    { role: 'Khata Staff', user: 'zain.khata' },
-    { role: 'Stock Manager', user: 'usman.stock' },
-    { role: 'Payment Collection Staff', user: 'rashid.recovery' },
-  ];
-
   const handleLogin = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if (!username.trim()) {
+      setError('Please enter your staff username.');
+      return;
+    }
+
     setIsLoading(true);
     setError('');
 
@@ -58,12 +53,6 @@ export default function LoginPage() {
     }, 600);
   };
 
-  const handleSelectDemo = (user: string) => {
-    setUsername(user);
-    setPassword(user === 'admin' ? 'admin123' : 'pos1234');
-    setError('');
-  };
-
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-slate-950 p-4 relative overflow-hidden font-sans">
       {/* Background ambient lighting */}
@@ -87,7 +76,7 @@ export default function LoginPage() {
           <div className="mb-6">
             <h2 className="text-lg font-bold text-white">Sign In to Counter</h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              Enter your authorized staff username and pin to unlock the register.
+              Enter your authorized staff username and password to unlock the register.
             </p>
           </div>
 
@@ -108,9 +97,10 @@ export default function LoginPage() {
                 <input
                   type="text"
                   required
+                  autoFocus
                   value={username}
                   onChange={e => setUsername(e.target.value)}
-                  placeholder="e.g. admin or tariq.cashier"
+                  placeholder="Enter your username"
                   className="w-full pl-10 pr-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                 />
               </div>
@@ -127,7 +117,7 @@ export default function LoginPage() {
                   required
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  placeholder="••••••••"
+                  placeholder="Enter your password"
                   className="w-full pl-10 pr-10 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                 />
                 <button
@@ -163,34 +153,6 @@ export default function LoginPage() {
               Authorize & Open POS <ArrowRight className="w-4 h-4" />
             </Button>
           </form>
-
-          {/* Quick Demo Personas Selector */}
-          <div className="mt-6 pt-5 border-t border-slate-800">
-            <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">
-              <span className="flex items-center gap-1">
-                <Sparkles className="w-3 h-3 text-cyan-400" /> Instant Demo Personas
-              </span>
-              <span className="text-[10px] font-normal lowercase text-slate-500">1-click fill</span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-              {demoAccounts.map(demo => (
-                <button
-                  key={demo.user}
-                  type="button"
-                  onClick={() => handleSelectDemo(demo.user)}
-                  className={`flex items-center justify-between px-3 py-2 rounded-lg border text-xs font-semibold transition-all ${
-                    username === demo.user
-                      ? 'bg-blue-600/20 border-blue-500/50 text-white'
-                      : 'bg-slate-950/50 border-slate-800/80 text-slate-300 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <span>{demo.role}</span>
-                  {username === demo.user && <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />}
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
 
         {/* Footer */}

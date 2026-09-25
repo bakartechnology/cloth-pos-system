@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
 import { Button } from '@/components/ui/Button';
@@ -272,18 +272,20 @@ export default function KhataPOSPage() {
     });
   };
 
-  // Product Filter
-  const filteredProducts = products.filter(p => {
+  // Product Filter (Memoized for smooth 60fps typing & cart updates)
+  const filteredProducts = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
-    return (
-      !q ||
-      p.name.toLowerCase().includes(q) ||
-      p.sku.toLowerCase().includes(q) ||
-      p.barcode?.includes(q) ||
-      p.wholesaleBarcode?.includes(q) ||
-      p.category.toLowerCase().includes(q)
-    );
-  });
+    return products.filter(p => {
+      return (
+        !q ||
+        p.name.toLowerCase().includes(q) ||
+        p.sku.toLowerCase().includes(q) ||
+        p.barcode?.includes(q) ||
+        p.wholesaleBarcode?.includes(q) ||
+        p.category.toLowerCase().includes(q)
+      );
+    });
+  }, [products, searchQuery]);
 
   // Open Checkout Modal
   const handleOpenCheckout = () => {

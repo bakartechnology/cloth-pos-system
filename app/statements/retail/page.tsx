@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
 import { Button } from '@/components/ui/Button';
@@ -31,7 +31,7 @@ export default function RetailStatementPage() {
   const [selectedYear, setSelectedYear] = useState<string>('All');
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
 
-  const retentionYears = retentionService.getActiveRetentionYears();
+  const retentionYears = useMemo(() => retentionService.getActiveRetentionYears(), []);
 
   useEffect(() => {
     // 1. Fetch only Retail invoices
@@ -41,25 +41,31 @@ export default function RetailStatementPage() {
     setBills(retained);
   }, []);
 
-  const filteredBills = bills.filter(b => {
+  const filteredBills = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
-    const matchSearch =
-      !q ||
-      b.invoiceNumber.toLowerCase().includes(q) ||
-      (b.customerName && b.customerName.toLowerCase().includes(q)) ||
-      (b.customerPhone && b.customerPhone.includes(q)) ||
-      b.staffName.toLowerCase().includes(q) ||
-      b.items.some(i => i.productName.toLowerCase().includes(q));
+    return bills.filter(b => {
+      const matchSearch =
+        !q ||
+        b.invoiceNumber.toLowerCase().includes(q) ||
+        (b.customerName && b.customerName.toLowerCase().includes(q)) ||
+        (b.customerPhone && b.customerPhone.includes(q)) ||
+        b.staffName.toLowerCase().includes(q) ||
+        b.items.some(i => i.productName.toLowerCase().includes(q));
 
-    const billYear = new Date(b.date).getFullYear().toString();
-    const matchYear = selectedYear === 'All' || billYear === selectedYear;
+      const billYear = new Date(b.date).getFullYear().toString();
+      const matchYear = selectedYear === 'All' || billYear === selectedYear;
 
-    return matchSearch && matchYear;
-  });
+      return matchSearch && matchYear;
+    });
+  }, [bills, searchQuery, selectedYear]);
 
-  const totalSales = filteredBills.reduce((sum, b) => sum + b.grandTotal, 0);
-  const totalDiscount = filteredBills.reduce((sum, b) => sum + b.discountTotal, 0);
-  const totalPaid = filteredBills.reduce((sum, b) => sum + (b.amountReceived || b.grandTotal), 0);
+  const { totalSales, totalDiscount, totalPaid } = useMemo(() => {
+    return {
+      totalSales: filteredBills.reduce((sum, b) => sum + b.grandTotal, 0),
+      totalDiscount: filteredBills.reduce((sum, b) => sum + b.discountTotal, 0),
+      totalPaid: filteredBills.reduce((sum, b) => sum + (b.amountReceived || b.grandTotal), 0),
+    };
+  }, [filteredBills]);
 
   return (
     <ProtectedRoute permission="retail_statement_view">

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
 import { Button } from '@/components/ui/Button';
@@ -186,19 +186,23 @@ export default function WholesaleRecoveryPage() {
     }
   };
 
-  const filteredCollections = collections.filter(c => {
+  const filteredCollections = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
-    if (!q) return true;
-    return (
-      c.receiptNumber.toLowerCase().includes(q) ||
-      c.customerName.toLowerCase().includes(q) ||
-      (c.clientName && c.clientName.toLowerCase().includes(q)) ||
-      (c.customerCity && c.customerCity.toLowerCase().includes(q)) ||
-      c.staffName.toLowerCase().includes(q)
-    );
-  });
+    if (!q) return collections;
+    return collections.filter(c => {
+      return (
+        c.receiptNumber.toLowerCase().includes(q) ||
+        c.customerName.toLowerCase().includes(q) ||
+        (c.clientName && c.clientName.toLowerCase().includes(q)) ||
+        (c.customerCity && c.customerCity.toLowerCase().includes(q)) ||
+        c.staffName.toLowerCase().includes(q)
+      );
+    });
+  }, [collections, searchQuery]);
 
-  const totalCollected = collections.reduce((sum, c) => sum + c.amountCollected, 0);
+  const totalCollected = useMemo(() => {
+    return collections.reduce((sum, c) => sum + c.amountCollected, 0);
+  }, [collections]);
 
   return (
     <ProtectedRoute permission="wholesale_recovery">

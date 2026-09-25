@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
 import { Button } from '@/components/ui/Button';
@@ -196,17 +196,19 @@ export default function RetailPOSPage() {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [retailCart.length, completedBill]);
 
-  // Filter products by search and category
-  const filteredProducts = products.filter(p => {
-    const matchesCat = selectedCategory === 'All' || p.category === selectedCategory;
-    const q = searchQuery.toLowerCase().trim();
-    const matchesQuery =
-      !q ||
-      p.name.toLowerCase().includes(q) ||
-      p.sku.toLowerCase().includes(q) ||
-      p.barcode.includes(q);
-    return matchesCat && matchesQuery;
-  });
+  // Filter products by search and category (Memoized for smooth 60fps rendering)
+  const filteredProducts = useMemo(() => {
+    return products.filter(p => {
+      const matchesCat = selectedCategory === 'All' || p.category === selectedCategory;
+      const q = searchQuery.toLowerCase().trim();
+      const matchesQuery =
+        !q ||
+        p.name.toLowerCase().includes(q) ||
+        p.sku.toLowerCase().includes(q) ||
+        p.barcode.includes(q);
+      return matchesCat && matchesQuery;
+    });
+  }, [products, selectedCategory, searchQuery]);
 
   const categories: (string | ProductCategory)[] = [
     'All',

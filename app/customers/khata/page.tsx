@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
 import { Button } from '@/components/ui/Button';
@@ -40,7 +40,7 @@ export default function KhataLedgerPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTx, setSelectedTx] = useState<KhataTransaction | null>(null);
 
-  const retentionYears = retentionService.getActiveRetentionYears();
+  const retentionYears = useMemo(() => retentionService.getActiveRetentionYears(), []);
 
   // Record Payment Modal State
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -59,23 +59,28 @@ export default function KhataLedgerPage() {
     }
   }, []);
 
-  const selectedCustomer =
-    khataCustomers.find(c => c.id === selectedCustomerId) || khataCustomers[0];
+  const selectedCustomer = useMemo(() => {
+    return khataCustomers.find(c => c.id === selectedCustomerId) || khataCustomers[0];
+  }, [khataCustomers, selectedCustomerId]);
 
-  const allTransactions = selectedCustomer
-    ? customersService.getKhataTransactions(selectedCustomer.id)
-    : [];
+  const allTransactions = useMemo(() => {
+    return selectedCustomer ? customersService.getKhataTransactions(selectedCustomer.id) : [];
+  }, [selectedCustomer]);
 
   // PART 6 - Req 10: Apply 5-year rolling retention policy safely
-  const retainedTransactions = retentionService.filterActiveStatements(allTransactions);
+  const retainedTransactions = useMemo(() => {
+    return retentionService.filterActiveStatements(allTransactions);
+  }, [allTransactions]);
 
-  const filteredTransactions = retainedTransactions.filter(t => {
-    if (selectedYear !== 'All') {
-      const tYear = new Date(t.date).getFullYear().toString();
-      return tYear === selectedYear;
-    }
-    return true;
-  });
+  const filteredTransactions = useMemo(() => {
+    return retainedTransactions.filter(t => {
+      if (selectedYear !== 'All') {
+        const tYear = new Date(t.date).getFullYear().toString();
+        return tYear === selectedYear;
+      }
+      return true;
+    });
+  }, [retainedTransactions, selectedYear]);
 
   const handleRecordPayment = (e: React.FormEvent) => {
     e.preventDefault();
@@ -110,10 +115,12 @@ export default function KhataLedgerPage() {
     }
   };
 
-  const filteredCustomers = khataCustomers.filter(c => {
+  const filteredCustomers = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
-    return !q || c.name.toLowerCase().includes(q) || c.phone.includes(q) || (c.businessName && c.businessName.toLowerCase().includes(q));
-  });
+    return khataCustomers.filter(c => {
+      return !q || c.name.toLowerCase().includes(q) || c.phone.includes(q) || (c.businessName && c.businessName.toLowerCase().includes(q));
+    });
+  }, [khataCustomers, searchQuery]);
 
   return (
     <ProtectedRoute permission="customers_view">

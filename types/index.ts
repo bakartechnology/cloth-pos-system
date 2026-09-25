@@ -29,9 +29,11 @@ export interface Product {
   unit: UnitType;
   retailPrice: number;
   wholesalePrice: number;
+  khataPrice?: number;
   costPrice?: number;
   retailDiscount?: number;
   wholesaleDiscount?: number;
+  khataDiscount?: number;
   stock: number;
   minStockAlert: number;
   supplier: string;
@@ -55,6 +57,7 @@ export interface Customer {
   businessName?: string;
   creditLimit: number;
   currentBalance: number; // positive = customer owes store (debit)
+  balance?: number; // alias for currentBalance
   totalPurchased: number;
   totalPaid: number;
   lastTransactionDate?: string;
@@ -393,4 +396,7 @@ export interface WholesaleSessionDraft {
   subtotal: number;
   grandTotal: number;
 }
+
+export type KhataSessionDraft = WholesaleSessionDraft;
+
 

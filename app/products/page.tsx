@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
 import { Button } from '@/components/ui/Button';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
+import { Card, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Modal } from '@/components/ui/Modal';
@@ -27,7 +27,12 @@ import { Product, ProductCategory, UnitType } from '@/types';
 
 export default function ProductsPage() {
   const { toast } = useToast();
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<Product[]>(() => {
+    if (typeof window !== 'undefined') {
+      return productsService.getAll();
+    }
+    return [];
+  });
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
@@ -44,7 +49,9 @@ export default function ProductsPage() {
   };
 
   useEffect(() => {
-    refreshProducts();
+    const handleSync = () => setProducts(productsService.getAll());
+    window.addEventListener('focus', handleSync);
+    return () => window.removeEventListener('focus', handleSync);
   }, []);
 
   const categories: (string | ProductCategory)[] = [
@@ -181,7 +188,7 @@ export default function ProductsPage() {
               <div className="flex items-center gap-2">
                 <select
                   value={sortBy}
-                  onChange={e => setSortBy(e.target.value as any)}
+                  onChange={e => setSortBy(e.target.value as 'name' | 'stock' | 'retailPrice')}
                   className="flex-1 text-xs border border-slate-200 rounded-lg px-3 py-2 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-medium"
                 >
                   <option value="name">Sort by Name</option>
@@ -226,6 +233,7 @@ export default function ProductsPage() {
                         <th className="py-3 px-4">Unit</th>
                         <th className="py-3 px-4 text-right">Retail Rate</th>
                         <th className="py-3 px-4 text-right">Wholesale Rate</th>
+                        <th className="py-3 px-4 text-right">Khata Rate</th>
                         <th className="py-3 px-4 text-center">Available Stock</th>
                         <th className="py-3 px-4 text-center">Status</th>
                         <th className="py-3 px-4 text-right">Actions</th>
@@ -291,6 +299,23 @@ export default function ProductsPage() {
                                 <div className="text-[10px] text-emerald-600 font-semibold">
                                   -Rs. {(prod.wholesaleDiscount || 0).toLocaleString()} (Net: Rs. {(prod.wholesalePrice - (prod.wholesaleDiscount || 0)).toLocaleString()})
                                 </div>
+                              )}
+                            </td>
+
+                            <td className="py-3 px-4 text-right">
+                              {prod.khataPrice ? (
+                                <>
+                                  <div className="font-bold text-amber-800">
+                                    Rs. {prod.khataPrice.toLocaleString()}
+                                  </div>
+                                  {(prod.khataDiscount || 0) > 0 && (
+                                    <div className="text-[10px] text-emerald-600 font-semibold">
+                                      -Rs. {(prod.khataDiscount || 0).toLocaleString()} (Net: Rs. {(prod.khataPrice - (prod.khataDiscount || 0)).toLocaleString()})
+                                    </div>
+                                  )}
+                                </>
+                              ) : (
+                                <span className="text-[11px] text-slate-400 italic">Not Set</span>
                               )}
                             </td>
 

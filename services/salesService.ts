@@ -37,6 +37,9 @@ export const salesService = {
     if (type === 'Wholesale') {
       return storageService.getNextWholesaleInvoiceNumber();
     }
+    if (type === 'Khata') {
+      return storageService.getNextKhataInvoiceNumber();
+    }
     const currentYear = new Date().getFullYear();
     const random = Math.floor(10000 + Math.random() * 90000);
     return `KHT-${currentYear}-${random}`;
@@ -52,7 +55,10 @@ export const salesService = {
     if (type === 'Wholesale') {
       return storageService.peekNextWholesaleInvoiceNumber();
     }
-    return `KHT-${new Date().getFullYear()}-000000`;
+    if (type === 'Khata') {
+      return storageService.peekNextKhataInvoiceNumber();
+    }
+    return `KHT-${new Date().getFullYear()}-000001`;
   },
 
   /**

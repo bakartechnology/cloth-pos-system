@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
@@ -34,19 +34,29 @@ export default function AddProductPage() {
   const [unit, setUnit] = useState<UnitType>('Unstitched Box');
   const [retailPrice, setRetailPrice] = useState<number>(4500);
   const [wholesalePrice, setWholesalePrice] = useState<number>(3600);
+  const [khataPrice, setKhataPrice] = useState<number>(3800);
   const [retailDiscount, setRetailDiscount] = useState<number>(0);
   const [wholesaleDiscount, setWholesaleDiscount] = useState<number>(0);
+  const [khataDiscount, setKhataDiscount] = useState<number>(0);
   const [initialStock, setInitialStock] = useState<number>(30);
   const [minStockAlert, setMinStockAlert] = useState<number>(8);
   const [supplier, setSupplier] = useState('Gul Ahmed Textiles');
   const [description, setDescription] = useState('');
-  const [barcode, setBarcode] = useState('896400' + Math.floor(100000 + Math.random() * 900000));
-  const [wholesaleBarcode, setWholesaleBarcode] = useState('896401' + Math.floor(100000 + Math.random() * 900000));
+  const [barcode, setBarcode] = useState('896400100001');
+  const [wholesaleBarcode, setWholesaleBarcode] = useState('896401100001');
 
   const [skuManuallyEdited, setSkuManuallyEdited] = useState(false);
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setBarcode('896400' + Math.floor(100000 + Math.random() * 900000));
+      setWholesaleBarcode('896401' + Math.floor(100000 + Math.random() * 900000));
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
+
   // Helper to generate SKU from article name with guaranteed uniqueness
-  const generateSkuFromName = (articleName: string, cat: ProductCategory, packagingUnit: UnitType) => {
+  const generateSkuFromName = (articleName: string, cat: ProductCategory) => {
     if (!articleName.trim()) return '';
     const words = articleName
       .trim()
@@ -76,14 +86,14 @@ export default function AddProductPage() {
   const handleNameChange = (val: string) => {
     setName(val);
     if (!skuManuallyEdited) {
-      setSku(generateSkuFromName(val, category, unit));
+      setSku(generateSkuFromName(val, category));
     }
   };
 
   // Auto-generate realistic SKU and Barcode
   const handleAutoGenerateSKU = () => {
     const newSku = name.trim()
-      ? generateSkuFromName(name, category, unit)
+      ? generateSkuFromName(name, category)
       : `${category.slice(0, 3).toUpperCase()}-${unit.slice(0, 3).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`;
 
     setSku(newSku);
@@ -109,7 +119,7 @@ export default function AddProductPage() {
       return;
     }
 
-    const finalSku = sku.trim() || generateSkuFromName(name, category, unit);
+    const finalSku = sku.trim() || generateSkuFromName(name, category);
 
     // Validate SKU uniqueness before saving
     const existingProducts = productsService.getAll();
@@ -125,6 +135,15 @@ export default function AddProductPage() {
       return;
     }
 
+    if (khataPrice <= 0) {
+      toast({
+        title: 'Validation Error',
+        description: 'Khata Sale Price must be greater than zero.',
+        type: 'error',
+      });
+      return;
+    }
+
     const newProduct = productsService.add({
       name,
       sku: finalSku,
@@ -134,8 +153,10 @@ export default function AddProductPage() {
       unit,
       retailPrice: Math.max(0, retailPrice),
       wholesalePrice: Math.max(0, wholesalePrice),
+      khataPrice: Math.max(0, khataPrice),
       retailDiscount: Math.max(0, retailDiscount),
       wholesaleDiscount: Math.max(0, wholesaleDiscount),
+      khataDiscount: Math.max(0, khataDiscount),
       stock: initialStock,
       minStockAlert,
       supplier: supplier || 'Local Mill',
@@ -254,7 +275,7 @@ export default function AddProductPage() {
                         const newCat = e.target.value as ProductCategory;
                         setCategory(newCat);
                         if (!skuManuallyEdited && name.trim()) {
-                          setSku(generateSkuFromName(name, newCat, unit));
+                          setSku(generateSkuFromName(name, newCat));
                         }
                       }}
                     >
@@ -362,6 +383,32 @@ export default function AddProductPage() {
                       <span className="text-slate-600 font-medium">Final Wholesale:</span>
                       <span className="font-mono font-bold text-cyan-700">
                         Rs. {Math.max(0, wholesalePrice - wholesaleDiscount).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 p-3 rounded-xl bg-amber-50/40 border border-amber-200">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <Input
+                        label="Khata Sale Price (Rs.) *"
+                        type="number"
+                        min="0"
+                        value={khataPrice}
+                        onChange={e => setKhataPrice(parseFloat(e.target.value) || 0)}
+                        required
+                      />
+                      <Input
+                        label="Khata Sale Discount (Rs.)"
+                        type="number"
+                        min="0"
+                        value={khataDiscount}
+                        onChange={e => setKhataDiscount(parseFloat(e.target.value) || 0)}
+                      />
+                    </div>
+                    <div className="flex justify-between items-center text-xs pt-1 border-t border-amber-200/50">
+                      <span className="text-slate-600 font-medium">Final Khata Rate:</span>
+                      <span className="font-mono font-bold text-amber-800">
+                        Rs. {Math.max(0, khataPrice - khataDiscount).toLocaleString()}
                       </span>
                     </div>
                   </div>

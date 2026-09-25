@@ -15,7 +15,7 @@ export const ALL_PERMISSIONS: { key: PermissionKey; label: string; group: string
   { key: 'dashboard_view', label: 'View Dashboard & Analytics', group: 'Dashboard' },
   { key: 'pos_retail', label: 'Access Retail POS', group: 'Point of Sale' },
   { key: 'pos_wholesale', label: 'Access Wholesale POS', group: 'Point of Sale' },
-  { key: 'pos_khata', label: 'Access Khata Credit Sales', group: 'Point of Sale' },
+  { key: 'pos_khata', label: 'Access Khata Credit POS', group: 'Point of Sale' },
   { key: 'stock_view', label: 'View Inventory & Stock', group: 'Inventory' },
   { key: 'stock_add', label: 'Add New Products & Restock', group: 'Inventory' },
   { key: 'stock_edit', label: 'Edit Product Pricing & Details', group: 'Inventory' },

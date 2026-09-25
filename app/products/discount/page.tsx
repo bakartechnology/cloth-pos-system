@@ -23,10 +23,15 @@ import { Product } from '@/types';
 
 export default function DiscountManagementPage() {
   const { toast } = useToast();
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<Product[]>(() => {
+    if (typeof window !== 'undefined') {
+      return productsService.getAll();
+    }
+    return [];
+  });
 
   // Form State
-  const [saleType, setSaleType] = useState<'Retail' | 'Wholesale'>('Retail');
+  const [saleType, setSaleType] = useState<'Retail' | 'Wholesale' | 'Khata Sale'>('Retail');
   const [category, setCategory] = useState<'All' | 'Summer' | 'Winter'>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -37,7 +42,9 @@ export default function DiscountManagementPage() {
   };
 
   useEffect(() => {
-    loadProducts();
+    const handleSync = () => setProducts(productsService.getAll());
+    window.addEventListener('focus', handleSync);
+    return () => window.removeEventListener('focus', handleSync);
   }, []);
 
   // Helper for product season
@@ -85,7 +92,7 @@ export default function DiscountManagementPage() {
 
     if (selectedProduct) {
       // 1. Specific product discount
-      const result = productsService.applyBulkDiscount({
+      productsService.applyBulkDiscount({
         saleType,
         category: 'All',
         discountAmount: cleanAmount,
@@ -119,6 +126,7 @@ export default function DiscountManagementPage() {
   const totalWinter = products.filter(p => getProductSeason(p) === 'Winter').length;
   const activeRetailDiscounts = products.filter(p => (p.retailDiscount || 0) > 0).length;
   const activeWholesaleDiscounts = products.filter(p => (p.wholesaleDiscount || 0) > 0).length;
+  const activeKhataDiscounts = products.filter(p => (p.khataDiscount || 0) > 0).length;
 
   return (
     <ProtectedRoute permission="stock_edit">
@@ -152,7 +160,7 @@ export default function DiscountManagementPage() {
           </div>
 
           {/* Quick Metrics */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
             <div className="p-3.5 bg-white rounded-xl border border-slate-200 shadow-2xs">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                 Summer Collection
@@ -188,6 +196,15 @@ export default function DiscountManagementPage() {
                 {activeWholesaleDiscounts} <span className="text-xs font-normal text-slate-500">articles</span>
               </div>
             </div>
+
+            <div className="p-3.5 bg-white rounded-xl border border-slate-200 shadow-2xs">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                Active Khata Discounts
+              </span>
+              <div className="text-lg font-black text-amber-700 mt-0.5">
+                {activeKhataDiscounts} <span className="text-xs font-normal text-slate-500">articles</span>
+              </div>
+            </div>
           </div>
 
           {/* Discount Setup Form & Target Preview */}
@@ -212,15 +229,18 @@ export default function DiscountManagementPage() {
                       </label>
                       <Select
                         value={saleType}
-                        onChange={e => setSaleType(e.target.value as 'Retail' | 'Wholesale')}
+                        onChange={e => setSaleType(e.target.value as 'Retail' | 'Wholesale' | 'Khata Sale')}
                       >
                         <option value="Retail">Retail (Applies to Retail POS)</option>
                         <option value="Wholesale">Wholesale (Applies to Wholesale POS)</option>
+                        <option value="Khata Sale">Khata Sale (Applies to Khata Credit POS)</option>
                       </Select>
                       <span className="text-[11px] text-slate-400 mt-1 block">
                         {saleType === 'Retail'
-                          ? 'Updates Retail Discount field only. Wholesale rates unaffected.'
-                          : 'Updates Wholesale Discount field only. Retail rates unaffected.'}
+                          ? 'Updates Retail Discount field only. Wholesale and Khata rates unaffected.'
+                          : saleType === 'Wholesale'
+                          ? 'Updates Wholesale Discount field only. Retail and Khata rates unaffected.'
+                          : 'Updates Khata Discount field only. Retail and Wholesale rates unaffected.'}
                       </span>
                     </div>
 
@@ -440,11 +460,17 @@ export default function DiscountManagementPage() {
                           targetProducts.map(prod => {
                             const season = getProductSeason(prod);
                             const originalRate =
-                              saleType === 'Retail' ? prod.retailPrice : prod.wholesalePrice;
+                              saleType === 'Retail'
+                                ? prod.retailPrice
+                                : saleType === 'Wholesale'
+                                ? prod.wholesalePrice
+                                : (prod.khataPrice || 0);
                             const currentDiscount =
                               saleType === 'Retail'
                                 ? prod.retailDiscount || 0
-                                : prod.wholesaleDiscount || 0;
+                                : saleType === 'Wholesale'
+                                ? prod.wholesaleDiscount || 0
+                                : prod.khataDiscount || 0;
                             const newDiscount = Math.max(0, discountAmount || 0);
                             const projectedFinal = Math.max(0, originalRate - newDiscount);
 

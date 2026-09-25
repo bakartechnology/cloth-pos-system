@@ -1,13 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, ShoppingBag, Users, FileText, UserCheck, ArrowRight, X, Sparkles } from 'lucide-react';
 import { productsService } from '@/services/productsService';
 import { customersService } from '@/services/customersService';
 import { salesService } from '@/services/salesService';
 import { staffService } from '@/services/staffService';
-import { Product, Customer, Bill, Staff } from '@/types';
 
 interface GlobalSearchModalProps {
   isOpen: boolean;
@@ -17,74 +16,58 @@ interface GlobalSearchModalProps {
 export function GlobalSearchModal({ isOpen, onClose }: GlobalSearchModalProps) {
   const router = useRouter();
   const [query, setQuery] = useState('');
-  const [products, setProducts] = useState<Product[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [bills, setBills] = useState<Bill[]>([]);
-  const [staff, setStaff] = useState<Staff[]>([]);
 
-  useEffect(() => {
-    if (!isOpen) {
-      setQuery('');
-      return;
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
+  const { products, customers, bills, staff } = useMemo(() => {
     if (!query.trim()) {
-      setProducts([]);
-      setCustomers([]);
-      setBills([]);
-      setStaff([]);
-      return;
+      return { products: [], customers: [], bills: [], staff: [] };
     }
 
     const q = query.toLowerCase();
 
     // Search Products
     const allProducts = productsService.getAll();
-    setProducts(
-      allProducts
-        .filter(
-          p =>
-            p.name.toLowerCase().includes(q) ||
-            p.sku.toLowerCase().includes(q) ||
-            p.barcode.includes(q)
-        )
-        .slice(0, 4)
-    );
+    const filteredProducts = allProducts
+      .filter(
+        p =>
+          p.name.toLowerCase().includes(q) ||
+          p.sku.toLowerCase().includes(q) ||
+          p.barcode.includes(q)
+      )
+      .slice(0, 4);
 
     // Search Customers
     const allCustomers = customersService.getAll();
-    setCustomers(
-      allCustomers
-        .filter(
-          c =>
-            c.name.toLowerCase().includes(q) ||
-            c.phone.includes(q) ||
-            (c.businessName && c.businessName.toLowerCase().includes(q))
-        )
-        .slice(0, 3)
-    );
+    const filteredCustomers = allCustomers
+      .filter(
+        c =>
+          c.name.toLowerCase().includes(q) ||
+          c.phone.includes(q) ||
+          (c.businessName && c.businessName.toLowerCase().includes(q))
+      )
+      .slice(0, 3);
 
     // Search Bills
     const allBills = salesService.getAllBills();
-    setBills(
-      allBills
-        .filter(
-          b =>
-            b.invoiceNumber.toLowerCase().includes(q) ||
-            (b.customerName && b.customerName.toLowerCase().includes(q))
-        )
-        .slice(0, 3)
-    );
+    const filteredBills = allBills
+      .filter(
+        b =>
+          b.invoiceNumber.toLowerCase().includes(q) ||
+          (b.customerName && b.customerName.toLowerCase().includes(q))
+      )
+      .slice(0, 3);
 
     // Search Staff
     const allStaff = staffService.getAll();
-    setStaff(
-      allStaff
-        .filter(s => s.name.toLowerCase().includes(q) || s.role.toLowerCase().includes(q))
-        .slice(0, 3)
-    );
+    const filteredStaff = allStaff
+      .filter(s => s.name.toLowerCase().includes(q) || s.role.toLowerCase().includes(q))
+      .slice(0, 3);
+
+    return {
+      products: filteredProducts,
+      customers: filteredCustomers,
+      bills: filteredBills,
+      staff: filteredStaff,
+    };
   }, [query]);
 
   const handleNavigate = (path: string) => {
@@ -151,7 +134,7 @@ export function GlobalSearchModal({ isOpen, onClose }: GlobalSearchModalProps) {
                   onClick={() => handleNavigate('/pos/khata')}
                   className="flex items-center justify-between p-2.5 rounded-lg border border-slate-100 hover:bg-blue-50 hover:border-blue-200 transition-colors text-left"
                 >
-                  <span className="font-semibold text-slate-800">Khata Credit Sale</span>
+                  <span className="font-semibold text-slate-800">Khata Credit POS</span>
                   <span className="font-mono text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">F6</span>
                 </button>
                 <button

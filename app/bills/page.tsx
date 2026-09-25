@@ -3,8 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
-import { Button } from '@/components/ui/Button';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
+import { Card, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -14,11 +13,8 @@ import {
   Receipt,
   Search,
   Printer,
-  Eye,
   RotateCcw,
   Copy,
-  Calendar,
-  Filter,
 } from 'lucide-react';
 import { salesService } from '@/services/salesService';
 import { useToast } from '@/context/ToastContext';
@@ -26,7 +22,12 @@ import { Bill, SaleType } from '@/types';
 
 export default function BillHistoryPage() {
   const { toast } = useToast();
-  const [bills, setBills] = useState<Bill[]>([]);
+  const [bills, setBills] = useState<Bill[]>(() => {
+    if (typeof window !== 'undefined') {
+      return salesService.getAllBills();
+    }
+    return [];
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'All' | SaleType>('All');
   const [periodFilter, setPeriodFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
@@ -36,7 +37,9 @@ export default function BillHistoryPage() {
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
   useEffect(() => {
-    setBills(salesService.getAllBills());
+    const handleSync = () => setBills(salesService.getAllBills());
+    window.addEventListener('focus', handleSync);
+    return () => window.removeEventListener('focus', handleSync);
   }, []);
 
   const handleRefundPlaceholder = (invoiceNum: string) => {
@@ -205,7 +208,7 @@ export default function BillHistoryPage() {
                                   : 'warning'
                               }
                             >
-                              {bill.saleType}
+                              {bill.saleType === 'Khata' ? 'Khata Credit POS' : bill.saleType}
                             </Badge>
                           </td>
 
@@ -281,10 +284,10 @@ export default function BillHistoryPage() {
           isOpen={isPrintModalOpen}
           onClose={() => setIsPrintModalOpen(false)}
           title={`Invoice #${selectedBill?.invoiceNumber || ''}`}
-          maxWidth={selectedBill?.saleType === 'Wholesale' ? '4xl' : 'md'}
+          maxWidth={selectedBill?.saleType === 'Wholesale' || selectedBill?.saleType === 'Khata' ? '4xl' : 'md'}
         >
           {selectedBill && (
-            selectedBill.saleType === 'Wholesale' ? (
+            selectedBill.saleType === 'Wholesale' || selectedBill.saleType === 'Khata' ? (
               <WholesaleInvoicePrint
                 bill={selectedBill}
                 onClose={() => setIsPrintModalOpen(false)}

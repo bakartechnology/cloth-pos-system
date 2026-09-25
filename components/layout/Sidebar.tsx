@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -20,7 +20,6 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  Sparkles,
   TrendingUp,
   Briefcase,
   X,
@@ -49,15 +48,12 @@ interface NavSection {
 export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
   const { hasPermission, currentStaff } = useAuth();
-  const [isCollapsed, setIsCollapsed] = useState(false);
-
-  // Restore collapsed state from localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem('anf_sidebar_collapsed');
-    if (saved) {
-      setIsCollapsed(saved === 'true');
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('anf_sidebar_collapsed') === 'true';
     }
-  }, []);
+    return false;
+  });
 
   const toggleCollapse = () => {
     const next = !isCollapsed;
@@ -77,7 +73,7 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
       items: [
         { label: 'Retail POS', href: '/pos/retail', icon: ShoppingCart, permission: 'pos_retail', badge: 'F4' },
         { label: 'Wholesale POS', href: '/pos/wholesale', icon: Truck, permission: 'pos_wholesale', badge: 'F5' },
-        { label: 'Khata Credit Sale', href: '/pos/khata', icon: BookOpen, permission: 'pos_khata', badge: 'F6' },
+        { label: 'Khata Credit POS', href: '/pos/khata', icon: BookOpen, permission: 'pos_khata', badge: 'F6' },
       ],
     },
     {

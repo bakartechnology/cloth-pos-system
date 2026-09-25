@@ -64,13 +64,11 @@ export const productsService = {
     if (index === -1) return null;
 
     // Never change an existing product's barcode or ID when editing it
-    const {
-      id: _ignoredId,
-      barcode: _ignoredBarcode,
-      wholesaleBarcode: _ignoredWholesaleBarcode,
-      createdAt: _ignoredCreatedAt,
-      ...allowedUpdates
-    } = updates;
+    const allowedUpdates = { ...updates };
+    delete allowedUpdates.id;
+    delete allowedUpdates.barcode;
+    delete allowedUpdates.wholesaleBarcode;
+    delete allowedUpdates.createdAt;
 
     const updatedProduct: Product = {
       ...products[index],
@@ -87,7 +85,7 @@ export const productsService = {
   },
 
   applyBulkDiscount(params: {
-    saleType: 'Retail' | 'Wholesale';
+    saleType: 'Retail' | 'Wholesale' | 'Khata' | 'Khata Sale';
     category: 'All' | 'Summer' | 'Winter';
     discountAmount: number;
     productId?: string;
@@ -96,6 +94,9 @@ export const productsService = {
     const cleanDiscount = Math.max(0, params.discountAmount);
     let count = 0;
     const updatedProducts: Product[] = [];
+    const isKhata = params.saleType === 'Khata' || params.saleType === 'Khata Sale';
+    const isRetail = params.saleType === 'Retail';
+    const isWholesale = params.saleType === 'Wholesale';
 
     const updated = products.map(p => {
       // If productId is provided, only update that product
@@ -104,8 +105,9 @@ export const productsService = {
           count++;
           const modified: Product = {
             ...p,
-            retailDiscount: params.saleType === 'Retail' ? cleanDiscount : (p.retailDiscount || 0),
-            wholesaleDiscount: params.saleType === 'Wholesale' ? cleanDiscount : (p.wholesaleDiscount || 0),
+            retailDiscount: isRetail ? cleanDiscount : (p.retailDiscount || 0),
+            wholesaleDiscount: isWholesale ? cleanDiscount : (p.wholesaleDiscount || 0),
+            khataDiscount: isKhata ? cleanDiscount : (p.khataDiscount || 0),
             updatedAt: new Date().toISOString().split('T')[0],
           };
           updatedProducts.push(modified);
@@ -122,8 +124,9 @@ export const productsService = {
         count++;
         const modified: Product = {
           ...p,
-          retailDiscount: params.saleType === 'Retail' ? cleanDiscount : (p.retailDiscount || 0),
-          wholesaleDiscount: params.saleType === 'Wholesale' ? cleanDiscount : (p.wholesaleDiscount || 0),
+          retailDiscount: isRetail ? cleanDiscount : (p.retailDiscount || 0),
+          wholesaleDiscount: isWholesale ? cleanDiscount : (p.wholesaleDiscount || 0),
+          khataDiscount: isKhata ? cleanDiscount : (p.khataDiscount || 0),
           updatedAt: new Date().toISOString().split('T')[0],
         };
         updatedProducts.push(modified);

@@ -37,15 +37,18 @@ export function EditProductModal({
   const [unit, setUnit] = useState<UnitType>('Unstitched Box');
   const [retailPrice, setRetailPrice] = useState<number>(0);
   const [wholesalePrice, setWholesalePrice] = useState<number>(0);
+  const [khataPrice, setKhataPrice] = useState<number>(0);
   const [retailDiscount, setRetailDiscount] = useState<number>(0);
   const [wholesaleDiscount, setWholesaleDiscount] = useState<number>(0);
+  const [khataDiscount, setKhataDiscount] = useState<number>(0);
   const [stock, setStock] = useState<number>(0);
   const [minStockAlert, setMinStockAlert] = useState<number>(5);
   const [supplier, setSupplier] = useState('');
   const [description, setDescription] = useState('');
 
   useEffect(() => {
-    if (product) {
+    if (!product) return;
+    const timer = setTimeout(() => {
       setName(product.name || '');
       setSku(product.sku || '');
       setCategory(product.category || 'Lawn');
@@ -57,19 +60,23 @@ export function EditProductModal({
       setUnit(product.unit || 'Unstitched Box');
       setRetailPrice(product.retailPrice || 0);
       setWholesalePrice(product.wholesalePrice || 0);
+      setKhataPrice(product.khataPrice ?? (product.wholesalePrice ? Math.round(product.wholesalePrice * 1.05) : 0));
       setRetailDiscount(product.retailDiscount || 0);
       setWholesaleDiscount(product.wholesaleDiscount || 0);
+      setKhataDiscount(product.khataDiscount || 0);
       setStock(product.stock || 0);
       setMinStockAlert(product.minStockAlert || 5);
       setSupplier(product.supplier || '');
       setDescription(product.description || '');
-    }
+    }, 0);
+    return () => clearTimeout(timer);
   }, [product]);
 
   if (!product) return null;
 
   const finalRetail = Math.max(0, retailPrice - retailDiscount);
   const finalWholesale = Math.max(0, wholesalePrice - wholesaleDiscount);
+  const finalKhata = Math.max(0, khataPrice - khataDiscount);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,6 +101,15 @@ export function EditProductModal({
       return;
     }
 
+    if (khataPrice <= 0) {
+      toast({
+        title: 'Validation Error',
+        description: 'Khata Sale Price must be greater than zero.',
+        type: 'error',
+      });
+      return;
+    }
+
     const previousStock = product.stock;
     const newStock = Math.max(0, stock);
     const stockDiff = newStock - previousStock;
@@ -108,8 +124,10 @@ export function EditProductModal({
       unit,
       retailPrice: Math.max(0, retailPrice),
       wholesalePrice: Math.max(0, wholesalePrice),
+      khataPrice: Math.max(0, khataPrice),
       retailDiscount: Math.max(0, retailDiscount),
       wholesaleDiscount: Math.max(0, wholesaleDiscount),
+      khataDiscount: Math.max(0, khataDiscount),
       stock: newStock,
       minStockAlert: Math.max(1, minStockAlert),
       supplier: supplier.trim(),
@@ -293,7 +311,7 @@ export function EditProductModal({
         </div>
 
         {/* Pricing & Discounts (Fixed Rs amounts, No Cost Price!) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Retail Section */}
           <div className="p-4 rounded-xl border border-blue-100 bg-blue-50/30 space-y-3">
             <div className="flex items-center justify-between">
@@ -362,6 +380,42 @@ export function EditProductModal({
               <span className="text-slate-600">Final Wholesale Price:</span>
               <span className="font-black text-cyan-700 font-mono text-sm">
                 Rs. {finalWholesale.toLocaleString()}
+              </span>
+            </div>
+          </div>
+
+          {/* Khata Section */}
+          <div className="p-4 rounded-xl border border-amber-200 bg-amber-50/40 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-amber-950 uppercase tracking-wider">
+                Khata Credit Pricing
+              </span>
+              <Badge variant="secondary" size="sm" className="bg-amber-100 text-amber-800">
+                Khata POS
+              </Badge>
+            </div>
+
+            <Input
+              label="Khata Sale Price (Rs.) *"
+              type="number"
+              min="0"
+              value={khataPrice}
+              onChange={e => setKhataPrice(parseFloat(e.target.value) || 0)}
+              required
+            />
+
+            <Input
+              label="Khata Sale Discount (Rs.)"
+              type="number"
+              min="0"
+              value={khataDiscount}
+              onChange={e => setKhataDiscount(parseFloat(e.target.value) || 0)}
+            />
+
+            <div className="pt-2 border-t border-amber-200/60 flex items-center justify-between text-xs">
+              <span className="text-slate-600">Final Khata Rate:</span>
+              <span className="font-black text-amber-800 font-mono text-sm">
+                Rs. {finalKhata.toLocaleString()}
               </span>
             </div>
           </div>

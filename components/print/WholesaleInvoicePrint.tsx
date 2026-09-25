@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Bill } from '@/types';
-import { Printer, ArrowLeft, Building, User, CheckCircle2 } from 'lucide-react';
+import { Printer, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { Button } from '../ui/Button';
 
 interface WholesaleInvoicePrintProps {
@@ -71,8 +71,12 @@ export function WholesaleInvoicePrint({ bill, onClose }: WholesaleInvoicePrintPr
           </div>
 
           <div className="text-right">
-            <span className="inline-block px-3 py-1 bg-cyan-50 text-cyan-800 font-black text-xs rounded-lg border border-cyan-200 uppercase tracking-wider mb-2">
-              Wholesale Tax Invoice
+            <span className={`inline-block px-3 py-1 font-black text-xs rounded-lg border uppercase tracking-wider mb-2 ${
+              bill.saleType === 'Khata'
+                ? 'bg-amber-50 text-amber-800 border-amber-200'
+                : 'bg-cyan-50 text-cyan-800 border-cyan-200'
+            }`}>
+              {bill.saleType === 'Khata' ? 'Khata Credit POS Invoice' : 'Wholesale Tax Invoice'}
             </span>
             <div className="text-base font-black font-mono text-slate-900">#{bill.invoiceNumber}</div>
             <div className="text-xs text-slate-500 mt-0.5">Date: {formattedDate} ({formattedTime})</div>
@@ -84,7 +88,7 @@ export function WholesaleInvoicePrint({ bill, onClose }: WholesaleInvoicePrintPr
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-slate-50 rounded-xl border border-slate-200/80 mb-6 text-xs">
           <div>
             <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-              Billed To (Wholesale Client):
+              {bill.saleType === 'Khata' ? 'Billed To (Khata Account Holder):' : 'Billed To (Wholesale Client):'}
             </div>
             <div className="text-sm font-black text-slate-900">
               {bill.clientName || bill.customerBusiness || bill.customerName || 'Walking Wholesale Buyer'}
@@ -225,7 +229,7 @@ export function WholesaleInvoicePrint({ bill, onClose }: WholesaleInvoicePrintPr
 
               {bill.paymentMethod === 'Credit/Khata' && (
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 font-semibold">
-                  Debited to Wholesale Customer Khata Ledger.
+                  Debited to Customer Khata Credit Ledger.
                 </div>
               )}
             </div>
@@ -265,13 +269,13 @@ export function WholesaleInvoicePrint({ bill, onClose }: WholesaleInvoicePrintPr
           <div className="space-y-4">
             <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200/90 space-y-2.5">
               <div className="flex justify-between text-slate-600">
-                <span>Wholesale Subtotal:</span>
+                <span>{bill.saleType === 'Khata' ? 'Khata Subtotal:' : 'Wholesale Subtotal:'}</span>
                 <span className="font-mono font-bold">Rs. {bill.subtotal.toLocaleString()}</span>
               </div>
 
               {bill.discountTotal > 0 && (
                 <div className="flex justify-between text-emerald-700">
-                  <span>Wholesale Discount:</span>
+                  <span>{bill.saleType === 'Khata' ? 'Khata Discount:' : 'Wholesale Discount:'}</span>
                   <span className="font-mono font-bold">-Rs. {bill.discountTotal.toLocaleString()}</span>
                 </div>
               )}

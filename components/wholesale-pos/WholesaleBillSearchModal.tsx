@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Bill } from '@/types';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Bill, SaleType } from '@/types';
 import { salesService } from '@/services/salesService';
 import { Modal } from '@/components/ui/Modal';
 import {
@@ -14,13 +14,14 @@ import {
   Calendar,
   Eye,
   Building,
-  CheckCircle2,
-  X,
 } from 'lucide-react';
 
 interface WholesaleBillSearchModalProps {
   isOpen: boolean;
   onClose: () => void;
+  saleType?: SaleType;
+  title?: string;
+  description?: string;
   onSelectReturn: (bill: Bill) => void;
   onSelectExchange: (bill: Bill) => void;
   onSelectPrint: (bill: Bill) => void;
@@ -30,6 +31,9 @@ interface WholesaleBillSearchModalProps {
 export function WholesaleBillSearchModal({
   isOpen,
   onClose,
+  saleType = 'Wholesale',
+  title,
+  description,
   onSelectReturn,
   onSelectExchange,
   onSelectPrint,
@@ -39,12 +43,12 @@ export function WholesaleBillSearchModal({
   const [invoiceQuery, setInvoiceQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Bill[]>([]);
 
-  const executeSearch = (custQ: string, invQ: string) => {
+  const executeSearch = useCallback((custQ: string, invQ: string) => {
     if (!custQ.trim() && !invQ.trim()) {
-      // Show latest 15 wholesale bills by default
+      // Show latest 15 bills by default
       const latest = salesService
         .getAllBills()
-        .filter(b => b.saleType === 'Wholesale')
+        .filter(b => b.saleType === saleType)
         .slice(0, 15);
       setSearchResults(latest);
       return;
@@ -53,16 +57,19 @@ export function WholesaleBillSearchModal({
     const results = salesService.searchBills({
       customerName: custQ.trim() || undefined,
       invoiceNumber: invQ.trim() || undefined,
-      saleType: 'Wholesale',
+      saleType,
     });
     setSearchResults(results);
-  };
+  }, [saleType]);
 
   useEffect(() => {
     if (isOpen) {
-      executeSearch(customerQuery, invoiceQuery);
+      const timer = setTimeout(() => {
+        executeSearch(customerQuery, invoiceQuery);
+      }, 0);
+      return () => clearTimeout(timer);
     }
-  }, [isOpen]);
+  }, [isOpen, customerQuery, invoiceQuery, executeSearch]);
 
   const handleCustomerSearchChange = (val: string) => {
     setCustomerQuery(val);
@@ -76,18 +83,12 @@ export function WholesaleBillSearchModal({
     executeSearch('', val);
   };
 
-  const handleClear = () => {
-    setCustomerQuery('');
-    setInvoiceQuery('');
-    executeSearch('', '');
-  };
-
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Wholesale Invoices & Return / Exchange Portal"
-      description="Independent search for previous wholesale bills by customer name or commercial invoice number."
+      title={title || (saleType === 'Khata' ? 'Khata Credit Invoices & Return / Exchange Portal' : 'Wholesale Invoices & Return / Exchange Portal')}
+      description={description || (saleType === 'Khata' ? 'Search previous Khata credit bills by customer name or Khata invoice number.' : 'Independent search for previous wholesale bills by customer name or commercial invoice number.')}
       maxWidth="4xl"
     >
       <div className="space-y-4">

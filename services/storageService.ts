@@ -24,6 +24,7 @@ const KEYS = {
   ACTIVE_STAFF_ID: 'anf_pos_active_staff_id_v1',
   RETAIL_INVOICE_SEQ: 'anf_pos_retail_invoice_seq_v1',
   WHOLESALE_INVOICE_SEQ: 'anf_pos_wholesale_invoice_seq_v1',
+  KHATA_INVOICE_SEQ: 'anf_pos_khata_invoice_seq_v1',
   WHOLESALE_RETURN_SEQ: 'anf_pos_wholesale_return_seq_v1',
   WHOLESALE_EXCHANGE_SEQ: 'anf_pos_wholesale_exchange_seq_v1',
   RETURNS: 'anf_pos_returns_v1',
@@ -66,6 +67,8 @@ class StorageService {
       seasonCategory: p.seasonCategory || (['Khaddar', 'Wash & Wear'].includes(p.category) ? 'Winter' : 'Summer'),
       retailDiscount: typeof p.retailDiscount === 'number' ? p.retailDiscount : 0,
       wholesaleDiscount: typeof p.wholesaleDiscount === 'number' ? p.wholesaleDiscount : 0,
+      khataPrice: typeof p.khataPrice === 'number' ? p.khataPrice : (p.wholesalePrice ? Math.round(p.wholesalePrice * 1.05) : undefined),
+      khataDiscount: typeof p.khataDiscount === 'number' ? p.khataDiscount : 0,
     }));
   }
 
@@ -179,6 +182,23 @@ class StorageService {
     return `WHO-${currentYear}-${padded}`;
   }
 
+  getNextKhataInvoiceNumber(): string {
+    const currentYear = new Date().getFullYear();
+    const currentSeq = this.getItem<number>(KEYS.KHATA_INVOICE_SEQ, 1000);
+    const nextSeq = currentSeq + 1;
+    this.setItem(KEYS.KHATA_INVOICE_SEQ, nextSeq);
+    const padded = String(nextSeq).padStart(6, '0');
+    return `KHT-${currentYear}-${padded}`;
+  }
+
+  peekNextKhataInvoiceNumber(): string {
+    const currentYear = new Date().getFullYear();
+    const currentSeq = this.getItem<number>(KEYS.KHATA_INVOICE_SEQ, 1000);
+    const nextSeq = currentSeq + 1;
+    const padded = String(nextSeq).padStart(6, '0');
+    return `KHT-${currentYear}-${padded}`;
+  }
+
   getNextWholesaleReturnNumber(): string {
     const currentYear = new Date().getFullYear();
     const currentSeq = this.getItem<number>(KEYS.WHOLESALE_RETURN_SEQ, 100);
@@ -227,6 +247,7 @@ class StorageService {
     localStorage.removeItem(KEYS.ACTIVE_STAFF_ID);
     localStorage.removeItem(KEYS.RETAIL_INVOICE_SEQ);
     localStorage.removeItem(KEYS.WHOLESALE_INVOICE_SEQ);
+    localStorage.removeItem(KEYS.KHATA_INVOICE_SEQ);
     localStorage.removeItem(KEYS.WHOLESALE_RETURN_SEQ);
     localStorage.removeItem(KEYS.WHOLESALE_EXCHANGE_SEQ);
     window.location.reload();

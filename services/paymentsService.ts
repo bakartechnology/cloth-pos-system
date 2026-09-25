@@ -15,6 +15,14 @@ export const paymentsService = {
     return storageService.getCollections().filter(c => c.customerId === customerId);
   },
 
+  getCollectionsByType(type: 'Khata' | 'Wholesale'): PaymentCollectionRecord[] {
+    const all = storageService.getCollections();
+    if (type === 'Wholesale') {
+      return all.filter(c => c.collectionType === 'Wholesale');
+    }
+    return all.filter(c => c.collectionType !== 'Wholesale');
+  },
+
   recordCollection(params: {
     customerId: string;
     staffId: string;
@@ -27,6 +35,9 @@ export const paymentsService = {
     date?: string;
     notes?: string;
     chequeDetails?: PaymentCollectionRecord['chequeDetails'];
+    collectionType?: 'Khata' | 'Wholesale';
+    clientId?: string;
+    clientName?: string;
   }): PaymentCollectionRecord | null {
     const customer = customersService.getById(params.customerId);
     if (!customer) return null;
@@ -34,7 +45,8 @@ export const paymentsService = {
     const previousBalance = customer.currentBalance;
     const newBalance = Math.max(0, previousBalance - params.amountCollected);
 
-    const receiptNumber = `COL-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const prefix = params.collectionType === 'Wholesale' ? 'WCOL' : 'COL';
+    const receiptNumber = `${prefix}-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
     let chequeNote = '';
     if (params.cheques && params.cheques.length > 0) {
@@ -44,6 +56,7 @@ export const paymentsService = {
     }
 
     // 1. Record customer ledger payment
+    const moduleLabel = params.collectionType === 'Wholesale' ? 'Wholesale client recovery' : 'Field collection';
     customersService.recordKhataPayment({
       customerId: customer.id,
       customerName: customer.name,
@@ -51,7 +64,7 @@ export const paymentsService = {
       paymentMethod: params.paymentMethod,
       staffId: params.staffId,
       staffName: params.staffName,
-      notes: `Field collection receipt #${receiptNumber}${chequeNote} - ${params.notes || ''}`,
+      notes: `${moduleLabel} receipt #${receiptNumber}${chequeNote} - ${params.notes || ''}`,
     });
 
     // 2. Save payment collection record
@@ -74,6 +87,9 @@ export const paymentsService = {
       date: params.date || new Date().toISOString(),
       notes: params.notes,
       chequeDetails: params.chequeDetails,
+      collectionType: params.collectionType || 'Khata',
+      clientId: params.clientId || customer.id,
+      clientName: params.clientName || customer.businessName || customer.name,
     };
 
     const current = storageService.getCollections();

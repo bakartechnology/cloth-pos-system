@@ -22,8 +22,14 @@ class KhataSessionService {
     return `${DRAFT_PREFIX}${cleanId}_v1`;
   }
 
+  private getDiscardKey(staffId: string): string {
+    const cleanId = staffId ? staffId.trim() : 'default';
+    return `${DRAFT_PREFIX}${cleanId}_discarded_v1`;
+  }
+
   /**
-   * Saves current active Khata cart and draft parameters for the logged-in staff member
+   * Saves current active Khata cart and draft parameters for the logged-in staff member.
+   * Only persists when there are real cart items in progress.
    */
   saveDraft(
     staffId: string,
@@ -32,15 +38,10 @@ class KhataSessionService {
     if (!this.isBrowser() || !staffId) return;
 
     try {
-      // Check if draft has anything meaningful
-      const hasItems = draft.cartItems && draft.cartItems.length > 0;
-      const hasCustomer = Boolean(draft.customerName?.trim());
-      const hasClient = Boolean(draft.selectedClient);
-      const hasCash = draft.amountReceived > 0;
-      const hasNotes = Boolean(draft.notes?.trim());
+      const hasItems = Array.isArray(draft.cartItems) && draft.cartItems.length > 0;
 
-      if (!hasItems && !hasCustomer && !hasClient && !hasCash && !hasNotes) {
-        // Nothing meaningful to persist -> clear any previous draft
+      // An empty cart is never an unfinished session draft
+      if (!hasItems) {
         this.clearDraft(staffId);
         return;
       }
@@ -53,6 +54,8 @@ class KhataSessionService {
       };
 
       localStorage.setItem(this.getKey(staffId), JSON.stringify(payload));
+      // Remove any previous discard marker since user is actively working with new cart items
+      localStorage.removeItem(this.getDiscardKey(staffId));
     } catch (err) {
       console.error('Failed to save Khata POS session draft:', err);
     }
@@ -71,14 +74,24 @@ class KhataSessionService {
       const parsed = JSON.parse(raw) as KhataSessionDraft;
       if (!parsed) return null;
 
-      const hasItems = Array.isArray(parsed.cartItems) && parsed.cartItems.length > 0;
-      const hasCustomer = Boolean(parsed.customerName?.trim());
-      const hasClient = Boolean(parsed.selectedClient);
+      // Check discard marker
+      const discardRaw = localStorage.getItem(this.getDiscardKey(staffId));
+      if (discardRaw) {
+        const discardedAt = parseInt(discardRaw, 10);
+        const draftTime = new Date(parsed.timestamp).getTime();
+        if (discardedAt >= draftTime) {
+          // Draft was explicitly discarded; clean up
+          this.clearDraft(staffId);
+          return null;
+        }
+      }
 
-      if (hasItems || hasCustomer || hasClient) {
+      const hasItems = Array.isArray(parsed.cartItems) && parsed.cartItems.length > 0;
+      if (hasItems) {
         return parsed;
       }
 
+      this.clearDraft(staffId);
       return null;
     } catch (err) {
       console.warn('Failed to parse Khata POS draft, clearing corrupt entry:', err);
@@ -88,7 +101,21 @@ class KhataSessionService {
   }
 
   /**
-   * Clears saved draft once completed or explicitly discarded by the staff member
+   * Permanently discards the active draft and records the discard state
+   */
+  discardDraft(staffId: string): void {
+    if (!this.isBrowser() || !staffId) return;
+
+    try {
+      localStorage.removeItem(this.getKey(staffId));
+      localStorage.setItem(this.getDiscardKey(staffId), String(Date.now()));
+    } catch (err) {
+      console.error('Failed to discard Khata POS draft:', err);
+    }
+  }
+
+  /**
+   * Clears saved draft once completed or cleared
    */
   clearDraft(staffId: string): void {
     if (!this.isBrowser() || !staffId) return;

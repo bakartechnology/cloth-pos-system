@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Building, Search, X, ChevronDown } from 'lucide-react';
+import { Building, Search, X, ChevronDown, Plus } from 'lucide-react';
 import { Customer } from '@/types';
 import { customersService } from '@/services/customersService';
 
@@ -91,6 +91,36 @@ export function WholesaleClientSearch({
     inputRef.current?.focus();
   };
 
+  const handleCreateOrConfirm = (name: string) => {
+    const clean = name.trim();
+    if (!clean) return;
+
+    if (filterKhataOnly) {
+      const newAccount = customersService.findOrCreateKhataAccount(clean);
+      handleSelect(newAccount);
+    } else {
+      const existing = customersService.searchCustomers(clean).find(
+        c =>
+          c.name.toLowerCase() === clean.toLowerCase() ||
+          (c.businessName && c.businessName.toLowerCase() === clean.toLowerCase())
+      );
+      if (existing) {
+        handleSelect(existing);
+      } else {
+        const newClient = customersService.add({
+          name: clean,
+          businessName: clean,
+          phone: '',
+          address: 'Wholesale Market',
+          city: 'Lahore',
+          type: 'Wholesale',
+          creditLimit: 0,
+        });
+        handleSelect(newClient);
+      }
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (!isOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
       handleOpenDropdown();
@@ -111,6 +141,17 @@ export function WholesaleClientSearch({
       e.preventDefault();
       if (isOpen && highlightedIndex >= 0 && suggestions[highlightedIndex]) {
         handleSelect(suggestions[highlightedIndex]);
+      } else if (query.trim().length > 0) {
+        const exact = suggestions.find(
+          s =>
+            s.name.toLowerCase() === query.trim().toLowerCase() ||
+            (s.businessName && s.businessName.toLowerCase() === query.trim().toLowerCase())
+        );
+        if (exact) {
+          handleSelect(exact);
+        } else {
+          handleCreateOrConfirm(query);
+        }
       } else if (suggestions.length > 0) {
         handleSelect(suggestions[0]);
       }
@@ -217,8 +258,22 @@ export function WholesaleClientSearch({
           </div>
 
           {suggestions.length === 0 ? (
-            <div className="p-4 text-center text-xs text-slate-400">
-              No wholesale client matched &quot;{query}&quot;.
+            <div className="p-3 text-center">
+              <p className="text-xs text-slate-500 mb-2">
+                No existing {filterKhataOnly ? 'Khata account' : 'client'} matched "{query.trim()}".
+              </p>
+              {query.trim().length > 0 && (
+                <button
+                  type="button"
+                  onMouseDown={() => handleCreateOrConfirm(query)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-white text-xs font-bold rounded-xl shadow-xs transition-colors ${
+                    themeColor === 'amber' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-cyan-600 hover:bg-cyan-700'
+                  }`}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Create & Select "{query.trim()}" (Enter)</span>
+                </button>
+              )}
             </div>
           ) : (
             <div className="p-1 space-y-0.5">
@@ -233,9 +288,13 @@ export function WholesaleClientSearch({
                     onMouseEnter={() => setHighlightedIndex(idx)}
                     className={`flex items-center justify-between p-2 rounded-lg text-xs cursor-pointer transition-colors ${
                       isSelected
-                        ? 'bg-cyan-100/70 text-cyan-950 font-semibold'
+                        ? themeColor === 'amber'
+                          ? 'bg-amber-100/70 text-amber-950 font-semibold'
+                          : 'bg-cyan-100/70 text-cyan-950 font-semibold'
                         : isCurrent
-                        ? 'bg-cyan-50 text-cyan-900 font-bold'
+                        ? themeColor === 'amber'
+                          ? 'bg-amber-50 text-amber-900 font-bold'
+                          : 'bg-cyan-50 text-cyan-900 font-bold'
                         : 'text-slate-700 hover:bg-slate-50'
                     }`}
                   >
@@ -264,6 +323,25 @@ export function WholesaleClientSearch({
                   </div>
                 );
               })}
+
+              {query.trim().length > 1 &&
+                !suggestions.some(
+                  s =>
+                    s.name.toLowerCase() === query.trim().toLowerCase() ||
+                    (s.businessName && s.businessName.toLowerCase() === query.trim().toLowerCase())
+                ) && (
+                  <div
+                    onMouseDown={() => handleCreateOrConfirm(query)}
+                    className={`mt-1 pt-1 border-t border-slate-100 px-2.5 py-1.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1.5 transition-colors ${
+                      themeColor === 'amber'
+                        ? 'text-amber-800 hover:bg-amber-50'
+                        : 'text-cyan-800 hover:bg-cyan-50'
+                    }`}
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Create & Select "{query.trim()}" as new {filterKhataOnly ? 'Khata Account' : 'Client'} (Press Enter)</span>
+                  </div>
+                )}
             </div>
           )}
         </div>

@@ -37,7 +37,7 @@ export const authService = {
     return current.permissions.includes(permission);
   },
 
-  login(username: string): { success: boolean; staff?: Staff; error?: string } {
+  login(username: string, password?: string): { success: boolean; staff?: Staff; error?: string } {
     const cleanUser = username.trim().toLowerCase();
     const staffList = storageService.getStaff();
     const found = staffList.find(s => s.username.toLowerCase() === cleanUser);
@@ -48,6 +48,10 @@ export const authService = {
 
     if (found.status !== 'Active') {
       return { success: false, error: 'This staff account has been deactivated.' };
+    }
+
+    if (password && found.password && found.password !== password) {
+      return { success: false, error: 'Incorrect password. Please verify your counter security credentials.' };
     }
 
     storageService.setActiveStaffId(found.id);

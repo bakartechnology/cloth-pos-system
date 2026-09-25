@@ -22,6 +22,7 @@ import {
   ChevronRight,
   TrendingUp,
   Briefcase,
+  FileText,
   X,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
@@ -86,12 +87,15 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
       ],
     },
     {
-      title: 'SALES & KHATA',
+      title: 'SALES & STATEMENTS',
       items: [
         { label: 'Bill History', href: '/bills', icon: Receipt, permission: 'bills_view' },
         { label: 'Customers CRM', href: '/customers', icon: Users, permission: 'customers_view' },
-        { label: 'Khata Ledgers', href: '/customers/khata', icon: BookOpen, permission: 'customers_view' },
+        { label: 'Khata Ledgers (5-Yr)', href: '/customers/khata', icon: BookOpen, permission: 'customers_view' },
+        { label: 'Retail Statement', href: '/statements/retail', icon: FileText, permission: 'retail_statement_view' },
+        { label: 'Wholesale Statement', href: '/statements/wholesale', icon: Receipt, permission: 'wholesale_statement_view' },
         { label: 'Field Recovery', href: '/payments', icon: Banknote, permission: 'payment_collection' },
+        { label: 'Wholesale Recovery', href: '/payments/wholesale', icon: Truck, permission: 'wholesale_recovery' },
         { label: 'Staff Khata', href: '/staff-khata', icon: Briefcase, permission: 'staff_khata', badge: 'Outstation' },
       ],
     },

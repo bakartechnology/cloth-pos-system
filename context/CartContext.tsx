@@ -24,6 +24,7 @@ interface CartContextType {
   removeFromWholesaleCart: (productId: string) => void;
   updateWholesaleQuantity: (productId: string, quantity: number) => void;
   updateWholesaleDiscount: (productId: string, discountPercent: number) => void;
+  updateWholesaleExtraDiscount: (productId: string, extraDiscountRs: number) => void;
   clearWholesaleCart: () => void;
   wholesaleSubtotal: number;
   wholesaleDiscountTotal: number;
@@ -35,6 +36,7 @@ interface CartContextType {
   removeFromKhataCart: (productId: string) => void;
   updateKhataQuantity: (productId: string, quantity: number) => void;
   updateKhataDiscount: (productId: string, discountPercent: number) => void;
+  updateKhataExtraDiscount: (productId: string, extraDiscountRs: number) => void;
   clearKhataCart: () => void;
   khataSubtotal: number;
   khataDiscountTotal: number;
@@ -52,14 +54,15 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [wholesaleCart, setWholesaleCart] = useState<CartItem[]>([]);
   const [khataCart, setKhataCart] = useState<CartItem[]>([]);
 
-  // Calculate line item total with unit price, per-unit rupee discount, and manual percent discount
+  // Calculate line item total with unit price, per-unit rupee discount, rupee extra discount, and manual percent discount
   const computeLineTotal = (
     price: number,
     discountPerUnit: number,
     qty: number,
-    discountPercent = 0
+    discountPercent = 0,
+    extraDiscountRupees = 0
   ) => {
-    const netUnitPrice = Math.max(0, price - discountPerUnit);
+    const netUnitPrice = Math.max(0, price - discountPerUnit - extraDiscountRupees);
     const baseTotal = netUnitPrice * qty;
     const manualDiscount = (baseTotal * discountPercent) / 100;
     return Math.max(0, Math.round(baseTotal - manualDiscount));
@@ -353,7 +356,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
               freshPrice,
               freshDiscount,
               quantity,
-              item.discountPercent
+              item.discountPercent,
+              item.extraDiscountRupees || 0
             ),
           };
         }
@@ -374,6 +378,30 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
               item.price,
               item.discountPerUnit || 0,
               item.quantity,
+              validDiscount,
+              item.extraDiscountRupees || 0
+            ),
+          };
+        }
+        return item;
+      })
+    );
+  };
+
+  const updateWholesaleExtraDiscount = (productId: string, extraDiscountRs: number) => {
+    const validDiscount = Math.max(0, extraDiscountRs || 0);
+    setWholesaleCart(prev =>
+      prev.map(item => {
+        if (item.product.id === productId) {
+          return {
+            ...item,
+            extraDiscountRupees: validDiscount,
+            discountPercent: 0,
+            lineTotal: computeLineTotal(
+              item.price,
+              item.discountPerUnit || 0,
+              item.quantity,
+              0,
               validDiscount
             ),
           };
@@ -513,7 +541,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
               freshPrice,
               freshDiscount,
               quantity,
-              item.discountPercent
+              item.discountPercent,
+              item.extraDiscountRupees || 0
             ),
           };
         }
@@ -534,6 +563,30 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
               item.price,
               item.discountPerUnit || 0,
               item.quantity,
+              validDiscount,
+              item.extraDiscountRupees || 0
+            ),
+          };
+        }
+        return item;
+      })
+    );
+  };
+
+  const updateKhataExtraDiscount = (productId: string, extraDiscountRs: number) => {
+    const validDiscount = Math.max(0, extraDiscountRs || 0);
+    setKhataCart(prev =>
+      prev.map(item => {
+        if (item.product.id === productId) {
+          return {
+            ...item,
+            extraDiscountRupees: validDiscount,
+            discountPercent: 0,
+            lineTotal: computeLineTotal(
+              item.price,
+              item.discountPerUnit || 0,
+              item.quantity,
+              0,
               validDiscount
             ),
           };
@@ -583,7 +636,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             fresh.wholesalePrice,
             freshDiscount,
             item.quantity,
-            item.discountPercent
+            item.discountPercent,
+            item.extraDiscountRupees || 0
           ),
         };
       })
@@ -604,7 +658,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             freshPrice,
             freshDiscount,
             item.quantity,
-            item.discountPercent
+            item.discountPercent,
+            item.extraDiscountRupees || 0
           ),
         };
       })
@@ -653,10 +708,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         removeFromKhataCart,
         updateKhataQuantity,
         updateKhataDiscount,
+        updateKhataExtraDiscount,
         clearKhataCart,
         khataSubtotal,
         khataDiscountTotal,
         khataGrandTotal,
+
+        updateWholesaleExtraDiscount,
 
         syncWithLatestProducts,
       }}

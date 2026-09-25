@@ -33,7 +33,7 @@ export default function LoginPage() {
     setError('');
 
     setTimeout(() => {
-      const result = authService.login(username);
+      const result = authService.login(username, password);
       if (result.success && result.staff) {
         refreshStaff();
         if (authService.hasPermission('dashboard_view', result.staff)) {
@@ -60,7 +60,7 @@ export default function LoginPage() {
 
   const handleSelectDemo = (user: string) => {
     setUsername(user);
-    setPassword('pos1234');
+    setPassword(user === 'admin' ? 'admin123' : 'pos1234');
     setError('');
   };
 

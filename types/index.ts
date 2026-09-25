@@ -115,8 +115,9 @@ export interface CartItem {
   product: Product;
   quantity: number;
   price: number; // retailPrice or wholesalePrice depending on POS mode
-  discountPerUnit?: number; // fixed discount in Rs per unit
-  discountPercent: number;
+  discountPerUnit?: number; // fixed discount in Rs per unit (catalog discount)
+  discountPercent: number; // percentage discount (for retail or backwards compatibility)
+  extraDiscountRupees?: number; // fixed manual extra discount in Rs. per unit
   lineTotal: number;
 }
 
@@ -129,7 +130,9 @@ export interface BillItem {
   price: number;
   discountPerUnit?: number;
   discountPercent: number;
+  extraDiscountRupees?: number;
   subtotal: number;
+  lineTotal?: number;
 }
 
 export interface ReturnItemDetail {
@@ -279,22 +282,33 @@ export type PermissionKey =
   | 'stock_add'
   | 'stock_edit'
   | 'stock_delete'
+  | 'catalog_view'
+  | 'discount_view'
   | 'barcode_view'
   | 'customers_view'
+  | 'khata_ledger_view'
+  | 'retail_statement_view'
+  | 'wholesale_statement_view'
   | 'bills_view'
+  | 'payment_collection'
+  | 'wholesale_recovery'
+  | 'staff_khata'
   | 'reports_view'
   | 'staff_view'
+  | 'staff_create'
+  | 'staff_edit'
   | 'attendance_view'
-  | 'payment_collection'
-  | 'staff_khata'
   | 'cheque_notifications'
-  | 'settings_view';
+  | 'settings_view'
+  | 'action_print'
+  | 'action_export_pdf';
 
 export interface Staff {
   id: string;
   name: string;
   phone: string;
   username: string;
+  password?: string;
   role: StaffRole;
   status: 'Active' | 'Inactive';
   counter: string;
@@ -337,6 +351,9 @@ export interface PaymentCollectionRecord {
   notes?: string;
   receiptNumber: string;
   chequeDetails?: ChequeDetails;
+  collectionType?: 'Khata' | 'Wholesale';
+  clientId?: string;
+  clientName?: string;
 }
 
 export interface StockMovement {

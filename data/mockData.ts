@@ -12,23 +12,48 @@ import {
 } from '@/types';
 
 export const ALL_PERMISSIONS: { key: PermissionKey; label: string; group: string }[] = [
-  { key: 'dashboard_view', label: 'View Dashboard & Analytics', group: 'Dashboard' },
-  { key: 'pos_retail', label: 'Access Retail POS', group: 'Point of Sale' },
-  { key: 'pos_wholesale', label: 'Access Wholesale POS', group: 'Point of Sale' },
-  { key: 'pos_khata', label: 'Access Khata Credit POS', group: 'Point of Sale' },
-  { key: 'stock_view', label: 'View Inventory & Stock', group: 'Inventory' },
-  { key: 'stock_add', label: 'Add New Products & Restock', group: 'Inventory' },
-  { key: 'stock_edit', label: 'Edit Product Pricing & Details', group: 'Inventory' },
-  { key: 'stock_delete', label: 'Delete Products & Archive', group: 'Inventory' },
-  { key: 'barcode_view', label: 'Barcode Management & Printing', group: 'Inventory' },
-  { key: 'customers_view', label: 'View Customers & Ledger', group: 'Customers' },
-  { key: 'bills_view', label: 'View Bill & Invoice History', group: 'Sales & Billing' },
-  { key: 'reports_view', label: 'View Business & Multi-Year Reports', group: 'Reports' },
-  { key: 'staff_view', label: 'Staff Management & Matrix', group: 'Staff' },
-  { key: 'attendance_view', label: 'Staff Attendance & Timesheets', group: 'Staff' },
-  { key: 'payment_collection', label: 'Field Payment Collection', group: 'Khata & Finance' },
-  { key: 'staff_khata', label: 'Staff Khata & Outstation Recovery', group: 'Khata & Finance' },
-  { key: 'cheque_notifications', label: 'Field Cheque Due Notifications', group: 'Khata & Finance' },
+  // Dashboard
+  { key: 'dashboard_view', label: 'View Dashboard & Executive Analytics', group: 'Dashboard' },
+
+  // Point of Sale
+  { key: 'pos_retail', label: 'Access Retail POS Register (F4)', group: 'Point of Sale' },
+  { key: 'pos_wholesale', label: 'Access Wholesale & Bulk POS (F5)', group: 'Point of Sale' },
+  { key: 'pos_khata', label: 'Access Khata Credit POS Engine (F6)', group: 'Point of Sale' },
+
+  // Inventory & Fabrics
+  { key: 'catalog_view', label: 'View Fabrics & Product Catalog', group: 'Inventory & Fabrics' },
+  { key: 'stock_view', label: 'View Inventory & Stock Levels', group: 'Inventory & Fabrics' },
+  { key: 'stock_add', label: 'Add New Products & Stock In (Create)', group: 'Inventory & Fabrics' },
+  { key: 'stock_edit', label: 'Edit Product Pricing & Details (Edit)', group: 'Inventory & Fabrics' },
+  { key: 'stock_delete', label: 'Delete Products & Archive (Discard)', group: 'Inventory & Fabrics' },
+  { key: 'discount_view', label: 'View & Manage Product Discounts', group: 'Inventory & Fabrics' },
+  { key: 'barcode_view', label: 'Barcode Studio & Label Generation', group: 'Inventory & Fabrics' },
+
+  // Statements & Ledgers
+  { key: 'retail_statement_view', label: 'View Retail Customer Statements', group: 'Statements & Ledgers' },
+  { key: 'wholesale_statement_view', label: 'View Wholesale Statements (Customer & Client)', group: 'Statements & Ledgers' },
+  { key: 'khata_ledger_view', label: 'View Khata Ledgers & Customer Balances', group: 'Statements & Ledgers' },
+
+  // Sales & CRM
+  { key: 'customers_view', label: 'View Customers CRM Directory', group: 'Sales & CRM' },
+  { key: 'bills_view', label: 'View Bill & Commercial Invoice History', group: 'Sales & CRM' },
+  { key: 'action_print', label: 'Print Invoices, Statements & Slips', group: 'Sales & CRM' },
+  { key: 'action_export_pdf', label: 'Export Statements & Reports to PDF', group: 'Sales & CRM' },
+
+  // Field Finance & Recovery
+  { key: 'payment_collection', label: 'Field Recovery (Record Khata Field Collection)', group: 'Field Finance & Recovery' },
+  { key: 'wholesale_recovery', label: 'Wholesale Recovery (Wholesale Client Collections)', group: 'Field Finance & Recovery' },
+  { key: 'staff_khata', label: 'Staff Khata & Outstation Recovery', group: 'Field Finance & Recovery' },
+  { key: 'cheque_notifications', label: 'Field Cheque Due Notifications', group: 'Field Finance & Recovery' },
+
+  // Reports
+  { key: 'reports_view', label: 'View Multi-Year Business Reports Hub', group: 'Reports & Analytics' },
+
+  // Staff & Administration
+  { key: 'staff_view', label: 'Staff Directory & Management', group: 'Staff & Team' },
+  { key: 'staff_create', label: 'Create New Staff / Cashier Accounts', group: 'Staff & Team' },
+  { key: 'staff_edit', label: 'Edit Staff Accounts & Reset Passwords', group: 'Staff & Team' },
+  { key: 'attendance_view', label: 'Staff Attendance & Timesheets', group: 'Staff & Team' },
   { key: 'settings_view', label: 'Store & System Settings', group: 'Administration' },
 ];
 
@@ -92,6 +117,7 @@ export const INITIAL_STAFF: Staff[] = [
     name: 'Haji Abdul Rehman',
     phone: '+92 300 8421100',
     username: 'admin',
+    password: 'admin123',
     role: 'Admin',
     status: 'Active',
     counter: 'Main Office',
@@ -103,55 +129,60 @@ export const INITIAL_STAFF: Staff[] = [
     name: 'Tariq Mehmood',
     phone: '+92 321 4567890',
     username: 'tariq.cashier',
+    password: 'pos1234',
     role: 'Retail Cashier',
     status: 'Active',
     counter: 'Counter 01 (Retail)',
     joinedDate: '2022-03-15',
-    permissions: ['dashboard_view', 'pos_retail', 'bills_view', 'barcode_view'],
+    permissions: ['dashboard_view', 'pos_retail', 'bills_view', 'barcode_view', 'retail_statement_view'],
   },
   {
     id: 'stf-003',
     name: 'Hamza Bilal',
     phone: '+92 333 9876543',
     username: 'hamza.wholesale',
+    password: 'pos1234',
     role: 'Wholesale Cashier',
     status: 'Active',
     counter: 'Counter 02 (Wholesale)',
     joinedDate: '2022-06-20',
-    permissions: ['dashboard_view', 'pos_wholesale', 'bills_view', 'customers_view'],
+    permissions: ['dashboard_view', 'pos_wholesale', 'bills_view', 'customers_view', 'wholesale_statement_view'],
   },
   {
     id: 'stf-004',
     name: 'Zain Ul Abideen',
     phone: '+92 301 6543210',
     username: 'zain.khata',
+    password: 'pos1234',
     role: 'Khata Staff',
     status: 'Active',
     counter: 'Accounts Desk',
     joinedDate: '2023-01-05',
-    permissions: ['dashboard_view', 'pos_khata', 'customers_view', 'bills_view', 'payment_collection'],
+    permissions: ['dashboard_view', 'pos_khata', 'customers_view', 'bills_view', 'khata_ledger_view', 'payment_collection'],
   },
   {
     id: 'stf-005',
     name: 'Muhammad Usman',
     phone: '+92 345 1234567',
     username: 'usman.stock',
+    password: 'pos1234',
     role: 'Stock Manager',
     status: 'Active',
     counter: 'Warehouse Terminal',
     joinedDate: '2022-08-12',
-    permissions: ['dashboard_view', 'stock_view', 'stock_add', 'stock_edit', 'barcode_view'],
+    permissions: ['dashboard_view', 'stock_view', 'stock_add', 'stock_edit', 'barcode_view', 'catalog_view'],
   },
   {
     id: 'stf-006',
     name: 'Rashid Khan',
     phone: '+92 312 8765432',
     username: 'rashid.recovery',
+    password: 'pos1234',
     role: 'Payment Collection Staff',
     status: 'Active',
     counter: 'Field Operations',
     joinedDate: '2023-05-18',
-    permissions: ['dashboard_view', 'customers_view', 'payment_collection'],
+    permissions: ['dashboard_view', 'customers_view', 'payment_collection', 'wholesale_recovery'],
   },
   {
     id: 'stf-007',

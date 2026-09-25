@@ -148,13 +148,25 @@ export function WholesaleCustomerInput({
           onKeyDown={handleKeyDown}
           onFocus={() => {
             if (inputValue.trim().length > 0) {
-              const matches = customersService.searchCustomers(inputValue).slice(0, 6);
+              const matches = customersService.searchCustomers(inputValue).slice(0, 8);
               setSuggestions(matches);
+            } else {
+              setSuggestions(customersService.getAll().slice(0, 8));
+            }
+            setIsOpen(true);
+          }}
+          onClick={() => {
+            if (!isOpen) {
+              if (inputValue.trim().length > 0) {
+                setSuggestions(customersService.searchCustomers(inputValue).slice(0, 8));
+              } else {
+                setSuggestions(customersService.getAll().slice(0, 8));
+              }
               setIsOpen(true);
             }
           }}
           disabled={disabled}
-          placeholder="Enter shopper name (e.g. Muhammad Bilal)..."
+          placeholder="Enter or select customer (e.g. Muhammad Bilal)..."
           className="w-full text-xs font-semibold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:bg-white transition-all placeholder:text-slate-400 placeholder:font-normal"
         />
 

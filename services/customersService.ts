@@ -75,6 +75,49 @@ export const customersService = {
     return newCustomer;
   },
 
+  findOrCreateKhataAccount(name: string, phone?: string): Customer {
+    const cleanName = (name || '').trim();
+    if (!cleanName) {
+      throw new Error('Khata account name cannot be empty');
+    }
+
+    const customers = storageService.getCustomers();
+    // Search by exact or case-insensitive match on name or businessName
+    const existing = customers.find(
+      c =>
+        c.name.toLowerCase().trim() === cleanName.toLowerCase() ||
+        (c.businessName && c.businessName.toLowerCase().trim() === cleanName.toLowerCase())
+    );
+
+    if (existing) {
+      if (existing.type !== 'Khata' && existing.type !== 'Wholesale') {
+        // Upgrade to Khata type
+        const updated = this.update(existing.id, { type: 'Khata' }) || existing;
+        return updated;
+      }
+      return existing;
+    }
+
+    // Create new dedicated Khata Credit Ledger Account persistently without duplicates
+    const newKhataAccount: Customer = {
+      id: `cst-kht-${Date.now().toString().slice(-6)}`,
+      name: cleanName,
+      businessName: cleanName,
+      phone: phone || '',
+      address: 'Main Cloth Market',
+      city: 'Lahore',
+      type: 'Khata',
+      creditLimit: 0,
+      currentBalance: 0,
+      totalPurchased: 0,
+      totalPaid: 0,
+      createdAt: new Date().toISOString().split('T')[0],
+    };
+
+    storageService.setCustomers([newKhataAccount, ...customers]);
+    return newKhataAccount;
+  },
+
   add(customerData: Omit<Customer, 'id' | 'createdAt' | 'currentBalance' | 'totalPurchased' | 'totalPaid'>): Customer {
     const customers = storageService.getCustomers();
     const newCustomer: Customer = {

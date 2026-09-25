@@ -73,6 +73,7 @@ export default function WholesalePOSPage() {
     removeFromWholesaleCart,
     updateWholesaleQuantity,
     updateWholesaleDiscount,
+    updateWholesaleExtraDiscount,
     clearWholesaleCart,
     wholesaleSubtotal,
     wholesaleDiscountTotal,
@@ -337,10 +338,11 @@ export default function WholesalePOSPage() {
       });
       return;
     }
-    if (!selectedCustomer) {
+    // PART 2 - Req 6: Customer Name alone is sufficient to enable checkout
+    if (!customerName.trim() && !selectedCustomer) {
       toast({
-        title: 'Wholesale Client Required',
-        description: 'Please select a registered wholesale business client account.',
+        title: 'Customer Name Required',
+        description: 'Please enter a Customer Name or select a Wholesale Client.',
         type: 'error',
       });
       return;
@@ -408,7 +410,8 @@ export default function WholesalePOSPage() {
 
   // Complete Wholesale Sale & Save Invoice
   const handleCompleteWholesaleSale = () => {
-    if (!currentStaff || !selectedCustomer) return;
+    if (!currentStaff) return;
+    if (!customerName.trim() && !selectedCustomer) return;
 
     // Validation per payment method
     if (paymentMethod === 'Cash') {
@@ -438,9 +441,35 @@ export default function WholesalePOSPage() {
         });
         return;
       }
+    } else if (paymentMethod === 'Credit/Khata') {
+      if (!selectedCustomer) {
+        toast({
+          title: 'Registered Client Required',
+          description: 'Credit/Khata ledger charging requires selecting a registered Client.',
+          type: 'error',
+        });
+        return;
+      }
     }
 
     const calculatedChange = paymentMethod === 'Cash' ? Math.max(0, cashReceived - wholesaleGrandTotal) : 0;
+    const effectiveCustomerName = customerName.trim() || selectedCustomer?.name || 'Walk-in Wholesale Customer';
+    const effectivePhone = selectedCustomer?.phone || '';
+
+    // If no client selected, ensure customer is tracked in customer service
+    let billCustomer = selectedCustomer;
+    if (!billCustomer && customerName.trim()) {
+      billCustomer = customersService.getAll().find(
+        c => c.name.toLowerCase() === customerName.trim().toLowerCase()
+      ) || customersService.add({
+        name: customerName.trim(),
+        phone: '',
+        address: '',
+        city: 'Local',
+        type: 'Wholesale',
+        creditLimit: 0,
+      });
+    }
 
     const bill = salesService.completeSale({
       saleType: 'Wholesale',
@@ -451,11 +480,11 @@ export default function WholesalePOSPage() {
       taxTotal: 0,
       staffId: currentStaff.id,
       staffName: currentStaff.name,
-      customer: selectedCustomer,
-      customerName: customerName.trim() || selectedCustomer.name,
-      customerPhone: selectedCustomer.phone,
-      clientId: selectedCustomer.id,
-      clientName: selectedCustomer.businessName || selectedCustomer.name,
+      customer: billCustomer || undefined,
+      customerName: effectiveCustomerName,
+      customerPhone: effectivePhone,
+      clientId: selectedCustomer?.id,
+      clientName: selectedCustomer ? (selectedCustomer.businessName || selectedCustomer.name) : undefined,
       cardTransactionId: paymentMethod === 'Card' ? cardTransactionId : undefined,
       bankDetails:
         paymentMethod === 'Bank Transfer' && selectedBank
@@ -479,6 +508,7 @@ export default function WholesalePOSPage() {
     setCompletedBill(bill);
     clearWholesaleCart();
     setCustomerName('');
+    setSelectedCustomer(null);
     setCashReceived(0);
     setNotes('');
     setIsCashDrawerOpen(false);
@@ -777,27 +807,26 @@ export default function WholesalePOSPage() {
                           </div>
 
                           {/* Wholesale Price & Discount Breakdown */}
+                          {/* Wholesale Price & Discount Breakdown */}
                           <div className="mt-1 space-y-0.5 text-[11px] font-mono">
                             <div className="text-slate-600">
-                              {item.quantity > 1 ? 'Original Unit Price:' : 'Original Wholesale Price:'}{' '}
+                              {item.quantity > 1 ? 'Unit Wholesale Price:' : 'Wholesale Price:'}{' '}
                               <span className="font-semibold text-slate-900">Rs. {item.price.toLocaleString()}</span>
                               <span className="text-[10px] text-slate-400 font-sans ml-1">/{item.product.unit}</span>
                             </div>
                             {unitDiscount > 0 ? (
-                              <>
-                                <div className="text-emerald-600 font-semibold">
-                                  {item.quantity > 1 ? 'Discount per unit:' : 'Discount:'} − Rs. {unitDiscount.toLocaleString()}
-                                </div>
-                                {item.quantity > 1 && (
-                                  <div className="text-emerald-700 text-[10px]">
-                                    Total Discount ({item.quantity} units): − Rs. {(unitDiscount * item.quantity).toLocaleString()}
-                                  </div>
-                                )}
-                                <div className="text-cyan-800 font-bold text-[10px]">
-                                  Final Unit Price: Rs. {netUnit.toLocaleString()}
-                                </div>
-                              </>
+                              <div className="text-emerald-600 font-semibold">
+                                {item.quantity > 1 ? 'Wholesale Discount/unit:' : 'Wholesale Discount:'} − Rs. {unitDiscount.toLocaleString()}
+                              </div>
                             ) : null}
+                            {(item.extraDiscountRupees || 0) > 0 ? (
+                              <div className="text-cyan-700 font-semibold">
+                                Extra Discount (Rs.): − Rs. {(item.extraDiscountRupees || 0).toLocaleString()}
+                              </div>
+                            ) : null}
+                            <div className="text-cyan-900 font-bold text-[10px]">
+                              Final Unit Price: Rs. {Math.max(0, item.price - unitDiscount - (item.extraDiscountRupees || 0)).toLocaleString()}
+                            </div>
                           </div>
                         </div>
 
@@ -810,7 +839,7 @@ export default function WholesalePOSPage() {
                         </button>
                       </div>
 
-                      {/* Quantity & Extra % & Line Total */}
+                      {/* Quantity & Extra Rs. & Line Total */}
                       <div className="flex items-center justify-between pt-1.5 border-t border-slate-200/60 text-xs">
                         <div className="flex items-center gap-1 border border-slate-200 rounded-lg p-0.5 bg-white">
                           <button
@@ -831,18 +860,20 @@ export default function WholesalePOSPage() {
                         </div>
 
                         <div className="flex items-center gap-1">
-                          <span className="text-[10px] text-slate-400">Extra%:</span>
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            value={item.discountPercent || ''}
-                            placeholder="0"
-                            onChange={e =>
-                              updateWholesaleDiscount(item.product.id, parseInt(e.target.value, 10) || 0)
-                            }
-                            className="w-12 h-6 text-center text-xs border border-slate-200 rounded bg-white focus:bg-white focus:outline-none focus:ring-1 focus:ring-cyan-500 font-mono font-bold"
-                          />
+                          <span className="text-[10px] text-slate-500 font-semibold">Extra (Rs.):</span>
+                          <div className="relative flex items-center">
+                            <span className="text-[10px] text-slate-400 absolute left-1.5 font-mono">Rs.</span>
+                            <input
+                              type="number"
+                              min="0"
+                              value={item.extraDiscountRupees || ''}
+                              placeholder="0"
+                              onChange={e =>
+                                updateWholesaleExtraDiscount(item.product.id, Math.max(0, parseFloat(e.target.value) || 0))
+                              }
+                              className="w-20 h-6 pl-6 pr-1 text-right text-xs border border-slate-200 rounded bg-white focus:bg-white focus:outline-none focus:ring-1 focus:ring-cyan-500 font-mono font-bold text-cyan-800"
+                            />
+                          </div>
                         </div>
 
                         <div className="text-right">
@@ -881,7 +912,7 @@ export default function WholesalePOSPage() {
                 variant="accent"
                 size="lg"
                 onClick={handleOpenCheckout}
-                disabled={wholesaleCart.length === 0 || !selectedCustomer}
+                disabled={wholesaleCart.length === 0 || (!customerName.trim() && !selectedCustomer)}
                 className="w-full mt-2 font-bold gap-2 text-sm shadow-md"
               >
                 Checkout Wholesale Order <ArrowRight className="w-4 h-4" />
@@ -920,17 +951,16 @@ export default function WholesalePOSPage() {
                     Rs. {wholesaleGrandTotal.toLocaleString()}
                   </div>
                 </div>
-                {selectedCustomer && (
-                  <div className="text-right">
-                    <span className="text-slate-500 font-medium">Billed To (Client):</span>
-                    <div className="font-bold text-slate-900 text-sm">
-                      {selectedCustomer.businessName || selectedCustomer.name}
-                    </div>
-                    <div className="text-[11px] text-slate-600">
-                      Shopper: <strong>{customerName || selectedCustomer.name}</strong> • City: {selectedCustomer.city}
-                    </div>
+                <div className="text-right">
+                  <span className="text-slate-500 font-medium">Billed To:</span>
+                  <div className="font-bold text-slate-900 text-sm">
+                    {selectedCustomer ? (selectedCustomer.businessName || selectedCustomer.name) : customerName.trim()}
                   </div>
-                )}
+                  <div className="text-[11px] text-slate-600">
+                    Customer: <strong>{customerName.trim() || (selectedCustomer?.name ?? '')}</strong>
+                    {selectedCustomer?.city ? ` • City: ${selectedCustomer.city}` : ''}
+                  </div>
+                </div>
               </div>
             </div>
 

@@ -25,6 +25,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { customersService } from '@/services/customersService';
+import { retentionService } from '@/services/retentionService';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { Customer, KhataTransaction, PaymentMethod } from '@/types';
@@ -35,8 +36,11 @@ export default function KhataLedgerPage() {
 
   const [khataCustomers, setKhataCustomers] = useState<Customer[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('cst-001');
+  const [selectedYear, setSelectedYear] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
-  const [dateFilter, setDateFilter] = useState<'All' | 'Month' | 'Year'>('All');
+  const [selectedTx, setSelectedTx] = useState<KhataTransaction | null>(null);
+
+  const retentionYears = retentionService.getActiveRetentionYears();
 
   // Record Payment Modal State
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -62,14 +66,13 @@ export default function KhataLedgerPage() {
     ? customersService.getKhataTransactions(selectedCustomer.id)
     : [];
 
-  const filteredTransactions = allTransactions.filter(t => {
-    if (dateFilter === 'Month') {
-      const currentMonth = new Date().toISOString().slice(0, 7);
-      return t.date.startsWith(currentMonth);
-    }
-    if (dateFilter === 'Year') {
-      const currentYear = new Date().getFullYear().toString();
-      return t.date.startsWith(currentYear);
+  // PART 6 - Req 10: Apply 5-year rolling retention policy safely
+  const retainedTransactions = retentionService.filterActiveStatements(allTransactions);
+
+  const filteredTransactions = retainedTransactions.filter(t => {
+    if (selectedYear !== 'All') {
+      const tYear = new Date(t.date).getFullYear().toString();
+      return tYear === selectedYear;
     }
     return true;
   });
@@ -256,32 +259,28 @@ export default function KhataLedgerPage() {
                       </CardTitle>
                     </div>
 
-                    {/* Date filter selector */}
-                    <div className="flex items-center p-0.5 bg-slate-100 rounded-lg text-xs font-semibold">
+                    {/* 5-Year Rolling Retention selector */}
+                    <div className="flex items-center gap-1 flex-wrap text-xs font-semibold">
+                      <span className="text-[11px] text-slate-500 font-bold mr-1">5-Yr History:</span>
                       <button
-                        onClick={() => setDateFilter('All')}
+                        onClick={() => setSelectedYear('All')}
                         className={`px-2.5 py-1 rounded-md transition-colors ${
-                          dateFilter === 'All' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-600'
+                          selectedYear === 'All' ? 'bg-amber-600 text-white shadow-2xs font-bold' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                         }`}
                       >
-                        All Entries
+                        All (5-Yr)
                       </button>
-                      <button
-                        onClick={() => setDateFilter('Month')}
-                        className={`px-2.5 py-1 rounded-md transition-colors ${
-                          dateFilter === 'Month' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-600'
-                        }`}
-                      >
-                        This Month
-                      </button>
-                      <button
-                        onClick={() => setDateFilter('Year')}
-                        className={`px-2.5 py-1 rounded-md transition-colors ${
-                          dateFilter === 'Year' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-600'
-                        }`}
-                      >
-                        This Year
-                      </button>
+                      {retentionYears.map(yr => (
+                        <button
+                          key={yr}
+                          onClick={() => setSelectedYear(yr.toString())}
+                          className={`px-2 py-1 rounded-md transition-colors ${
+                            selectedYear === yr.toString() ? 'bg-amber-600 text-white shadow-2xs font-bold' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          }`}
+                        >
+                          {yr}
+                        </button>
+                      ))}
                     </div>
                   </CardHeader>
 
@@ -297,6 +296,7 @@ export default function KhataLedgerPage() {
                             <th className="py-2.5 px-4 text-right">Credit (-)</th>
                             <th className="py-2.5 px-4 text-right">Running Balance</th>
                             <th className="py-2.5 px-4">Handled By</th>
+                            <th className="py-2.5 px-4 text-right">Details</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -323,6 +323,15 @@ export default function KhataLedgerPage() {
                                 Rs. {tx.balanceAfter.toLocaleString()}
                               </td>
                               <td className="py-2.5 px-4 text-slate-500">{tx.staffName}</td>
+                              <td className="py-2.5 px-4 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedTx(tx)}
+                                  className="text-[11px] text-amber-700 hover:text-amber-900 font-bold underline"
+                                >
+                                  View
+                                </button>
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -414,9 +423,67 @@ export default function KhataLedgerPage() {
             <KhataStatementPrint
               customer={selectedCustomer}
               transactions={filteredTransactions}
-              dateRangeLabel={dateFilter === 'All' ? 'All Historical Records' : `Filter: ${dateFilter}`}
+              dateRangeLabel={selectedYear === 'All' ? '5-Year Rolling Statement' : `Year: ${selectedYear}`}
               onClose={() => setIsStatementModalOpen(false)}
             />
+          )}
+        </Modal>
+
+        {/* Modal: View Transaction Details */}
+        <Modal
+          isOpen={!!selectedTx}
+          onClose={() => setSelectedTx(null)}
+          title="Khata Ledger Transaction Details"
+          maxWidth="md"
+        >
+          {selectedTx && (
+            <div className="space-y-4 text-xs">
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                <div className="flex justify-between items-center pb-2 border-b border-slate-200">
+                  <span className="font-mono font-bold text-slate-500">Ref: {selectedTx.invoiceId || selectedTx.id}</span>
+                  <Badge variant={selectedTx.type === 'DEBIT' ? 'destructive' : 'default'} size="sm">
+                    {selectedTx.type}
+                  </Badge>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                  <div>
+                    <span className="text-slate-400 block">Date & Time:</span>
+                    <span className="font-semibold text-slate-800">{new Date(selectedTx.date).toLocaleString()}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block">Officer / Staff:</span>
+                    <span className="font-semibold text-slate-800">{selectedTx.staffName}</span>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-slate-200 space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Transaction Amount:</span>
+                    <span className={`font-mono font-bold ${selectedTx.type === 'DEBIT' ? 'text-rose-600' : 'text-emerald-600'}`}>
+                      {selectedTx.type === 'DEBIT' ? `+ Rs. ${selectedTx.amount.toLocaleString()}` : `- Rs. ${selectedTx.amount.toLocaleString()}`}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-900 font-black pt-1 border-t border-slate-200">
+                    <span>Balance After:</span>
+                    <span className="font-mono">Rs. {selectedTx.balanceAfter.toLocaleString()}</span>
+                  </div>
+                </div>
+
+                {selectedTx.description && (
+                  <div className="pt-2 border-t border-slate-200 text-slate-600">
+                    <span className="font-bold text-slate-700 block mb-0.5">Description / Memo:</span>
+                    <p className="bg-white p-2 rounded-lg border border-slate-200">{selectedTx.description}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <Button variant="outline" size="sm" onClick={() => setSelectedTx(null)}>
+                  Close
+                </Button>
+              </div>
+            </div>
           )}
         </Modal>
       </AppShell>

@@ -41,8 +41,6 @@ import { customersService } from '@/services/customersService';
 import { salesService } from '@/services/salesService';
 import { storageService } from '@/services/storageService';
 import { khataSessionService } from '@/services/khataSessionService';
-import { barcodeScannerService } from '@/services/hardware/barcodeScannerService';
-import { cashDrawerService } from '@/services/hardware/cashDrawerService';
 import { cardTerminalService, CardPaymentState } from '@/services/hardware/cardTerminalService';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
@@ -67,6 +65,7 @@ export default function KhataPOSPage() {
     removeFromKhataCart,
     updateKhataQuantity,
     updateKhataDiscount,
+    updateKhataExtraDiscount,
     clearKhataCart,
     khataSubtotal,
     khataDiscountTotal,
@@ -81,22 +80,10 @@ export default function KhataPOSPage() {
     }
     return [];
   });
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(() => {
-    if (typeof window !== 'undefined') {
-      const khataClients = customersService.getAll().filter(c => c.type === 'Khata' || c.creditLimit > 0);
-      return khataClients.length > 0 ? khataClients[0] : null;
-    }
-    return null;
-  });
-  const [customerName, setCustomerName] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      const khataClients = customersService.getAll().filter(c => c.type === 'Khata' || c.creditLimit > 0);
-      return khataClients.length > 0 ? khataClients[0].name : '';
-    }
-    return '';
-  });
+  // PART 1 - Req 2: Customer Name must NOT be selected by default
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [customerName, setCustomerName] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [barcodeInput, setBarcodeInput] = useState('');
   const [nextInvoiceNumber, setNextInvoiceNumber] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       return salesService.peekNextInvoiceNumber('Khata');
@@ -134,9 +121,6 @@ export default function KhataPOSPage() {
   const [cardPaymentState, setCardPaymentState] = useState<CardPaymentState>('idle');
   const [cardStatusMessage, setCardStatusMessage] = useState('');
   const [cardTransactionId, setCardTransactionId] = useState<string | undefined>(undefined);
-
-  // Cash Drawer State
-  const [isCashDrawerOpen, setIsCashDrawerOpen] = useState(false);
 
   // Statement Print Modal
   const [isStatementModalOpen, setIsStatementModalOpen] = useState(false);
@@ -192,10 +176,11 @@ export default function KhataPOSPage() {
   }, [currentStaff?.id, hasCheckedDraft]);
 
   // Auto-save active khata draft to persistent storage whenever state changes
+  // Bug fix: ONLY save draft if cart has items!
   useEffect(() => {
     if (!currentStaff?.id || !hasCheckedDraft) return;
 
-    if (khataCart.length > 0 || customerName.trim() || selectedCustomer) {
+    if (khataCart.length > 0) {
       khataSessionService.saveDraft(currentStaff.id, {
         customerName: customerName.trim() || undefined,
         selectedClient: selectedCustomer,
@@ -239,7 +224,9 @@ export default function KhataPOSPage() {
       clearKhataCart();
       availableDraft.cartItems.forEach(item => {
         addToKhataCart(item.product, item.quantity);
-        if (item.discountPercent > 0) {
+        if (item.extraDiscountRupees && item.extraDiscountRupees > 0) {
+          updateKhataExtraDiscount(item.product.id, item.extraDiscountRupees);
+        } else if (item.discountPercent > 0) {
           updateKhataDiscount(item.product.id, item.discountPercent);
         }
       });
@@ -267,18 +254,20 @@ export default function KhataPOSPage() {
     });
   };
 
-  // Discard Draft Handler
+  // Discard Draft Handler (Permanent discard fix)
   const handleDiscardDraft = () => {
     if (currentStaff?.id) {
-      khataSessionService.clearDraft(currentStaff.id);
+      khataSessionService.discardDraft(currentStaff.id);
     }
     setAvailableDraft(null);
     clearKhataCart();
+    setSelectedCustomer(null);
+    setCustomerName('');
     setNotes('');
     setCashReceived(0);
     toast({
       title: 'Draft Discarded',
-      description: 'Previous unfinished Khata session was cleared.',
+      description: 'Previous unfinished Khata session was permanently cleared.',
       type: 'info',
     });
   };
@@ -295,70 +284,6 @@ export default function KhataPOSPage() {
       p.category.toLowerCase().includes(q)
     );
   });
-
-  // Barcode Scanner Handler
-  const handleBarcodeSubmit = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const code = barcodeInput.trim();
-    if (!code) return;
-
-    // Lookup product by barcode or SKU
-    const matched =
-      productsService.getByBarcodeOrSku(code) ||
-      products.find(
-        p =>
-          p.barcode === code ||
-          p.wholesaleBarcode === code ||
-          p.sku.toLowerCase() === code.toLowerCase()
-      );
-
-    if (matched) {
-      // Validate Khata Sale Price
-      if (matched.khataPrice === undefined || matched.khataPrice === null || matched.khataPrice <= 0) {
-        barcodeScannerService.playErrorBeep();
-        toast({
-          title: 'Khata Sale Price Missing',
-          description: `Cannot add "${matched.name}". Khata Sale Price is not set for this product. Please configure a Khata price in catalog first.`,
-          type: 'error',
-        });
-        setBarcodeInput('');
-        return;
-      }
-
-      if (matched.stock <= 0) {
-        barcodeScannerService.playErrorBeep();
-        toast({
-          title: 'Out of Stock',
-          description: `${matched.name} is currently out of stock.`,
-          type: 'error',
-        });
-      } else {
-        const discount = matched.khataDiscount || 0;
-        const finalPrice = Math.max(0, matched.khataPrice - discount);
-
-        addToKhataCart(matched);
-        barcodeScannerService.playSuccessBeep();
-        toast({
-          title: `Scanned: ${matched.name}`,
-          description:
-            discount > 0
-              ? `Khata Price: Rs. ${matched.khataPrice.toLocaleString()} | Discount: − Rs. ${discount.toLocaleString()} | Net: Rs. ${finalPrice.toLocaleString()}`
-              : `Khata Price: Rs. ${matched.khataPrice.toLocaleString()}`,
-          type: 'success',
-        });
-      }
-    } else {
-      barcodeScannerService.playErrorBeep();
-      toast({
-        title: 'Product not found',
-        description: `No fabric product matches barcode/SKU "${code}".`,
-        type: 'warning',
-      });
-    }
-
-    setBarcodeInput('');
-    barcodeInputRef.current?.focus();
-  };
 
   // Open Checkout Modal
   const handleOpenCheckout = () => {
@@ -411,28 +336,6 @@ export default function KhataPOSPage() {
         title: 'Card Payment Failed',
         description: result.errorMessage || 'Declined by bank or terminal timed out.',
         type: 'error',
-      });
-    }
-  };
-
-  // Confirm Cash Payment & Trigger Cash Drawer
-  const handleCashDrawerWorkflow = async () => {
-    if (cashReceived < khataGrandTotal) {
-      toast({
-        title: 'Insufficient Cash',
-        description: `Received Rs. ${cashReceived.toLocaleString()} is less than total Rs. ${khataGrandTotal.toLocaleString()}`,
-        type: 'error',
-      });
-      return;
-    }
-
-    setIsCashDrawerOpen(true);
-    const drawerRes = await cashDrawerService.openCashDrawer();
-    if (drawerRes.success) {
-      toast({
-        title: 'Cash Drawer Opened',
-        description: 'Place cash into drawer and return change to customer.',
-        type: 'info',
       });
     }
   };
@@ -515,7 +418,6 @@ export default function KhataPOSPage() {
     clearKhataCart();
     setCashReceived(0);
     setNotes('');
-    setIsCashDrawerOpen(false);
     setIsCheckoutOpen(false);
     setIsInvoiceModalOpen(true);
     setProducts(productsService.getAll());
@@ -565,20 +467,8 @@ export default function KhataPOSPage() {
                   </div>
                 </div>
 
-                {/* Right Utilities: Statement Button, Search Past Bills, & Hardware Status */}
+                {/* Right Utilities: Search Past Bills */}
                 <div className="flex items-center gap-2 flex-wrap">
-                  {selectedCustomer && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setIsStatementModalOpen(true)}
-                      className="gap-1.5 font-bold text-xs bg-white shadow-2xs border-amber-300 text-amber-900 hover:bg-amber-50 hover:border-amber-400"
-                    >
-                      <Printer className="w-3.5 h-3.5 text-amber-600" />
-                      <span>Print Statement</span>
-                    </Button>
-                  )}
-
                   <Button
                     variant="outline"
                     size="sm"
@@ -588,8 +478,6 @@ export default function KhataPOSPage() {
                     <History className="w-3.5 h-3.5 text-amber-600" />
                     <span>Search Khata Bills / Returns</span>
                   </Button>
-
-                  <WholesaleHardwareStatus />
                 </div>
               </div>
 
@@ -716,26 +604,9 @@ export default function KhataPOSPage() {
                 </div>
               )}
 
-              {/* Barcode Scanner & Search Filters Strip */}
-              <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 pt-1">
-                {/* Dedicated Barcode Input */}
-                <form
-                  onSubmit={handleBarcodeSubmit}
-                  className="sm:col-span-5 relative"
-                >
-                  <BarcodeIcon className="w-4 h-4 text-amber-600 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    ref={barcodeInputRef}
-                    type="text"
-                    value={barcodeInput}
-                    onChange={e => setBarcodeInput(e.target.value)}
-                    placeholder="Scan or enter barcode / SKU (Press Enter)..."
-                    className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-amber-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono font-bold text-slate-900 shadow-2xs placeholder:font-normal placeholder:text-slate-400"
-                  />
-                </form>
-
-                {/* Text Search Bar */}
-                <div className="sm:col-span-7 relative">
+              {/* Search Filters Strip - Hardware Barcode removed for Khata Credit POS */}
+              <div className="pt-1">
+                <div className="relative">
                   <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
@@ -923,20 +794,18 @@ export default function KhataPOSPage() {
                               <span className="text-[10px] text-slate-400 font-sans ml-1">/{item.product.unit}</span>
                             </div>
                             {unitDiscount > 0 ? (
-                              <>
-                                <div className="text-emerald-600 font-semibold">
-                                  {item.quantity > 1 ? 'Khata Discount/unit:' : 'Discount:'} − Rs. {unitDiscount.toLocaleString()}
-                                </div>
-                                {item.quantity > 1 && (
-                                  <div className="text-emerald-700 text-[10px]">
-                                    Total Discount ({item.quantity} units): − Rs. {(unitDiscount * item.quantity).toLocaleString()}
-                                  </div>
-                                )}
-                                <div className="text-amber-800 font-bold text-[10px]">
-                                  Final Unit Price: Rs. {netUnit.toLocaleString()}
-                                </div>
-                              </>
+                              <div className="text-emerald-600 font-semibold">
+                                {item.quantity > 1 ? 'Khata Discount/unit:' : 'Khata Discount:'} − Rs. {unitDiscount.toLocaleString()}
+                              </div>
                             ) : null}
+                            {(item.extraDiscountRupees || 0) > 0 ? (
+                              <div className="text-amber-700 font-semibold">
+                                Extra Discount (Rs.): − Rs. {(item.extraDiscountRupees || 0).toLocaleString()}
+                              </div>
+                            ) : null}
+                            <div className="text-amber-900 font-bold text-[10px]">
+                              Final Unit Price: Rs. {Math.max(0, item.price - unitDiscount - (item.extraDiscountRupees || 0)).toLocaleString()}
+                            </div>
                           </div>
                         </div>
 
@@ -949,7 +818,7 @@ export default function KhataPOSPage() {
                         </button>
                       </div>
 
-                      {/* Quantity & Extra % & Line Total */}
+                      {/* Quantity & Extra Rs. & Line Total */}
                       <div className="flex items-center justify-between pt-1.5 border-t border-slate-200/60 text-xs">
                         <div className="flex items-center gap-1 border border-slate-200 rounded-lg p-0.5 bg-white">
                           <button
@@ -970,18 +839,20 @@ export default function KhataPOSPage() {
                         </div>
 
                         <div className="flex items-center gap-1">
-                          <span className="text-[10px] text-slate-400">Extra%:</span>
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            value={item.discountPercent || ''}
-                            placeholder="0"
-                            onChange={e =>
-                              updateKhataDiscount(item.product.id, parseInt(e.target.value, 10) || 0)
-                            }
-                            className="w-12 h-6 text-center text-xs border border-slate-200 rounded bg-white focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono font-bold"
-                          />
+                          <span className="text-[10px] text-slate-500 font-semibold">Extra (Rs.):</span>
+                          <div className="relative flex items-center">
+                            <span className="text-[10px] text-slate-400 absolute left-1.5 font-mono">Rs.</span>
+                            <input
+                              type="number"
+                              min="0"
+                              value={item.extraDiscountRupees || ''}
+                              placeholder="0"
+                              onChange={e =>
+                                updateKhataExtraDiscount(item.product.id, Math.max(0, parseFloat(e.target.value) || 0))
+                              }
+                              className="w-20 h-6 pl-6 pr-1 text-right text-xs border border-slate-200 rounded bg-white focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono font-bold text-amber-800"
+                            />
+                          </div>
                         </div>
 
                         <div className="text-right">
@@ -1164,23 +1035,6 @@ export default function KhataPOSPage() {
                   </div>
                 )}
 
-                {/* Cash Drawer Action */}
-                <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
-                  <div className="text-[11px] text-slate-500">
-                    Status: <span className="font-semibold text-slate-700">{isCashDrawerOpen ? 'Drawer Open' : 'Ready'}</span>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleCashDrawerWorkflow}
-                    disabled={isCashInsufficient}
-                    className="font-bold gap-1.5"
-                  >
-                    <Banknote className="w-4 h-4 text-amber-600" />
-                    <span>Open Cash Drawer</span>
-                  </Button>
-                </div>
               </div>
             )}
 

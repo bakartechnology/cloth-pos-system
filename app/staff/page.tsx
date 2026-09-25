@@ -15,18 +15,87 @@ import {
   TrendingUp,
   Settings,
   Phone,
+  KeyRound,
+  Lock,
+  CheckCircle2,
+  Eye,
+  EyeOff,
+  Edit2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { staffService } from '@/services/staffService';
-import { Staff } from '@/types';
+import { useToast } from '@/context/ToastContext';
+import { Modal } from '@/components/ui/Modal';
+import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
+import { Staff, StaffRole } from '@/types';
 
 export default function StaffPage() {
+  const { toast } = useToast();
   const [staffList, setStaffList] = useState<Staff[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Edit / Password Reset Modal State
+  const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editRole, setEditRole] = useState<StaffRole>('Retail Cashier');
+  const [editCounter, setEditCounter] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     setStaffList(staffService.getAll());
   }, []);
+
+  const handleOpenEdit = (staff: Staff) => {
+    setEditingStaff(staff);
+    setEditName(staff.name);
+    setEditPhone(staff.phone);
+    setEditRole(staff.role);
+    setEditCounter(staff.counter);
+    setNewPassword('');
+    setShowPassword(false);
+  };
+
+  const handleSaveEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStaff) return;
+
+    if (!editName.trim()) {
+      toast({ title: 'Validation Error', description: 'Name cannot be empty.', type: 'error' });
+      return;
+    }
+
+    if (newPassword && newPassword.trim().length < 4) {
+      toast({ title: 'Weak Password', description: 'New password must be at least 4 characters.', type: 'error' });
+      return;
+    }
+
+    const updates: Partial<Staff> = {
+      name: editName.trim(),
+      phone: editPhone.trim(),
+      role: editRole,
+      counter: editCounter.trim(),
+    };
+
+    if (newPassword.trim()) {
+      updates.password = newPassword.trim();
+    }
+
+    const updated = staffService.update(editingStaff.id, updates);
+    if (updated) {
+      setStaffList(staffService.getAll());
+      setEditingStaff(null);
+      toast({
+        title: 'Account Updated',
+        description: newPassword.trim()
+          ? `Password reset and profile updated for @${editingStaff.username}.`
+          : `Profile details updated for @${editingStaff.username}.`,
+        type: 'success',
+      });
+    }
+  };
 
   const filteredStaff = staffList.filter(s => {
     const q = searchQuery.toLowerCase().trim();
@@ -133,19 +202,139 @@ export default function StaffPage() {
                   </div>
                 </div>
 
-                <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                  <span className="text-[11px] text-slate-400">
-                    {staff.role === 'Admin' ? 'Universal Access' : `${staff.permissions.length} permissions active`}
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-1 flex-wrap">
+                  <span className="text-[10px] text-slate-400">
+                    {staff.role === 'Admin' ? 'Universal Access' : `${staff.permissions.length} perms`}
                   </span>
-                  <Link href={`/staff/permissions?staffId=${staff.id}`}>
-                    <Button variant="ghost" size="sm" className="text-xs text-blue-600 h-7 px-2">
-                      Edit Rights
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleOpenEdit(staff)}
+                      className="text-xs text-amber-700 hover:text-amber-900 hover:bg-amber-50 h-7 px-2 gap-1 font-semibold"
+                    >
+                      <KeyRound className="w-3 h-3 text-amber-600" /> Password
                     </Button>
-                  </Link>
+                    <Link href={`/staff/permissions?staffId=${staff.id}`}>
+                      <Button variant="ghost" size="sm" className="text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 h-7 px-2 font-semibold">
+                        Rights
+                      </Button>
+                    </Link>
+                  </div>
                 </div>
               </Card>
             ))}
           </div>
+
+          {/* Modal: Edit Staff Account & Reset Password */}
+          <Modal
+            isOpen={!!editingStaff}
+            onClose={() => setEditingStaff(null)}
+            title="Edit Staff Account & Reset Password"
+            description="Manage account details and update counter login password. Username is permanent."
+            maxWidth="md"
+          >
+            {editingStaff && (
+              <form onSubmit={handleSaveEdit} className="space-y-4 text-xs">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Login Username (Fixed Account Identifier)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      disabled
+                      value={editingStaff.username}
+                      className="w-full text-xs font-mono font-bold text-slate-500 bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 cursor-not-allowed select-none"
+                    />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[10px] text-slate-400 font-semibold">
+                      <Lock className="w-3 h-3 text-slate-400" /> Read-Only
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Username is fixed after creation and serves as the unique system identifier.
+                  </p>
+                </div>
+
+                <div>
+                  <Input
+                    label="Staff Full Name *"
+                    value={editName}
+                    onChange={e => setEditName(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Input
+                      label="Mobile Phone"
+                      value={editPhone}
+                      onChange={e => setEditPhone(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Select
+                      label="Role"
+                      value={editRole}
+                      onChange={e => setEditRole(e.target.value as StaffRole)}
+                    >
+                      <option value="Retail Cashier">Retail Cashier</option>
+                      <option value="Wholesale Cashier">Wholesale Cashier</option>
+                      <option value="Khata Staff">Khata Staff</option>
+                      <option value="Stock Manager">Stock Manager</option>
+                      <option value="Payment Collection Staff">Payment Collection Staff</option>
+                      <option value="Admin">Admin</option>
+                    </Select>
+                  </div>
+                </div>
+
+                <div>
+                  <Input
+                    label="Assigned Counter / Desk"
+                    value={editCounter}
+                    onChange={e => setEditCounter(e.target.value)}
+                  />
+                </div>
+
+                {/* Password Change / Reset Field */}
+                <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl space-y-2">
+                  <div className="flex items-center gap-1.5 text-amber-900 font-bold">
+                    <KeyRound className="w-4 h-4 text-amber-600" />
+                    <span>Reset / Change Password</span>
+                  </div>
+                  <p className="text-[10px] text-amber-800">
+                    Enter a new security password below to change or reset. Leave blank to keep current password unchanged. Stored passwords are never displayed in plain text.
+                  </p>
+                  <div className="relative pt-1">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={newPassword}
+                      onChange={e => setNewPassword(e.target.value)}
+                      placeholder="Enter new password (min. 4 characters)..."
+                      className="w-full text-xs font-semibold text-slate-900 bg-white border border-amber-300 rounded-xl px-3 py-2 pr-16 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-2.5 top-[calc(50%+2px)] -translate-y-1/2 text-slate-500 hover:text-slate-700 text-xs font-semibold px-1"
+                    >
+                      {showPassword ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                  <Button type="button" variant="outline" size="md" onClick={() => setEditingStaff(null)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" variant="primary" size="md" className="gap-1.5 font-bold">
+                    <CheckCircle2 className="w-4 h-4" /> Save Account Changes
+                  </Button>
+                </div>
+              </form>
+            )}
+          </Modal>
         </div>
       </AppShell>
     </ProtectedRoute>

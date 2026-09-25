@@ -48,7 +48,7 @@ export default function PaymentCollectionPage() {
   const [receiptRecord, setReceiptRecord] = useState<PaymentCollectionRecord | null>(null);
 
   useEffect(() => {
-    setCollections(paymentsService.getAllCollections());
+    setCollections(paymentsService.getCollectionsByType('Khata'));
     const clients = customersService.getAll().filter(c => c.type === 'Khata' || c.currentBalance > 0);
     setKhataCustomers(clients);
     if (clients.length > 0) {
@@ -88,7 +88,7 @@ export default function PaymentCollectionPage() {
 
   const handleMarkChequePassed = (colId: string, chqId: string) => {
     paymentsService.updateChequeStatus(colId, chqId, 'Passed');
-    setCollections(paymentsService.getAllCollections());
+    setCollections(paymentsService.getCollectionsByType('Khata'));
     toast({
       title: 'Cheque Marked as Passed',
       description: 'The cheque status has been updated to Passed. Future due notifications stopped.',
@@ -151,6 +151,7 @@ export default function PaymentCollectionPage() {
       paymentMethod: effectivePaymentMethod,
       date: new Date(collectionDate).toISOString(),
       notes: notes || (cheques.length > 0 ? `Field collection (${cheques.length} cheques + cash)` : 'Cash field recovery'),
+      collectionType: 'Khata',
       chequeDetails:
         cheques.length > 0
           ? {
@@ -175,7 +176,7 @@ export default function PaymentCollectionPage() {
       setCashAmount(0);
       setCheques([]);
       setNotes('');
-      setCollections(paymentsService.getAllCollections());
+      setCollections(paymentsService.getCollectionsByType('Khata'));
       setKhataCustomers(customersService.getAll().filter(c => c.type === 'Khata' || c.currentBalance > 0));
     }
   };
@@ -225,7 +226,7 @@ export default function PaymentCollectionPage() {
               }}
               className="gap-2 font-bold bg-emerald-600 hover:bg-emerald-700 shadow-sm"
             >
-              <Plus className="w-4 h-4" /> Record New Field Collection
+              <Plus className="w-4 h-4" /> Record Khata Field Collection
             </Button>
           </div>
 

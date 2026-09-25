@@ -279,44 +279,46 @@ export default function DashboardPage() {
             <CardContent>
               {/* Interactive SVG Bar Visualization */}
               <div className="pt-4 pb-2">
-                <div className="h-64 flex items-end justify-between gap-2 sm:gap-4 border-b border-slate-200 pb-2">
-                  {chartData.map((bar, idx) => {
-                    const label = bar.time || bar.day || bar.label || bar.year;
-                    const retailVal = bar.retail || 0;
-                    const wholesaleVal = bar.wholesale || 0;
-                    const retailHeight = Math.max(8, Math.round((retailVal / maxVal) * 200));
-                    const wholesaleHeight = Math.max(8, Math.round((wholesaleVal / maxVal) * 200));
+                <div className="overflow-x-auto pb-2 scrollbar-thin">
+                  <div className="h-64 flex items-end justify-between gap-1.5 sm:gap-3 border-b border-slate-200 pb-2 min-w-[580px] lg:min-w-0">
+                    {chartData.map((bar, idx) => {
+                      const label = bar.time || bar.day || bar.label || bar.year;
+                      const retailVal = bar.retail || 0;
+                      const wholesaleVal = bar.wholesale || 0;
+                      const retailHeight = Math.max(8, Math.round((retailVal / maxVal) * 200));
+                      const wholesaleHeight = Math.max(8, Math.round((wholesaleVal / maxVal) * 200));
 
-                    return (
-                      <div key={idx} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end group">
-                        {/* Tooltip value */}
-                        <div className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-mono bg-slate-900 text-white px-2 py-1 rounded shadow-lg pointer-events-none whitespace-nowrap z-20 -mb-2">
-                          {activeChartTab !== 'wholesale' && <div>Retail: Rs. {retailVal.toLocaleString()}</div>}
-                          {activeChartTab !== 'retail' && <div>Wholesale: Rs. {wholesaleVal.toLocaleString()}</div>}
-                        </div>
+                      return (
+                        <div key={idx} className="flex-1 min-w-0 flex flex-col items-center gap-1.5 h-full justify-end group relative">
+                          {/* Tooltip value */}
+                          <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-mono bg-slate-900 text-white px-2 py-1.5 rounded-md shadow-xl pointer-events-none whitespace-nowrap z-30">
+                            {activeChartTab !== 'wholesale' && <div>Retail: Rs. {retailVal.toLocaleString()}</div>}
+                            {activeChartTab !== 'retail' && <div>Wholesale: Rs. {wholesaleVal.toLocaleString()}</div>}
+                          </div>
 
-                        <div className="w-full flex items-end justify-center gap-1 max-w-[48px]">
-                          {(activeChartTab === 'both' || activeChartTab === 'retail') && (
-                            <div
-                              style={{ height: `${retailHeight}px` }}
-                              className="w-full bg-blue-600 rounded-t-md hover:bg-blue-500 transition-all"
-                              title={`Retail: Rs. ${retailVal.toLocaleString()}`}
-                            />
-                          )}
-                          {(activeChartTab === 'both' || activeChartTab === 'wholesale') && (
-                            <div
-                              style={{ height: `${wholesaleHeight}px` }}
-                              className="w-full bg-cyan-500 rounded-t-md hover:bg-cyan-400 transition-all"
-                              title={`Wholesale: Rs. ${wholesaleVal.toLocaleString()}`}
-                            />
-                          )}
+                          <div className="w-full flex items-end justify-center gap-0.5 sm:gap-1 max-w-[48px]">
+                            {(activeChartTab === 'both' || activeChartTab === 'retail') && (
+                              <div
+                                style={{ height: `${retailHeight}px` }}
+                                className="flex-1 bg-blue-600 rounded-t-sm sm:rounded-t-md hover:bg-blue-500 transition-all min-w-[3px]"
+                                title={`Retail: Rs. ${retailVal.toLocaleString()}`}
+                              />
+                            )}
+                            {(activeChartTab === 'both' || activeChartTab === 'wholesale') && (
+                              <div
+                                style={{ height: `${wholesaleHeight}px` }}
+                                className="flex-1 bg-cyan-500 rounded-t-sm sm:rounded-t-md hover:bg-cyan-400 transition-all min-w-[3px]"
+                                title={`Wholesale: Rs. ${wholesaleVal.toLocaleString()}`}
+                              />
+                            )}
+                          </div>
+                          <span className="text-[10px] sm:text-[11px] font-semibold text-slate-500 truncate w-full text-center">
+                            {label}
+                          </span>
                         </div>
-                        <span className="text-[11px] font-semibold text-slate-500 truncate max-w-[48px]">
-                          {label}
-                        </span>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {/* Legend */}

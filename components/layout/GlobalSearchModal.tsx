@@ -88,21 +88,21 @@ export function GlobalSearchModal({ isOpen, onClose }: GlobalSearchModalProps) {
       />
 
       {/* Palette Container */}
-      <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-200/80 overflow-hidden z-10 animate-in fade-in zoom-in-95 duration-150">
+      <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-[#DCE3E0] overflow-hidden z-10 animate-in fade-in zoom-in-95 duration-150">
         {/* Search Input Bar */}
-        <div className="flex items-center px-4 py-3.5 border-b border-slate-100 gap-3">
-          <Search className="w-5 h-5 text-blue-600 shrink-0" />
+        <div className="flex items-center px-4 py-3.5 border-b border-[#DCE3E0] gap-3">
+          <Search className="w-5 h-5 text-[#197A5A] shrink-0" />
           <input
             type="text"
             placeholder="Search fabrics, SKU, customers, invoices, staff... (Esc to close)"
             value={query}
             onChange={e => setQuery(e.target.value)}
             autoFocus
-            className="w-full text-sm bg-transparent border-none text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-0"
+            className="w-full text-sm bg-transparent border-none text-[#17211D] placeholder:text-[#8A9590] focus:outline-none focus:ring-0"
           />
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 p-1 rounded-md"
+            className="text-[#8A9590] hover:text-[#17211D] p-1 rounded-md cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -112,37 +112,37 @@ export function GlobalSearchModal({ isOpen, onClose }: GlobalSearchModalProps) {
         <div className="max-h-[60vh] overflow-y-auto p-3 space-y-4">
           {!query.trim() ? (
             <div className="p-4">
-              <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
+              <div className="text-xs font-semibold text-[#8A9590] uppercase tracking-wider mb-2.5">
                 Quick Navigation Shortcuts
               </div>
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <button
                   onClick={() => handleNavigate('/pos/retail')}
-                  className="flex items-center justify-between p-2.5 rounded-lg border border-slate-100 hover:bg-blue-50 hover:border-blue-200 transition-colors text-left"
+                  className="flex items-center justify-between p-2.5 rounded-xl border border-[#DCE3E0] hover:bg-[#DCEDE6]/50 hover:border-[#197A5A]/40 transition-colors text-left cursor-pointer"
                 >
-                  <span className="font-semibold text-slate-800">Retail POS</span>
-                  <span className="font-mono text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">F4</span>
+                  <span className="font-semibold text-[#17211D]">Retail POS</span>
+                  <span className="font-mono text-[10px] bg-[#F0F4F2] px-1.5 py-0.5 rounded text-[#66726D]">F4</span>
                 </button>
                 <button
                   onClick={() => handleNavigate('/pos/wholesale')}
-                  className="flex items-center justify-between p-2.5 rounded-lg border border-slate-100 hover:bg-blue-50 hover:border-blue-200 transition-colors text-left"
+                  className="flex items-center justify-between p-2.5 rounded-xl border border-[#DCE3E0] hover:bg-[#DCEDE6]/50 hover:border-[#197A5A]/40 transition-colors text-left cursor-pointer"
                 >
-                  <span className="font-semibold text-slate-800">Wholesale POS</span>
-                  <span className="font-mono text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">F5</span>
+                  <span className="font-semibold text-[#17211D]">Wholesale POS</span>
+                  <span className="font-mono text-[10px] bg-[#F0F4F2] px-1.5 py-0.5 rounded text-[#66726D]">F5</span>
                 </button>
                 <button
                   onClick={() => handleNavigate('/pos/khata')}
-                  className="flex items-center justify-between p-2.5 rounded-lg border border-slate-100 hover:bg-blue-50 hover:border-blue-200 transition-colors text-left"
+                  className="flex items-center justify-between p-2.5 rounded-xl border border-[#DCE3E0] hover:bg-[#DCEDE6]/50 hover:border-[#197A5A]/40 transition-colors text-left cursor-pointer"
                 >
-                  <span className="font-semibold text-slate-800">Khata Credit POS</span>
-                  <span className="font-mono text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">F6</span>
+                  <span className="font-semibold text-[#17211D]">Khata Credit POS</span>
+                  <span className="font-mono text-[10px] bg-[#F0F4F2] px-1.5 py-0.5 rounded text-[#66726D]">F6</span>
                 </button>
                 <button
                   onClick={() => handleNavigate('/products')}
-                  className="flex items-center justify-between p-2.5 rounded-lg border border-slate-100 hover:bg-blue-50 hover:border-blue-200 transition-colors text-left"
+                  className="flex items-center justify-between p-2.5 rounded-xl border border-[#DCE3E0] hover:bg-[#DCEDE6]/50 hover:border-[#197A5A]/40 transition-colors text-left cursor-pointer"
                 >
-                  <span className="font-semibold text-slate-800">Products Catalog</span>
-                  <span className="font-mono text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">F2</span>
+                  <span className="font-semibold text-[#17211D]">Products Catalog</span>
+                  <span className="font-mono text-[10px] bg-[#F0F4F2] px-1.5 py-0.5 rounded text-[#66726D]">F2</span>
                 </button>
               </div>
             </div>

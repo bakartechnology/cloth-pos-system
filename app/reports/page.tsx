@@ -66,35 +66,35 @@ export default function ReportsHubPage() {
 
           {/* Sub-report Quick Links */}
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-            <Link href="/reports/retail">
+            <Link href="/reports/retail" prefetch={false}>
               <div className="p-3 bg-white rounded-xl border border-slate-200 hover:border-blue-400 hover:shadow-xs transition-all text-center">
                 <ShoppingBag className="w-5 h-5 text-blue-600 mx-auto mb-1" />
                 <span className="text-xs font-bold text-slate-900 block">Retail Reports</span>
                 <span className="text-[10px] text-slate-400">Walk-in analytics</span>
               </div>
             </Link>
-            <Link href="/reports/wholesale">
+            <Link href="/reports/wholesale" prefetch={false}>
               <div className="p-3 bg-white rounded-xl border border-slate-200 hover:border-cyan-400 hover:shadow-xs transition-all text-center">
                 <Truck className="w-5 h-5 text-cyan-600 mx-auto mb-1" />
                 <span className="text-xs font-bold text-slate-900 block">Wholesale Reports</span>
                 <span className="text-[10px] text-slate-400">B2B volume</span>
               </div>
             </Link>
-            <Link href="/reports/khata">
+            <Link href="/reports/khata" prefetch={false}>
               <div className="p-3 bg-white rounded-xl border border-slate-200 hover:border-amber-400 hover:shadow-xs transition-all text-center">
                 <BookOpen className="w-5 h-5 text-amber-600 mx-auto mb-1" />
                 <span className="text-xs font-bold text-slate-900 block">Khata Reports</span>
                 <span className="text-[10px] text-slate-400">Aging & recovery</span>
               </div>
             </Link>
-            <Link href="/reports/stock">
+            <Link href="/reports/stock" prefetch={false}>
               <div className="p-3 bg-white rounded-xl border border-slate-200 hover:border-indigo-400 hover:shadow-xs transition-all text-center">
                 <Layers className="w-5 h-5 text-indigo-600 mx-auto mb-1" />
                 <span className="text-xs font-bold text-slate-900 block">Stock Valuation</span>
                 <span className="text-[10px] text-slate-400">Category share</span>
               </div>
             </Link>
-            <Link href="/reports/staff">
+            <Link href="/reports/staff" prefetch={false}>
               <div className="p-3 bg-white rounded-xl border border-slate-200 hover:border-emerald-400 hover:shadow-xs transition-all text-center">
                 <Users className="w-5 h-5 text-emerald-600 mx-auto mb-1" />
                 <span className="text-xs font-bold text-slate-900 block">Staff Performance</span>

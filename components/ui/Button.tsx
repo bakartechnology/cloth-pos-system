@@ -16,19 +16,19 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 
     const variants = {
       primary:
-        'bg-blue-600 text-white hover:bg-blue-700 shadow-sm focus:ring-blue-500 shadow-blue-500/20',
+        'bg-[#125E45] text-white hover:bg-[#197A5A] shadow-xs focus:ring-[#197A5A]',
       secondary:
-        'bg-slate-900 text-white hover:bg-slate-800 shadow-sm focus:ring-slate-900 shadow-slate-900/20',
+        'border border-[#DCE3E0] bg-white text-[#17211D] hover:bg-[#F0F4F2] hover:border-[#C7D2CD] focus:ring-[#197A5A]',
       accent:
-        'bg-cyan-500 text-white hover:bg-cyan-600 shadow-sm focus:ring-cyan-400 shadow-cyan-500/20',
+        'bg-[#DCEDE6] text-[#125E45] hover:bg-[#cbe3d9] focus:ring-[#197A5A]',
       outline:
-        'border border-slate-200 bg-white text-slate-800 hover:bg-slate-50 hover:border-slate-300 focus:ring-slate-400',
+        'border border-[#DCE3E0] bg-white text-[#17211D] hover:bg-[#F0F4F2] hover:border-[#C7D2CD] focus:ring-[#197A5A]',
       ghost:
-        'text-slate-600 hover:text-slate-900 hover:bg-slate-100 focus:ring-slate-400',
+        'text-[#66726D] hover:text-[#17211D] hover:bg-[#F0F4F2] focus:ring-[#197A5A]',
       destructive:
-        'bg-rose-600 text-white hover:bg-rose-700 focus:ring-rose-500 shadow-sm shadow-rose-500/20',
+        'bg-rose-600 text-white hover:bg-rose-700 focus:ring-rose-500 shadow-xs',
       success:
-        'bg-emerald-600 text-white hover:bg-emerald-700 focus:ring-emerald-500 shadow-sm shadow-emerald-500/20',
+        'bg-[#197A5A] text-white hover:bg-[#125E45] focus:ring-[#197A5A] shadow-xs',
     };
 
     const sizes = {

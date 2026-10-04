@@ -7,8 +7,8 @@ interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
 export function Card({ className = '', hoverEffect = false, children, ...props }: CardProps) {
   return (
     <div
-      className={`bg-white rounded-xl border border-slate-200/80 shadow-xs ${
-        hoverEffect ? 'transition-all duration-200 hover:shadow-md hover:border-slate-300' : ''
+      className={`bg-white rounded-2xl border border-[#DCE3E0] shadow-2xs ${
+        hoverEffect ? 'transition-all duration-200 hover:shadow-xs hover:border-[#C7D2CD]' : ''
       } ${className}`}
       {...props}
     >
@@ -19,7 +19,7 @@ export function Card({ className = '', hoverEffect = false, children, ...props }
 
 export function CardHeader({ className = '', children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={`px-5 py-4 border-b border-slate-100 flex items-center justify-between ${className}`} {...props}>
+    <div className={`px-5 py-4 border-b border-[#DCE3E0]/70 flex items-center justify-between ${className}`} {...props}>
       {children}
     </div>
   );
@@ -27,7 +27,7 @@ export function CardHeader({ className = '', children, ...props }: React.HTMLAtt
 
 export function CardTitle({ className = '', children, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
   return (
-    <h3 className={`font-semibold text-slate-900 text-base leading-snug tracking-tight ${className}`} {...props}>
+    <h3 className={`font-bold text-[#17211D] text-base leading-snug tracking-tight ${className}`} {...props}>
       {children}
     </h3>
   );
@@ -35,7 +35,7 @@ export function CardTitle({ className = '', children, ...props }: React.HTMLAttr
 
 export function CardDescription({ className = '', children, ...props }: React.HTMLAttributes<HTMLParagraphElement>) {
   return (
-    <p className={`text-xs text-slate-500 mt-0.5 ${className}`} {...props}>
+    <p className={`text-xs text-[#66726D] mt-0.5 ${className}`} {...props}>
       {children}
     </p>
   );
@@ -51,7 +51,7 @@ export function CardContent({ className = '', children, ...props }: React.HTMLAt
 
 export function CardFooter({ className = '', children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={`px-5 py-3 border-t border-slate-100 bg-slate-50/50 rounded-b-xl flex items-center ${className}`} {...props}>
+    <div className={`px-5 py-3 border-t border-[#DCE3E0]/70 bg-[#F6F8F7] rounded-b-2xl flex items-center ${className}`} {...props}>
       {children}
     </div>
   );

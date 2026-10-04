@@ -268,7 +268,7 @@ export default function CustomersCRMPage() {
 
                           <td className="py-3 px-4 text-right">
                             {c.type === 'Khata' ? (
-                              <Link href={`/customers/khata?id=${c.id}`}>
+                              <Link href={`/customers/khata?id=${c.id}`} prefetch={false}>
                                 <Button size="sm" variant="outline" className="gap-1 text-[11px] h-7">
                                   <BookOpen className="w-3 h-3" /> Ledger
                                 </Button>

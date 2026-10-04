@@ -123,17 +123,17 @@ export default function StaffPage() {
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
-              <Link href="/staff/permissions">
+              <Link href="/staff/permissions" prefetch={false}>
                 <Button variant="outline" size="md" className="gap-1.5 font-semibold">
                   <Shield className="w-4 h-4 text-blue-600" /> Permission Matrix
                 </Button>
               </Link>
-              <Link href="/staff/attendance">
+              <Link href="/staff/attendance" prefetch={false}>
                 <Button variant="outline" size="md" className="gap-1.5 font-semibold">
                   <CalendarCheck className="w-4 h-4 text-emerald-600" /> Attendance Timesheets
                 </Button>
               </Link>
-              <Link href="/staff/add">
+              <Link href="/staff/add" prefetch={false}>
                 <Button variant="primary" size="md" className="gap-1.5 font-bold shadow-sm">
                   <Plus className="w-4 h-4" /> Add New Staff
                 </Button>
@@ -215,7 +215,7 @@ export default function StaffPage() {
                     >
                       <KeyRound className="w-3 h-3 text-amber-600" /> Password
                     </Button>
-                    <Link href={`/staff/permissions?staffId=${staff.id}`}>
+                    <Link href={`/staff/permissions?staffId=${staff.id}`} prefetch={false}>
                       <Button variant="ghost" size="sm" className="text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 h-7 px-2 font-semibold">
                         Rights
                       </Button>

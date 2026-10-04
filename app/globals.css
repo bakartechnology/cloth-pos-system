@@ -1,37 +1,45 @@
 @import "tailwindcss";
 
 :root {
-  /* Brand Colors */
-  --brand-navy: #0f172a;
-  --brand-navy-light: #1e293b;
-  --brand-navy-dark: #090d16;
-  --brand-blue: #2563eb;
-  --brand-blue-hover: #1d4ed8;
-  --brand-cyan: #06b6d4;
-  --brand-cyan-light: #22d3ee;
+  /* Brand Colors from Reference Palette */
+  --brand-dark: #17211D;
+  --brand-primary: #125E45;
+  --brand-primary-light: #197A5A;
+  --brand-mint: #DCEDE6;
+  --brand-mint-pale: #E9F3EF;
+  --brand-bg: #F6F8F7;
+  --brand-bg-subtle: #F0F4F2;
+  --brand-border: #DCE3E0;
+  --brand-border-subtle: #C7D2CD;
+  --brand-sage: #A7B7B0;
+  --brand-muted-subtle: #8A9590;
+  --brand-muted: #66726D;
+  --brand-amber: #9A6A16;
+  --brand-amber-bg: #F7EEDC;
+  --brand-white: #FFFFFF;
 
   /* Semantic UI Tokens */
-  --background: #f8fafc;
-  --foreground: #0f172a;
-  --card: #ffffff;
-  --card-foreground: #0f172a;
-  --popover: #ffffff;
-  --popover-foreground: #0f172a;
-  --primary: #2563eb;
-  --primary-foreground: #ffffff;
-  --secondary: #0f172a;
-  --secondary-foreground: #ffffff;
-  --accent: #06b6d4;
-  --accent-foreground: #ffffff;
-  --muted: #f1f5f9;
-  --muted-foreground: #64748b;
-  --border: #e2e8f0;
-  --ring: #2563eb;
+  --background: #F6F8F7;
+  --foreground: #17211D;
+  --card: #FFFFFF;
+  --card-foreground: #17211D;
+  --popover: #FFFFFF;
+  --popover-foreground: #17211D;
+  --primary: #125E45;
+  --primary-foreground: #FFFFFF;
+  --secondary: #F0F4F2;
+  --secondary-foreground: #17211D;
+  --accent: #197A5A;
+  --accent-foreground: #FFFFFF;
+  --muted: #F0F4F2;
+  --muted-foreground: #66726D;
+  --border: #DCE3E0;
+  --ring: #197A5A;
 
   /* Semantic Alerts */
-  --success: #10b981;
+  --success: #197A5A;
   --destructive: #ef4444;
-  --warning: #f59e0b;
+  --warning: #9A6A16;
 }
 
 body {
@@ -49,16 +57,16 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: #F0F4F2;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: #C7D2CD;
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: #A7B7B0;
 }
 
 /* High-density POS and Thermal Receipt Print utilities */

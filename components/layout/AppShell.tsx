@@ -84,7 +84,7 @@ export function AppShell({ children }: AppShellProps) {
   }, [router, hasPermission, toast]);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-slate-50 font-sans text-slate-900">
+    <div className="flex h-screen w-screen overflow-hidden bg-[#F6F8F7] font-sans text-[#17211D]">
       {/* Sidebar Navigation */}
       <Sidebar
         isMobileOpen={isMobileMenuOpen}
@@ -92,7 +92,7 @@ export function AppShell({ children }: AppShellProps) {
       />
 
       {/* Main Body Area */}
-      <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden">
+      <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden bg-[#F6F8F7]">
         <Header
           onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
           onOpenSearch={() => setIsSearchOpen(true)}

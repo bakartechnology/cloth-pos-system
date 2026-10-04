@@ -130,12 +130,12 @@ export default function ProductsPage() {
             </div>
 
             <div className="flex items-center gap-2.5">
-              <Link href="/products/discount">
+              <Link href="/products/discount" prefetch={false}>
                 <Button variant="outline" size="md" className="gap-2 font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border-amber-200">
                   <Tag className="w-4 h-4" /> Discount
                 </Button>
               </Link>
-              <Link href="/products/add">
+              <Link href="/products/add" prefetch={false}>
                 <Button variant="primary" size="md" className="gap-2 font-bold shadow-sm">
                   <Plus className="w-4 h-4" /> Add New Fabric
                 </Button>

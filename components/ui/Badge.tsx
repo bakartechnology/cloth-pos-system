@@ -13,13 +13,13 @@ export function Badge({
   ...props
 }: BadgeProps) {
   const variants = {
-    default: 'bg-blue-50 text-blue-700 border-blue-200/60',
-    secondary: 'bg-slate-100 text-slate-700 border-slate-200',
-    outline: 'bg-transparent text-slate-600 border-slate-300',
-    success: 'bg-emerald-50 text-emerald-700 border-emerald-200/60',
-    warning: 'bg-amber-50 text-amber-700 border-amber-200/60',
+    default: 'bg-[#DCEDE6] text-[#125E45] border-[#C7D2CD]/60',
+    secondary: 'bg-[#F0F4F2] text-[#66726D] border-[#DCE3E0]',
+    outline: 'bg-transparent text-[#66726D] border-[#DCE3E0]',
+    success: 'bg-[#DCEDE6] text-[#125E45] border-[#C7D2CD]/60',
+    warning: 'bg-[#F7EEDC] text-[#9A6A16] border-[#F7EEDC]',
     destructive: 'bg-rose-50 text-rose-700 border-rose-200/60',
-    cyan: 'bg-cyan-50 text-cyan-700 border-cyan-200/60',
+    cyan: 'bg-[#E9F3EF] text-[#197A5A] border-[#DCE3E0]',
   };
 
   const sizes = {

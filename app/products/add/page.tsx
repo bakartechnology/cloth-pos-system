@@ -439,7 +439,7 @@ export default function AddProductPage() {
                     onChange={e => setMinStockAlert(parseInt(e.target.value, 10) || 1)}
                   />
 
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1">
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1.5">
                     <div className="flex justify-between text-slate-600">
                       <span>Total Initial Retail Valuation:</span>
                       <span className="font-bold text-slate-900">
@@ -447,9 +447,15 @@ export default function AddProductPage() {
                       </span>
                     </div>
                     <div className="flex justify-between text-slate-600">
-                      <span>Total Wholesale Value:</span>
+                      <span>Total Wholesale Valuation:</span>
                       <span className="font-bold text-cyan-700">
                         Rs. {(initialStock * wholesalePrice).toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-slate-600 pt-1 border-t border-slate-200/60">
+                      <span>Total Khata Valuation:</span>
+                      <span className="font-bold text-amber-800">
+                        Rs. {(initialStock * (khataPrice || retailPrice)).toLocaleString()}
                       </span>
                     </div>
                   </div>

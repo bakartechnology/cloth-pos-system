@@ -14,18 +14,21 @@ import {
   CreditCard,
   Check,
   Boxes,
+  ArrowRight,
 } from 'lucide-react';
 import Link from 'next/link';
 import { reportsService } from '@/services/reportsService';
 import { salesService } from '@/services/salesService';
 import { inventoryService } from '@/services/inventoryService';
 import { useAuth } from '@/context/AuthContext';
+import { Product } from '@/types';
 
 export default function DashboardPage() {
   const { currentStaff } = useAuth();
 
-  const [activeTimeframe, setActiveTimeframe] = useState<'today' | 'week' | 'month' | 'year'>('week');
+  const [activeTimeframe, setActiveTimeframe] = useState<'today' | 'week' | 'month' | 'year'>('today');
   const [hoveredBar, setHoveredBar] = useState<number | null>(null);
+  const [lowStockProducts, setLowStockProducts] = useState<Product[]>([]);
 
   // Initial KPIs with realistic fallback matching the design screenshot
   const [kpis, setKpis] = useState({
@@ -39,16 +42,83 @@ export default function DashboardPage() {
     inventorySub: '2,148 items currently in stock',
   });
 
-  // Chart data mirroring the reference image
-  const chartDays = [
-    { label: 'Mon', retail: 26000, wholesale: 52000, retailDisplay: 'Rs. 26,000', wholesaleDisplay: 'Rs. 52,000' },
-    { label: 'Tue', retail: 37000, wholesale: 62000, retailDisplay: 'Rs. 37,000', wholesaleDisplay: 'Rs. 62,000' },
-    { label: 'Wed', retail: 24000, wholesale: 47000, retailDisplay: 'Rs. 24,000', wholesaleDisplay: 'Rs. 47,000' },
-    { label: 'Thu', retail: 43000, wholesale: 64000, retailDisplay: 'Rs. 43,000', wholesaleDisplay: 'Rs. 64,000' },
-    { label: 'Fri', retail: 36000, wholesale: 68000, retailDisplay: 'Rs. 36,000', wholesaleDisplay: 'Rs. 68,000' },
-    { label: 'Sat', retail: 52000, wholesale: 75000, retailDisplay: 'Rs. 52,000', wholesaleDisplay: 'Rs. 75,000' },
-    { label: 'Today', retail: 31000, wholesale: 66470, retailDisplay: 'Rs. 31,000', wholesaleDisplay: 'Rs. 66,470' },
-  ];
+interface ChartDataPoint {
+  label: string;
+  retail: number;
+  wholesale: number;
+  retailDisplay: string;
+  wholesaleDisplay: string;
+}
+
+interface TimeframeConfig {
+  summaryLabel: string;
+  summaryTotal: string;
+  chartMax: number;
+  yAxisMarkers: string[];
+  data: ChartDataPoint[];
+}
+
+const timeframeConfigs: Record<'today' | 'week' | 'month' | 'year', TimeframeConfig> = {
+  today: {
+    summaryLabel: "Today's total",
+    summaryTotal: 'Rs. 97,470',
+    chartMax: 80000,
+    yAxisMarkers: ['80k', '60k', '40k', '20k', '0'],
+    data: [
+      { label: '9 AM', retail: 4500, wholesale: 12000, retailDisplay: 'Rs. 4,500', wholesaleDisplay: 'Rs. 12,000' },
+      { label: '11 AM', retail: 12200, wholesale: 24000, retailDisplay: 'Rs. 12,200', wholesaleDisplay: 'Rs. 24,000' },
+      { label: '1 PM', retail: 18500, wholesale: 41000, retailDisplay: 'Rs. 18,500', wholesaleDisplay: 'Rs. 41,000' },
+      { label: '3 PM', retail: 24000, wholesale: 56000, retailDisplay: 'Rs. 24,000', wholesaleDisplay: 'Rs. 56,000' },
+      { label: '5 PM', retail: 32000, wholesale: 66470, retailDisplay: 'Rs. 32,000', wholesaleDisplay: 'Rs. 66,470' },
+      { label: '7 PM', retail: 28000, wholesale: 38000, retailDisplay: 'Rs. 28,000', wholesaleDisplay: 'Rs. 38,000' },
+      { label: '9 PM', retail: 14000, wholesale: 18000, retailDisplay: 'Rs. 14,000', wholesaleDisplay: 'Rs. 18,000' },
+    ],
+  },
+  week: {
+    summaryLabel: '7-day total',
+    summaryTotal: 'Rs. 5.62 Lakh',
+    chartMax: 80000,
+    yAxisMarkers: ['80k', '60k', '40k', '20k', '0'],
+    data: [
+      { label: 'Mon', retail: 26000, wholesale: 52000, retailDisplay: 'Rs. 26,000', wholesaleDisplay: 'Rs. 52,000' },
+      { label: 'Tue', retail: 37000, wholesale: 62000, retailDisplay: 'Rs. 37,000', wholesaleDisplay: 'Rs. 62,000' },
+      { label: 'Wed', retail: 24000, wholesale: 47000, retailDisplay: 'Rs. 24,000', wholesaleDisplay: 'Rs. 47,000' },
+      { label: 'Thu', retail: 43000, wholesale: 64000, retailDisplay: 'Rs. 43,000', wholesaleDisplay: 'Rs. 64,000' },
+      { label: 'Fri', retail: 36000, wholesale: 68000, retailDisplay: 'Rs. 36,000', wholesaleDisplay: 'Rs. 68,000' },
+      { label: 'Sat', retail: 52000, wholesale: 75000, retailDisplay: 'Rs. 52,000', wholesaleDisplay: 'Rs. 75,000' },
+      { label: 'Today', retail: 31000, wholesale: 66470, retailDisplay: 'Rs. 31,000', wholesaleDisplay: 'Rs. 66,470' },
+    ],
+  },
+  month: {
+    summaryLabel: "This month's total",
+    summaryTotal: 'Rs. 24.85 Lakh',
+    chartMax: 500000,
+    yAxisMarkers: ['5L', '3.75L', '2.5L', '1.25L', '0'],
+    data: [
+      { label: 'Week 1', retail: 280000, wholesale: 390000, retailDisplay: 'Rs. 2.80 Lakh', wholesaleDisplay: 'Rs. 3.90 Lakh' },
+      { label: 'Week 2', retail: 310000, wholesale: 420000, retailDisplay: 'Rs. 3.10 Lakh', wholesaleDisplay: 'Rs. 4.20 Lakh' },
+      { label: 'Week 3', retail: 240000, wholesale: 360000, retailDisplay: 'Rs. 2.40 Lakh', wholesaleDisplay: 'Rs. 3.60 Lakh' },
+      { label: 'Week 4', retail: 195000, wholesale: 290000, retailDisplay: 'Rs. 1.95 Lakh', wholesaleDisplay: 'Rs. 2.90 Lakh' },
+    ],
+  },
+  year: {
+    summaryLabel: "This year's total (YTD)",
+    summaryTotal: 'Rs. 4.89 Crore',
+    chartMax: 4500000,
+    yAxisMarkers: ['45L', '30L', '20L', '10L', '0'],
+    data: [
+      { label: 'Jan', retail: 2150000, wholesale: 2900000, retailDisplay: 'Rs. 21.5 Lakh', wholesaleDisplay: 'Rs. 29.0 Lakh' },
+      { label: 'Feb', retail: 2300000, wholesale: 3100000, retailDisplay: 'Rs. 23.0 Lakh', wholesaleDisplay: 'Rs. 31.0 Lakh' },
+      { label: 'Mar', retail: 3400000, wholesale: 4200000, retailDisplay: 'Rs. 34.0 Lakh', wholesaleDisplay: 'Rs. 42.0 Lakh' },
+      { label: 'Apr', retail: 3100000, wholesale: 3800000, retailDisplay: 'Rs. 31.0 Lakh', wholesaleDisplay: 'Rs. 38.0 Lakh' },
+      { label: 'May', retail: 2400000, wholesale: 2900000, retailDisplay: 'Rs. 24.0 Lakh', wholesaleDisplay: 'Rs. 29.0 Lakh' },
+      { label: 'Jun', retail: 2200000, wholesale: 2700000, retailDisplay: 'Rs. 22.0 Lakh', wholesaleDisplay: 'Rs. 27.0 Lakh' },
+      { label: 'Jul', retail: 2600000, wholesale: 3400000, retailDisplay: 'Rs. 26.0 Lakh', wholesaleDisplay: 'Rs. 34.0 Lakh' },
+      { label: 'Aug', retail: 2100000, wholesale: 2800000, retailDisplay: 'Rs. 21.0 Lakh', wholesaleDisplay: 'Rs. 28.0 Lakh' },
+      { label: 'Sep', retail: 1200000, wholesale: 1670000, retailDisplay: 'Rs. 12.0 Lakh', wholesaleDisplay: 'Rs. 16.7 Lakh' },
+    ],
+  },
+};
 
   // Table rows matching the exact transactions from the reference image
   const recentSales = [
@@ -100,26 +170,39 @@ export default function DashboardPage() {
   ];
 
   useEffect(() => {
-    // Optionally fetch live service metrics if available
-    try {
-      const metrics = reportsService.getDashboardMetrics();
-      if (metrics) {
-        setKpis({
-          todaySales: `Rs.${metrics.todayRetailSales?.toLocaleString() || '13,415'}`,
-          todaySalesSub: `${metrics.todayTransactionsCount || 18} retail bills today`,
-          wholesaleSales: `Rs.${metrics.todayWholesaleSales?.toLocaleString() || '66,470'}`,
-          wholesaleSalesSub: '4 wholesale orders today',
-          receivables: `Rs.${metrics.todayKhataCollection?.toLocaleString() || '50,000'}`,
-          receivablesSub: '8 customers have a balance',
-          inventory: `Rs.${((metrics.totalStockValue || 8480000) / 100000).toFixed(1)} Lakh`,
-          inventorySub: '2,148 items currently in stock',
-        });
-      }
-    } catch {}
+    const loadDashboardData = () => {
+      try {
+        const metrics = reportsService.getDashboardMetrics();
+        if (metrics) {
+          setKpis({
+            todaySales: `Rs.${metrics.todayRetailSales?.toLocaleString() || '13,415'}`,
+            todaySalesSub: `${metrics.todayTransactionsCount || 18} retail bills today`,
+            wholesaleSales: `Rs.${metrics.todayWholesaleSales?.toLocaleString() || '66,470'}`,
+            wholesaleSalesSub: '4 wholesale orders today',
+            receivables: `Rs.${metrics.todayKhataCollection?.toLocaleString() || '50,000'}`,
+            receivablesSub: '8 customers have a balance',
+            inventory: `Rs.${((metrics.totalStockValue || 8480000) / 100000).toFixed(1)} Lakh`,
+            inventorySub: '2,148 items currently in stock',
+          });
+        }
+
+        const lowItems = inventoryService.getLowStockProducts(10);
+        lowItems.sort((a, b) => a.stock - b.stock);
+        setLowStockProducts(lowItems);
+      } catch {}
+    };
+
+    loadDashboardData();
+    window.addEventListener('focus', loadDashboardData);
+    window.addEventListener('storage', loadDashboardData);
+    return () => {
+      window.removeEventListener('focus', loadDashboardData);
+      window.removeEventListener('storage', loadDashboardData);
+    };
   }, []);
 
-  // Max value for chart proportional scaling (80k limit on reference chart)
-  const chartMax = 80000;
+  // Active timeframe config for responsive sales chart
+  const activeConfig = timeframeConfigs[activeTimeframe];
   const chartHeightPx = 180;
 
   return (
@@ -233,8 +316,12 @@ export default function DashboardPage() {
                     {(['today', 'week', 'month', 'year'] as const).map(tab => (
                       <button
                         key={tab}
-                        onClick={() => setActiveTimeframe(tab)}
-                        className={`capitalize px-3 py-1 rounded-lg transition-all ${
+                        type="button"
+                        onClick={() => {
+                          setActiveTimeframe(tab);
+                          setHoveredBar(null);
+                        }}
+                        className={`capitalize px-3 py-1 rounded-lg transition-all cursor-pointer ${
                           activeTimeframe === tab
                             ? 'bg-white text-[#17211D] font-semibold shadow-2xs'
                             : 'text-[#66726D] hover:text-[#17211D]'
@@ -246,11 +333,11 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
-                {/* Sub-summary: 7-day total and Legend */}
+                {/* Sub-summary: Timeframe-specific total and Legend */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mt-4">
                   <div>
-                    <span className="text-xs text-[#66726D]">7-day total</span>
-                    <div className="text-xl font-bold text-[#17211D]">Rs. 5.62 Lakh</div>
+                    <span className="text-xs text-[#66726D]">{activeConfig.summaryLabel}</span>
+                    <div className="text-xl font-bold text-[#17211D]">{activeConfig.summaryTotal}</div>
                   </div>
 
                   <div className="flex items-center gap-4 text-xs">
@@ -270,33 +357,19 @@ export default function DashboardPage() {
               <div className="mt-6 relative">
                 {/* Grid Lines with Y-Axis Markers */}
                 <div className="absolute inset-0 flex flex-col justify-between pointer-events-none text-[11px] text-[#8A9590]">
-                  <div className="w-full flex items-center">
-                    <span className="w-8 shrink-0">80k</span>
-                    <div className="w-full border-b border-[#DCE3E0]/60" />
-                  </div>
-                  <div className="w-full flex items-center">
-                    <span className="w-8 shrink-0">60k</span>
-                    <div className="w-full border-b border-[#DCE3E0]/60" />
-                  </div>
-                  <div className="w-full flex items-center">
-                    <span className="w-8 shrink-0">40k</span>
-                    <div className="w-full border-b border-[#DCE3E0]/60" />
-                  </div>
-                  <div className="w-full flex items-center">
-                    <span className="w-8 shrink-0">20k</span>
-                    <div className="w-full border-b border-[#DCE3E0]/60" />
-                  </div>
-                  <div className="w-full flex items-center">
-                    <span className="w-8 shrink-0">0</span>
-                    <div className="w-full border-b border-[#DCE3E0]" />
-                  </div>
+                  {activeConfig.yAxisMarkers.map((marker, mIdx) => (
+                    <div key={mIdx} className="w-full flex items-center">
+                      <span className="w-9 shrink-0">{marker}</span>
+                      <div className={`w-full border-b ${mIdx === activeConfig.yAxisMarkers.length - 1 ? 'border-[#DCE3E0]' : 'border-[#DCE3E0]/60'}`} />
+                    </div>
+                  ))}
                 </div>
 
                 {/* Bars along X-Axis */}
-                <div className="pl-8 pt-2 pb-6 flex items-end justify-between gap-2 sm:gap-4 h-[210px]">
-                  {chartDays.map((item, idx) => {
-                    const retailHeight = (item.retail / chartMax) * chartHeightPx;
-                    const wholesaleHeight = (item.wholesale / chartMax) * chartHeightPx;
+                <div className="pl-9 pt-2 pb-6 flex items-end justify-between gap-1.5 sm:gap-3 h-[210px]">
+                  {activeConfig.data.map((item, idx) => {
+                    const retailHeight = Math.max(4, Math.min(chartHeightPx, (item.retail / activeConfig.chartMax) * chartHeightPx));
+                    const wholesaleHeight = Math.max(4, Math.min(chartHeightPx, (item.wholesale / activeConfig.chartMax) * chartHeightPx));
                     const isHovered = hoveredBar === idx;
 
                     return (
@@ -315,22 +388,22 @@ export default function DashboardPage() {
                           </div>
                         )}
 
-                        {/* Dual Vertical Bars */}
+                        {/* Dual Vertical Bars with smooth transition */}
                         <div className="flex items-end justify-center gap-1 w-full max-w-[28px] pb-0">
                           <div
                             style={{ height: `${retailHeight}px` }}
-                            className="w-2.5 sm:w-3 bg-[#197A5A] rounded-t-xs hover:bg-[#125E45] transition-all"
+                            className="w-2 sm:w-2.5 bg-[#197A5A] rounded-t-xs hover:bg-[#125E45] transition-all duration-300 ease-out"
                             title={`Retail: ${item.retailDisplay}`}
                           />
                           <div
                             style={{ height: `${wholesaleHeight}px` }}
-                            className="w-2.5 sm:w-3 bg-[#8A9590] rounded-t-xs hover:bg-[#66726D] transition-all"
+                            className="w-2 sm:w-2.5 bg-[#8A9590] rounded-t-xs hover:bg-[#66726D] transition-all duration-300 ease-out"
                             title={`Wholesale: ${item.wholesaleDisplay}`}
                           />
                         </div>
 
-                        {/* X-axis Day Label */}
-                        <span className="absolute -bottom-6 text-xs text-[#66726D] font-medium text-center">
+                        {/* X-axis Label */}
+                        <span className="absolute -bottom-6 text-[11px] sm:text-xs text-[#66726D] font-medium text-center truncate max-w-full">
                           {item.label}
                         </span>
                       </div>
@@ -343,33 +416,87 @@ export default function DashboardPage() {
             {/* Low Stock Card */}
             <div className="bg-white rounded-2xl border border-[#DCE3E0] p-6 shadow-2xs flex flex-col justify-between">
               <div>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between pb-1">
                   <div>
-                    <h2 className="text-base font-bold text-[#17211D]">Low Stock</h2>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-base font-bold text-[#17211D]">Low Stock</h2>
+                      {lowStockProducts.length > 0 && (
+                        <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold">
+                          {lowStockProducts.length} Alert{lowStockProducts.length > 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-[#66726D] mt-0.5">Products that need your attention</p>
                   </div>
                   <Link
-                    href="/inventory/stock"
+                    href="/inventory/stock?filter=low"
                     prefetch={false}
                     className="text-xs font-semibold text-[#197A5A] hover:underline"
                   >
                     View inventory
                   </Link>
                 </div>
+
+                {lowStockProducts.length === 0 ? (
+                  /* Centered Healthy Inventory State */
+                  <div className="bg-[#F6F8F7] rounded-2xl p-8 flex flex-col items-center justify-center text-center mt-4 my-auto min-h-[220px]">
+                    <div className="w-10 h-10 rounded-full bg-[#DCEDE6] flex items-center justify-center text-[#197A5A] mb-3">
+                      <Check className="w-5 h-5 text-[#197A5A]" />
+                    </div>
+                    <h3 className="font-bold text-sm text-[#17211D]">
+                      Your inventory looks healthy
+                    </h3>
+                    <p className="text-xs text-[#66726D] mt-1.5 max-w-[220px] leading-relaxed">
+                      All products have adequate stock levels above safety thresholds.
+                    </p>
+                  </div>
+                ) : (
+                  /* Dynamic List of Low Stock Products (Max 5 items to keep layout clean) */
+                  <div className="space-y-2 mt-3.5">
+                    {lowStockProducts.slice(0, 5).map(prod => (
+                      <Link
+                        key={prod.id}
+                        href="/inventory/stock?filter=low"
+                        prefetch={false}
+                        className="flex items-center justify-between p-2.5 rounded-xl bg-[#F6F8F7] hover:bg-[#F0F4F2] border border-[#DCE3E0]/70 transition-colors group cursor-pointer"
+                      >
+                        <div className="min-w-0 pr-2">
+                          <div className="text-xs font-semibold text-[#17211D] group-hover:text-[#197A5A] transition-colors truncate">
+                            {prod.name}
+                          </div>
+                          <div className="text-[10px] text-[#66726D] truncate mt-0.5">
+                            {prod.category} • SKU: {prod.sku} • Min: {prod.minStockAlert || 10} {prod.unit}
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              prod.stock <= 0
+                                ? 'bg-rose-100 text-rose-700'
+                                : 'bg-amber-100 text-amber-800'
+                            }`}
+                          >
+                            {prod.stock <= 0 ? 'Out of stock' : `${prod.stock} ${prod.unit} left`}
+                          </span>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              {/* Centered Healthy Inventory State */}
-              <div className="bg-[#F6F8F7] rounded-2xl p-8 flex flex-col items-center justify-center text-center mt-4 my-auto min-h-[220px]">
-                <div className="w-10 h-10 rounded-full bg-[#DCEDE6] flex items-center justify-center text-[#197A5A] mb-3">
-                  <Check className="w-5 h-5 text-[#197A5A]" />
+              {lowStockProducts.length > 5 && (
+                <div className="pt-3 mt-2 border-t border-[#DCE3E0] text-center">
+                  <Link
+                    href="/inventory/stock?filter=low"
+                    prefetch={false}
+                    className="text-xs font-semibold text-[#197A5A] hover:underline inline-flex items-center gap-1"
+                  >
+                    <span>+{lowStockProducts.length - 5} more low stock articles</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
                 </div>
-                <h3 className="font-bold text-sm text-[#17211D]">
-                  Your inventory looks healthy
-                </h3>
-                <p className="text-xs text-[#66726D] mt-1.5 max-w-[220px] leading-relaxed">
-                  Products will appear here when stock reaches their reorder level.
-                </p>
-              </div>
+              )}
             </div>
           </div>
 

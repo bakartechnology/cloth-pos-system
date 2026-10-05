@@ -83,7 +83,7 @@ export function Header({ onOpenMobileMenu, onOpenSearch }: HeaderProps) {
       <div className="flex items-center gap-3 flex-1 max-w-lg">
         <button
           onClick={onOpenMobileMenu}
-          className="md:hidden p-2 rounded-xl text-[#66726D] hover:text-[#17211D] hover:bg-[#F0F4F2] transition-colors"
+          className="lg:hidden p-2 rounded-xl text-[#66726D] hover:text-[#17211D] hover:bg-[#F0F4F2] transition-colors cursor-pointer"
           aria-label="Open navigation menu"
         >
           <Menu className="w-5 h-5" />

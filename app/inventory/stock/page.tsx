@@ -28,6 +28,7 @@ export default function StockOverviewPage() {
     totalStockCount: 0,
     totalRetailValue: 0,
     totalWholesaleValue: 0,
+    totalKhataValue: 0,
     totalCostValue: 0,
   });
   const [categoryBreakdown, setCategoryBreakdown] = useState<any[]>([]);
@@ -43,6 +44,23 @@ export default function StockOverviewPage() {
 
   useEffect(() => {
     refreshData();
+
+    // Check if arrived from Low Stock alert link (?filter=low)
+    const handleUrlFilter = () => {
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const filter = params.get('filter');
+        if (filter && filter.toLowerCase() === 'low') {
+          setStatusFilter('Low');
+        } else if (filter && filter.toLowerCase() === 'out') {
+          setStatusFilter('Out');
+        }
+      }
+    };
+
+    handleUrlFilter();
+    window.addEventListener('popstate', handleUrlFilter);
+    return () => window.removeEventListener('popstate', handleUrlFilter);
   }, []);
 
   const units: (string | UnitType)[] = [
@@ -110,7 +128,7 @@ export default function StockOverviewPage() {
           </div>
 
           {/* Valuation KPI Summary */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             <Card className="p-4">
               <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                 Total Stock Quantity
@@ -143,6 +161,18 @@ export default function StockOverviewPage() {
               </div>
               <div className="text-xs text-slate-500 mt-1">
                 Rs. {valuation.totalWholesaleValue.toLocaleString()} B2B rate
+              </div>
+            </Card>
+
+            <Card className="p-4">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                Khata Valuation
+              </span>
+              <div className="text-2xl font-black text-amber-700 mt-1">
+                Rs. {(valuation.totalKhataValue / 100000).toFixed(2)} Lakh
+              </div>
+              <div className="text-xs text-slate-500 mt-1">
+                Rs. {valuation.totalKhataValue.toLocaleString()} credit rate
               </div>
             </Card>
 

@@ -33,18 +33,21 @@ export const inventoryService = {
     totalStockCount: number;
     totalRetailValue: number;
     totalWholesaleValue: number;
+    totalKhataValue: number;
     totalCostValue: number;
   } {
     const products = storageService.getProducts();
     let totalStockCount = 0;
     let totalRetailValue = 0;
     let totalWholesaleValue = 0;
+    let totalKhataValue = 0;
     let totalCostValue = 0;
 
     products.forEach(p => {
       totalStockCount += p.stock;
       totalRetailValue += p.stock * p.retailPrice;
       totalWholesaleValue += p.stock * p.wholesalePrice;
+      totalKhataValue += p.stock * (p.khataPrice || p.retailPrice);
       totalCostValue += p.stock * (p.costPrice || 0);
     });
 
@@ -53,6 +56,7 @@ export const inventoryService = {
       totalStockCount,
       totalRetailValue,
       totalWholesaleValue,
+      totalKhataValue,
       totalCostValue,
     };
   },

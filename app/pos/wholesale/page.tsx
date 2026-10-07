@@ -109,6 +109,7 @@ export default function WholesalePOSPage() {
   const [cardPaymentState, setCardPaymentState] = useState<CardPaymentState>('idle');
   const [cardStatusMessage, setCardStatusMessage] = useState('');
   const [cardTransactionId, setCardTransactionId] = useState<string | undefined>(undefined);
+  const [isWholesaleTerminalEnabled, setIsWholesaleTerminalEnabled] = useState<boolean>(false);
 
   // Cash Drawer State
   const [isCashDrawerOpen, setIsCashDrawerOpen] = useState(false);
@@ -134,17 +135,17 @@ export default function WholesalePOSPage() {
     const refreshData = () => {
       setProducts(productsService.getAll());
       setNextInvoiceNumber(salesService.peekNextInvoiceNumber('Wholesale'));
+      const settings = storageService.getSettings();
+      setIsWholesaleTerminalEnabled(Boolean(settings.wholesaleCardTerminal?.enabled));
+      const banks = settings.bankAccounts || [];
+      setBankAccounts(banks);
+      if (banks.length > 0) {
+        setSelectedBank(banks[0]);
+      }
       syncWithLatestProducts();
     };
 
     refreshData();
-
-    const settings = storageService.getSettings();
-    const banks = settings.bankAccounts || [];
-    setBankAccounts(banks);
-    if (banks.length > 0) {
-      setSelectedBank(banks[0]);
-    }
 
     window.addEventListener('focus', refreshData);
     window.addEventListener('storage', refreshData);
@@ -361,6 +362,16 @@ export default function WholesalePOSPage() {
 
   // Trigger Card Payment
   const handleStartCardPayment = async () => {
+    const isEnabled = Boolean(storageService.getSettings().wholesaleCardTerminal?.enabled);
+    if (!isEnabled) {
+      toast({
+        title: 'Card Terminal Access Disabled',
+        description: 'Wholesale Card Terminal is disabled in Store Settings. Please enable it in Settings first.',
+        type: 'error',
+      });
+      return;
+    }
+
     setCardPaymentState('waiting_card');
     setCardStatusMessage('Waiting for customer card tap/insert on terminal...');
     const result = await cardTerminalService.startCardPayment(wholesaleGrandTotal, (state, msg) => {
@@ -426,6 +437,16 @@ export default function WholesalePOSPage() {
         return;
       }
     } else if (paymentMethod === 'Card') {
+      const isEnabled = Boolean(storageService.getSettings().wholesaleCardTerminal?.enabled);
+      if (!isEnabled) {
+        toast({
+          title: 'Card Payment Blocked',
+          description: 'Wholesale Card Terminal is disabled in Store Settings. Invoice cannot be created or submitted.',
+          type: 'error',
+        });
+        return;
+      }
+
       if (cardPaymentState !== 'authorized' || !cardTransactionId) {
         toast({
           title: 'Card Payment Incomplete',
@@ -972,34 +993,51 @@ export default function WholesalePOSPage() {
                 Settlement Method
               </label>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {(['Cash', 'Bank Transfer', 'Card', 'Credit/Khata'] as PaymentMethod[]).map(pm => (
-                  <button
-                    key={pm}
-                    type="button"
-                    onClick={() => {
-                      setPaymentMethod(pm);
-                      if (pm === 'Credit/Khata') {
-                        setAmountPaidNow(0);
-                      } else {
-                        setAmountPaidNow(wholesaleGrandTotal);
-                      }
-                      if (pm === 'Cash') {
-                        setCashReceived(wholesaleGrandTotal);
-                      }
-                    }}
-                    className={`flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl border font-bold text-xs transition-all ${
-                      paymentMethod === pm
-                        ? 'border-cyan-600 bg-cyan-600 text-white shadow-sm shadow-cyan-600/20'
-                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    {pm === 'Cash' && <Banknote className="w-4 h-4" />}
-                    {pm === 'Bank Transfer' && <Building className="w-4 h-4" />}
-                    {pm === 'Card' && <CreditCard className="w-4 h-4" />}
-                    {pm === 'Credit/Khata' && <BookOpen className="w-4 h-4" />}
-                    <span>{pm}</span>
-                  </button>
-                ))}
+                {(['Cash', 'Bank Transfer', 'Card', 'Credit/Khata'] as PaymentMethod[]).map(pm => {
+                  const isCardDisabled = pm === 'Card' && !isWholesaleTerminalEnabled;
+                  return (
+                    <button
+                      key={pm}
+                      type="button"
+                      onClick={() => {
+                        setPaymentMethod(pm);
+                        if (isCardDisabled) {
+                          toast({
+                            title: 'Card Terminal Disabled',
+                            description: 'Wholesale Card Terminal is disabled in Store Settings. Invoice cannot be submitted via card.',
+                            type: 'warning',
+                          });
+                        }
+                        if (pm === 'Credit/Khata') {
+                          setAmountPaidNow(0);
+                        } else {
+                          setAmountPaidNow(wholesaleGrandTotal);
+                        }
+                        if (pm === 'Cash') {
+                          setCashReceived(wholesaleGrandTotal);
+                        }
+                      }}
+                      className={`flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl border font-bold text-xs transition-all ${
+                        paymentMethod === pm
+                          ? isCardDisabled
+                            ? 'border-rose-400 bg-rose-50 text-rose-800'
+                            : 'border-cyan-600 bg-cyan-600 text-white shadow-sm shadow-cyan-600/20'
+                          : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      {pm === 'Cash' && <Banknote className="w-4 h-4" />}
+                      {pm === 'Bank Transfer' && <Building className="w-4 h-4" />}
+                      {pm === 'Card' && <CreditCard className="w-4 h-4" />}
+                      {pm === 'Credit/Khata' && <BookOpen className="w-4 h-4" />}
+                      <span>{pm}</span>
+                      {isCardDisabled && (
+                        <span className="text-[9px] font-normal text-rose-600">
+                          (Disabled in Settings)
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -1132,7 +1170,9 @@ export default function WholesalePOSPage() {
                   <span className="font-bold text-slate-800">Card Terminal Machine</span>
                   <span
                     className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
-                      cardPaymentState === 'authorized'
+                      !isWholesaleTerminalEnabled
+                        ? 'bg-rose-100 text-rose-800'
+                        : cardPaymentState === 'authorized'
                         ? 'bg-emerald-100 text-emerald-800'
                         : cardPaymentState === 'failed'
                         ? 'bg-rose-100 text-rose-800'
@@ -1141,11 +1181,20 @@ export default function WholesalePOSPage() {
                         : 'bg-slate-200 text-slate-700'
                     }`}
                   >
-                    {cardPaymentState}
+                    {!isWholesaleTerminalEnabled ? 'Disabled in Settings' : cardPaymentState}
                   </span>
                 </div>
 
-                {cardStatusMessage && (
+                {!isWholesaleTerminalEnabled && (
+                  <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs space-y-1">
+                    <p className="font-bold">Wholesale Card Terminal Disabled in Store Settings</p>
+                    <p className="text-[11px] text-rose-700 leading-relaxed">
+                      Terminal access is turned OFF. You cannot charge card payments or submit this wholesale invoice via card until enabled in Settings.
+                    </p>
+                  </div>
+                )}
+
+                {cardStatusMessage && isWholesaleTerminalEnabled && (
                   <p className="text-xs text-slate-600 italic bg-white p-2.5 rounded-xl border border-slate-200">
                     {cardStatusMessage}
                   </p>
@@ -1157,10 +1206,11 @@ export default function WholesalePOSPage() {
                     variant="primary"
                     size="md"
                     onClick={handleStartCardPayment}
-                    disabled={cardPaymentState === 'processing' || cardPaymentState === 'waiting_card'}
+                    disabled={!isWholesaleTerminalEnabled || cardPaymentState === 'processing' || cardPaymentState === 'waiting_card'}
                     className="w-full font-bold gap-2"
                   >
-                    <CreditCard className="w-4 h-4" /> Start Card Terminal Payment
+                    <CreditCard className="w-4 h-4" />
+                    {isWholesaleTerminalEnabled ? 'Start Card Terminal Payment' : 'Card Terminal Disabled in Settings'}
                   </Button>
                 ) : (
                   <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 font-bold flex items-center justify-between">

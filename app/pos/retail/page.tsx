@@ -3,10 +3,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { Badge } from '@/components/ui/Badge';
-import { Card } from '@/components/ui/Card';
 import { Modal } from '@/components/ui/Modal';
 import { ThermalReceipt } from '@/components/print/ThermalReceipt';
 import {
@@ -14,31 +10,25 @@ import {
   Barcode as BarcodeIcon,
   Trash2,
   Plus,
-  Minus,
-  CheckCircle2,
   CreditCard,
   Banknote,
   User,
   ShoppingBag,
-  Sparkles,
-  Printer,
-  ChevronRight,
-  RotateCcw,
-  ArrowLeftRight,
   Keyboard,
   Clock,
-  FileText,
-  AlertCircle,
-  X,
-  RefreshCw,
+  Scan,
+  ChevronDown,
+  UserCheck,
+  Receipt,
+  MoreHorizontal,
 } from 'lucide-react';
 import { productsService } from '@/services/productsService';
-import { customersService } from '@/services/customersService';
 import { salesService } from '@/services/salesService';
+import { storageService } from '@/services/storageService';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import { useToast } from '@/context/ToastContext';
-import { Product, Customer, PaymentMethod, Bill, ProductCategory } from '@/types';
+import { Product, Bill } from '@/types';
 import { HardwareStatusBar } from '@/components/retail-pos/HardwareStatusBar';
 import { CustomerBillSearchModal } from '@/components/retail-pos/CustomerBillSearchModal';
 import { ReturnModal } from '@/components/retail-pos/ReturnModal';
@@ -47,7 +37,7 @@ import { CashDrawerModal } from '@/components/retail-pos/CashDrawerModal';
 import { CardTerminalModal } from '@/components/retail-pos/CardTerminalModal';
 import { KeyboardShortcutsModal } from '@/components/retail-pos/KeyboardShortcutsModal';
 import { barcodeScannerService } from '@/services/hardware/barcodeScannerService';
-import { posSessionService, PosSessionDraft } from '@/services/posSessionService';
+import { receiptPrinterService } from '@/services/hardware/receiptPrinterService';
 import { CardPaymentResponse } from '@/services/hardware/cardTerminalService';
 
 export default function RetailPOSPage() {
@@ -58,165 +48,184 @@ export default function RetailPOSPage() {
     addToRetailCart,
     removeFromRetailCart,
     updateRetailQuantity,
-    updateRetailDiscount,
     clearRetailCart,
-    restoreRetailCart,
     retailSubtotal,
     retailDiscountTotal,
     retailGrandTotal,
     syncWithLatestProducts,
   } = useCart();
 
+  // Real Cloth / Suit Products from productsService
   const [products, setProducts] = useState<Product[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [sortOption, setSortOption] = useState<'inStock' | 'priceAsc' | 'priceDesc'>('inStock');
   const [barcodeInput, setBarcodeInput] = useState('');
+  const [visibleCount, setVisibleCount] = useState<number>(9);
 
-  // Optional customer details for checkout (No forced walk-in object)
-  const [customerName, setCustomerName] = useState('');
+  // Reset pagination count on search or filter change
+  useEffect(() => {
+    setVisibleCount(9);
+  }, [selectedCategory, searchQuery, sortOption]);
+
+  // Customer state
+  const [customerName, setCustomerName] = useState('Walk-in customer');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
 
-  // Next upcoming sequential invoice number
-  const [nextInvoiceNumber, setNextInvoiceNumber] = useState('RET-2026-001246');
+  // Live Clock & Invoice
   const [currentTime, setCurrentTime] = useState('');
+  const [nextInvoiceNumber, setNextInvoiceNumber] = useState('RET-2026-001246');
 
-  // Draft session resume state
-  const [availableDraft, setAvailableDraft] = useState<PosSessionDraft | null>(null);
-
-  // Modals state
+  // Tender & Payment State
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Card'>('Cash');
-  const [amountReceived, setAmountReceived] = useState<number>(0);
-  const [notes, setNotes] = useState('');
-  const [completedBill, setCompletedBill] = useState<Bill | null>(null);
-  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
-  const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
+  // Cash received state - empty by default so user enters manually or clicks quick cash
+  const [cashReceivedInput, setCashReceivedInput] = useState<string>('');
 
-  // Workflow modals
+  // Modals state
+  const [completedBill, setCompletedBill] = useState<Bill | null>(null);
+  const [selectedBillForAction, setSelectedBillForAction] = useState<Bill | null>(null);
+  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [isSearchBillsOpen, setIsSearchBillsOpen] = useState(false);
   const [searchBillsMode, setSearchBillsMode] = useState<'customer' | 'invoice'>('customer');
-  const [selectedBillForAction, setSelectedBillForAction] = useState<Bill | null>(null);
+  const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false);
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
   const [isExchangeModalOpen, setIsExchangeModalOpen] = useState(false);
   const [isCashDrawerModalOpen, setIsCashDrawerModalOpen] = useState(false);
   const [isCardTerminalModalOpen, setIsCardTerminalModalOpen] = useState(false);
-  const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false);
-  const [viewingBillDetails, setViewingBillDetails] = useState<Bill | null>(null);
+  const [isCardTerminalEnabled, setIsCardTerminalEnabled] = useState<boolean>(false);
 
   const barcodeInputRef = useRef<HTMLInputElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Clock ticker & initial sequence lookup + live storage/focus sync
+  // Quick cash buttons
+  const quickCashOptions = [500, 1000, 2000, 5000, 10000];
+
+  // Refresh Real Products & Next Invoice Number & Terminal Access
+  const loadRealData = () => {
+    const all = productsService.getAll();
+    setProducts(all);
+    setNextInvoiceNumber(salesService.peekNextInvoiceNumber('Retail'));
+    const settings = storageService.getSettings();
+    setIsCardTerminalEnabled(Boolean(settings.retailCardTerminal?.enabled));
+    syncWithLatestProducts();
+  };
+
   useEffect(() => {
-    const refreshData = () => {
-      setProducts(productsService.getAll());
-      setNextInvoiceNumber(salesService.peekNextInvoiceNumber('Retail'));
-      syncWithLatestProducts();
-    };
-
-    refreshData();
-
-    // Check for unfinished draft session
-    const draft = posSessionService.getDraft();
-    if (draft && draft.cartItems?.length > 0) {
-      setAvailableDraft(draft);
-    }
+    loadRealData();
 
     const updateClock = () => {
       const now = new Date();
       setCurrentTime(
-        now.toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
       );
     };
     updateClock();
     const interval = setInterval(updateClock, 1000);
 
-    window.addEventListener('focus', refreshData);
-    window.addEventListener('storage', refreshData);
+    window.addEventListener('focus', loadRealData);
+    window.addEventListener('storage', loadRealData);
 
     return () => {
       clearInterval(interval);
-      window.removeEventListener('focus', refreshData);
-      window.removeEventListener('storage', refreshData);
+      window.removeEventListener('focus', loadRealData);
+      window.removeEventListener('storage', loadRealData);
     };
   }, []);
 
-  // Auto-save active cart draft
+  // Keyboard Shortcuts (F1, F2, F3, F4, F8)
   useEffect(() => {
-    if (retailCart.length > 0 || customerName) {
-      posSessionService.saveDraft({
-        cartItems: retailCart,
-        customerName: customerName || undefined,
-        customerPhone: customerPhone || undefined,
-        notes: notes || undefined,
-        selectedCategory,
-      });
-    }
-  }, [retailCart, customerName, customerPhone, notes, selectedCategory]);
-
-  // Global Function Key Shortcuts (F2, F3, F4, F8, F9, ESC)
-  useEffect(() => {
-    const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'F2') {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F1') {
         e.preventDefault();
         barcodeInputRef.current?.focus();
         barcodeInputRef.current?.select();
+      } else if (e.key === 'F2') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
       } else if (e.key === 'F3') {
         e.preventDefault();
         setSearchBillsMode('customer');
         setIsSearchBillsOpen(true);
+      } else if (e.key === 'F4') {
+        e.preventDefault();
+        setSearchBillsMode('invoice');
+        setIsSearchBillsOpen(true);
       } else if (e.key === 'F8') {
         e.preventDefault();
-        if (retailCart.length > 0) {
-          openCheckout();
-        } else {
-          toast({ title: 'Cart Empty', description: 'Add products before checkout.', type: 'warning' });
-        }
-      } else if (e.key === 'F9') {
-        e.preventDefault();
-        if (completedBill) {
-          setIsReceiptModalOpen(true);
-        }
-      } else if (e.key === 'Escape') {
-        setIsCheckoutOpen(false);
-        setIsSearchBillsOpen(false);
-        setIsReturnModalOpen(false);
-        setIsExchangeModalOpen(false);
-        setIsCashDrawerModalOpen(false);
-        setIsCardTerminalModalOpen(false);
-        setIsShortcutsModalOpen(false);
-        setViewingBillDetails(null);
+        handleOpenCheckout();
       }
     };
 
-    window.addEventListener('keydown', handleGlobalKeyDown);
-    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [retailCart.length, completedBill]);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  });
 
-  // Filter products by search and category (Memoized for smooth 60fps rendering)
+  // Calculate parsed cash tender amount
+  const parsedCashReceived = useMemo(() => {
+    const num = parseFloat(cashReceivedInput.trim());
+    return isNaN(num) ? 0 : num;
+  }, [cashReceivedInput]);
+
+  const changeDue = useMemo(() => {
+    return Math.max(0, parsedCashReceived - retailGrandTotal);
+  }, [parsedCashReceived, retailGrandTotal]);
+
+  const totalItemsCount = useMemo(() => {
+    return retailCart.reduce((acc, item) => acc + item.quantity, 0);
+  }, [retailCart]);
+
+  // Dynamic Category List from real products + standard suits/fabrics
+  const categories = useMemo(() => {
+    const base = ['All', 'Lawn', 'Cotton', 'Khaddar', 'Wash & Wear', 'Unstitched', 'Thaan', 'Cut Piece', 'Silk & Chiffon'];
+    const fromProds = Array.from(new Set(products.map(p => p.category).filter(Boolean)));
+    const merged = Array.from(new Set([...base, ...fromProds]));
+    return merged;
+  }, [products]);
+
+  // Filter Real Products
   const filteredProducts = useMemo(() => {
-    return products.filter(p => {
-      const matchesCat = selectedCategory === 'All' || p.category === selectedCategory;
-      const q = searchQuery.toLowerCase().trim();
-      const matchesQuery =
-        !q ||
-        p.name.toLowerCase().includes(q) ||
-        p.sku.toLowerCase().includes(q) ||
-        p.barcode.includes(q);
-      return matchesCat && matchesQuery;
-    });
-  }, [products, selectedCategory, searchQuery]);
+    let list = [...products];
 
-  const categories: (string | ProductCategory)[] = [
-    'All',
-    'Lawn',
-    'Cotton',
-    'Khaddar',
-    'Wash & Wear',
-    'Unstitched',
-    'Thaan',
-    'Cut Piece',
-    'Silk & Chiffon',
-  ];
+    if (selectedCategory !== 'All') {
+      list = list.filter(p => p.category.toLowerCase() === selectedCategory.toLowerCase());
+    }
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(
+        p =>
+          p.name.toLowerCase().includes(q) ||
+          p.sku.toLowerCase().includes(q) ||
+          (p.barcode && p.barcode.toLowerCase().includes(q)) ||
+          p.category.toLowerCase().includes(q) ||
+          (p.subcategory && p.subcategory.toLowerCase().includes(q))
+      );
+    }
+
+    if (sortOption === 'priceAsc') {
+      list.sort((a, b) => a.retailPrice - b.retailPrice);
+    } else if (sortOption === 'priceDesc') {
+      list.sort((a, b) => b.retailPrice - a.retailPrice);
+    } else {
+      // Recent added first (by createdAt or id or index)
+      list.sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        if (dateB !== dateA) return dateB - dateA;
+        return (b.id || '').localeCompare(a.id || '');
+      });
+    }
+
+    return list;
+  }, [products, selectedCategory, searchQuery, sortOption]);
+
+  // Paginated list showing 9 products initially, +9 on each "Show More" click
+  const displayedProducts = useMemo(() => {
+    return filteredProducts.slice(0, visibleCount);
+  }, [filteredProducts, visibleCount]);
 
   // Continuous Barcode Scanning Handler
   const handleBarcodeSubmit = (e: React.FormEvent) => {
@@ -225,975 +234,971 @@ export default function RetailPOSPage() {
     if (!query) return;
 
     const matched = productsService.getByBarcodeOrSku(query);
+
     if (matched) {
-      const discount = matched.retailDiscount || 0;
-      const finalPrice = Math.max(0, matched.retailPrice - discount);
-
-      addToRetailCart(matched);
-      barcodeScannerService.playSuccessBeep();
+      if (matched.stock <= 0) {
+        barcodeScannerService.playErrorBeep();
+        toast({
+          title: 'Out of Stock',
+          description: `${matched.name} is currently out of stock.`,
+          type: 'error',
+        });
+      } else {
+        addToRetailCart(matched, 1);
+        barcodeScannerService.playSuccessBeep();
+      }
       setBarcodeInput('');
-
-      toast({
-        title: `Scanned: ${matched.name}`,
-        description:
-          discount > 0
-            ? `Price: Rs. ${matched.retailPrice.toLocaleString()} | Discount: − Rs. ${discount.toLocaleString()} | Total: Rs. ${finalPrice.toLocaleString()}`
-            : `Price: Rs. ${matched.retailPrice.toLocaleString()}`,
-        type: 'success',
-      });
-
-      // Continuous scanner: keep focus on barcode field
-      setTimeout(() => {
-        barcodeInputRef.current?.focus();
-      }, 50);
     } else {
       barcodeScannerService.playErrorBeep();
       toast({
-        title: 'Product Not Found',
+        title: 'Barcode Not Found',
         description: `No fabric found matching barcode / SKU "${query}".`,
         type: 'error',
       });
       setBarcodeInput('');
-      setTimeout(() => {
-        barcodeInputRef.current?.focus();
-      }, 50);
     }
   };
 
-  // Draft Resume / Discard Actions
-  const handleResumeDraft = () => {
-    if (availableDraft) {
-      restoreRetailCart(availableDraft.cartItems);
-      if (availableDraft.customerName) setCustomerName(availableDraft.customerName);
-      if (availableDraft.customerPhone) setCustomerPhone(availableDraft.customerPhone);
-      if (availableDraft.notes) setNotes(availableDraft.notes);
-      if (availableDraft.selectedCategory) setSelectedCategory(availableDraft.selectedCategory);
-      setAvailableDraft(null);
-      toast({
-        title: 'Sale Resumed',
-        description: `Restored ${availableDraft.cartItems.length} items from previous session.`,
-        type: 'info',
-      });
-    }
-  };
-
-  const handleDiscardDraft = () => {
-    posSessionService.clearDraft();
-    setAvailableDraft(null);
-    toast({ title: 'Draft Discarded', description: 'Fresh POS session initialized.', type: 'info' });
-  };
-
-  // Open Checkout Modal
-  const openCheckout = () => {
+  // Open Tender Modal
+  const handleOpenCheckout = () => {
     if (retailCart.length === 0) {
       toast({
         title: 'Empty Cart',
-        description: 'Please scan or add at least one fabric item.',
+        description: 'Please scan or add at least one product before checkout.',
         type: 'warning',
       });
       return;
     }
-    setAmountReceived(retailGrandTotal);
+    // Do NOT prefill with 0 - start with empty input so user can type or click quick cash
+    setCashReceivedInput('');
     setIsCheckoutOpen(true);
   };
 
-  // Step 1 of Cash Workflow: Open Cash Drawer and show change
-  const handleInitiateCashPayment = () => {
-    if (amountReceived < retailGrandTotal) {
+  // Step: Click "Confirm Cash & Open Drawer"
+  const handleConfirmCashAndOpenDrawer = () => {
+    if (parsedCashReceived < retailGrandTotal) {
       toast({
         title: 'Insufficient Cash',
-        description: `Remaining balance: Rs. ${(retailGrandTotal - amountReceived).toLocaleString()}`,
+        description: `Total due is Rs. ${retailGrandTotal.toLocaleString()}. Received Rs. ${parsedCashReceived.toLocaleString()}.`,
         type: 'error',
       });
       return;
     }
+
+    // Close tender modal and open Cash Drawer modal (exact screen from reference)
     setIsCheckoutOpen(false);
     setIsCashDrawerModalOpen(true);
   };
 
-  // Step 1 of Card Workflow: Open Terminal Authorization
-  const handleInitiateCardPayment = () => {
-    setIsCheckoutOpen(false);
-    setIsCardTerminalModalOpen(true);
-  };
-
-  // Finalize Sale
-  const finalizeSale = (params: {
-    paymentMethod: 'Cash' | 'Card';
-    amountReceived: number;
-    cardTransactionId?: string;
-  }) => {
+  // Finalize Sale: Saves to salesService (writes to Retail Statement & Bill History)
+  const handleFinalizeSale = (params?: { cardAuth?: CardPaymentResponse }) => {
     if (!currentStaff) return;
 
+    // Strict validation: Block card bill submission if terminal disabled in Store Settings
+    if (paymentMethod === 'Card') {
+      const isTerminalEnabled = Boolean(storageService.getSettings().retailCardTerminal?.enabled);
+      if (!isTerminalEnabled) {
+        toast({
+          title: 'Card Payment Blocked',
+          description: 'Retail Card Terminal is disabled in Store Settings. Bill cannot be submitted or created.',
+          type: 'error',
+        });
+        return;
+      }
+    }
+
+    const finalAmountReceived =
+      paymentMethod === 'Cash' ? parsedCashReceived || retailGrandTotal : retailGrandTotal;
+
+    // Use salesService to complete sale so it logs to Retail Statements and Bill history
     const bill = salesService.completeSale({
       saleType: 'Retail',
       cartItems: retailCart,
-      paymentMethod: params.paymentMethod,
-      amountReceived: params.amountReceived,
+      paymentMethod,
+      amountReceived: finalAmountReceived,
       discountTotal: retailDiscountTotal,
       taxTotal: 0,
       staffId: currentStaff.id,
       staffName: currentStaff.name,
-      customerName: customerName.trim() || undefined,
+      customerName: customerName.trim() === 'Walk-in customer' ? undefined : customerName.trim(),
       customerPhone: customerPhone.trim() || undefined,
-      cardTransactionId: params.cardTransactionId,
-      notes,
+      cardTransactionId: params?.cardAuth?.transactionId,
     });
 
     setCompletedBill(bill);
     clearRetailCart();
-    posSessionService.clearDraft();
-    setCustomerName('');
+    setCashReceivedInput('');
+    setCustomerName('Walk-in customer');
     setCustomerPhone('');
-    setNotes('');
     setIsCheckoutOpen(false);
     setIsCashDrawerModalOpen(false);
     setIsCardTerminalModalOpen(false);
-    setIsMobileCartOpen(false);
     setIsReceiptModalOpen(true);
-    setProducts(productsService.getAll());
-    setNextInvoiceNumber(salesService.peekNextInvoiceNumber('Retail'));
-  };
 
-  const quickCashOptions = [500, 1000, 2000, 5000, 10000];
+    // Refresh products stock & next invoice
+    loadRealData();
+
+    toast({
+      title: 'Sale Completed & Logged',
+      description: `Invoice ${bill.invoiceNumber} recorded in Retail Statement.`,
+      type: 'success',
+    });
+  };
 
   return (
     <ProtectedRoute permission="pos_retail">
       <AppShell>
-        <div className="flex flex-col gap-3 h-[calc(100vh-5rem)] overflow-hidden">
-          {/* PROFESSIONAL RETAIL POS HEADER */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs px-4 py-3 shrink-0 select-none">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              {/* Left Title & Cashier Info */}
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-base shadow-sm shadow-blue-600/20">
-                  R
+        <div className="space-y-4 max-w-[1700px] mx-auto select-none pb-12">
+          {/* TOP NAVBAR / HEADER (Single Compact Row matching Image 2 with all elements from Image 1) */}
+          <div className="bg-white rounded-2xl border border-[#DCE3E0] px-4 py-2.5 shadow-2xs flex items-center justify-between gap-4 flex-wrap xl:flex-nowrap">
+            {/* Left Section: Logo + Title + Metadata (Invoice, Cashier, Counter) */}
+            <div className="flex items-center gap-6 flex-wrap sm:flex-nowrap">
+              {/* Logo & Title */}
+              <div className="flex items-center gap-2.5 shrink-0">
+                <div className="w-8 h-8 rounded-lg bg-[#197A5A] flex items-center justify-center text-white shrink-0 shadow-2xs">
+                  <Scan className="w-4 h-4" />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
-                    <h1 className="text-base font-black text-slate-900 tracking-tight leading-none">
-                      RETAIL POS
-                    </h1>
-                    <span className="text-[11px] font-mono font-bold bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200">
-                      Next: {nextInvoiceNumber}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
-                    <span>
-                      Cashier: <strong className="text-slate-800">{currentStaff?.name}</strong> (Counter 01)
-                    </span>
-                    <span>•</span>
-                    <span className="flex items-center gap-1 font-mono text-slate-600">
-                      <Clock className="w-3.5 h-3.5 text-slate-400" />
-                      {currentTime}
-                    </span>
-                  </div>
+                  <h1 className="text-sm font-bold text-[#17211D] leading-none">
+                    Retail POS
+                  </h1>
+                  <p className="text-[11px] text-[#66726D] mt-0.5">
+                    Main Store Register
+                  </p>
                 </div>
               </div>
 
-              {/* Center/Right Toolbar & Hardware Bridge */}
-              <div className="flex items-center gap-2 flex-wrap">
-                {/* Hardware Status */}
-                <HardwareStatusBar />
-
-                {/* SEARCH BAR 1: Customer Name Modal Trigger */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchBillsMode('customer');
-                    setIsSearchBillsOpen(true);
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 transition-colors"
-                  title="Search past bills by Customer Name (F3)"
-                >
-                  <User className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Search Customer</span>
-                  <kbd className="hidden md:inline px-1 py-0.2 bg-white rounded text-[10px] text-slate-500 font-mono">
-                    F3
-                  </kbd>
-                </button>
-
-                {/* SEARCH BAR 2: Invoice Number Modal Trigger */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchBillsMode('invoice');
-                    setIsSearchBillsOpen(true);
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 transition-colors"
-                  title="Search past bills by Invoice Number"
-                >
-                  <FileText className="w-3.5 h-3.5 text-indigo-600" />
-                  <span>Search Invoice</span>
-                </button>
-
-                {/* Keyboard Shortcuts Help */}
-                <button
-                  type="button"
-                  onClick={() => setIsShortcutsModalOpen(true)}
-                  className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg border border-slate-200"
-                  title="Keyboard Shortcuts"
-                >
-                  <Keyboard className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* UNFINISHED SESSION RESUME BANNER */}
-            {availableDraft && (
-              <div className="mt-2.5 p-2.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-xs animate-in fade-in">
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                  <span className="font-semibold text-amber-900">
-                    Unfinished Sale Draft Found ({availableDraft.cartItems.length} items, saved{' '}
-                    {new Date(availableDraft.timestamp).toLocaleTimeString()})
+              {/* Metadata Columns on Same Line */}
+              <div className="flex items-center gap-6 text-left pl-4 sm:border-l sm:border-[#DCE3E0]">
+                <div>
+                  <span className="text-[9px] font-bold text-[#8A9590] uppercase tracking-wider block">
+                    INVOICE
+                  </span>
+                  <span className="text-xs font-bold text-[#17211D] font-mono">
+                    #{nextInvoiceNumber}
                   </span>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleDiscardDraft}
-                    className="px-2 py-1 text-slate-600 hover:text-rose-600 font-medium transition-colors"
-                  >
-                    Discard Draft
-                  </button>
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    type="button"
-                    onClick={handleResumeDraft}
-                    className="gap-1 font-bold bg-amber-600 hover:bg-amber-700"
-                  >
-                    <RefreshCw className="w-3 h-3" />
-                    Resume Sale
-                  </Button>
+                <div>
+                  <span className="text-[9px] font-bold text-[#8A9590] uppercase tracking-wider block">
+                    CASHIER
+                  </span>
+                  <span className="text-xs font-bold text-[#17211D]">
+                    {currentStaff?.name || 'Ayesha Khan'}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="text-[9px] font-bold text-[#8A9590] uppercase tracking-wider block">
+                    COUNTER
+                  </span>
+                  <span className="text-xs font-bold text-[#17211D]">
+                    Counter 03
+                  </span>
                 </div>
               </div>
-            )}
+            </div>
+
+            {/* Right Section: Action Buttons + Hardware Dot + Clock & Status */}
+            <div className="flex items-center gap-3 shrink-0 ml-auto">
+              {/* Search Customer Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchBillsMode('customer');
+                  setIsSearchBillsOpen(true);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#DCE3E0] bg-white hover:bg-[#F0F4F2] text-xs font-semibold text-[#17211D] transition-colors shadow-2xs cursor-pointer"
+                title="Search past bills by customer name (F3)"
+              >
+                <UserCheck className="w-3.5 h-3.5 text-[#66726D]" />
+                <span>Search Customer</span>
+              </button>
+
+              {/* Search Invoice Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchBillsMode('invoice');
+                  setIsSearchBillsOpen(true);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#DCE3E0] bg-white hover:bg-[#F0F4F2] text-xs font-semibold text-[#17211D] transition-colors shadow-2xs cursor-pointer"
+                title="Search past bills by invoice number (F4)"
+              >
+                <Receipt className="w-3.5 h-3.5 text-[#66726D]" />
+                <span>Search Invoice</span>
+              </button>
+
+              {/* Shortcuts Button */}
+              <button
+                type="button"
+                onClick={() => setIsShortcutsModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#DCE3E0] bg-white hover:bg-[#F0F4F2] text-xs font-semibold text-[#17211D] transition-colors shadow-2xs cursor-pointer"
+                title="View Keyboard Shortcuts"
+              >
+                <Keyboard className="w-3.5 h-3.5 text-[#66726D]" />
+                <span>Shortcuts</span>
+              </button>
+
+              {/* Hardware Status Popover Button (Green Dot) */}
+              <HardwareStatusBar />
+
+              {/* Clock & Status */}
+              <div className="text-right pl-3 border-l border-[#DCE3E0]">
+                <div className="font-bold text-xs text-[#17211D] font-mono leading-tight">
+                  {currentTime}
+                </div>
+                <div className="text-[10px] text-[#66726D] flex items-center justify-end gap-1.5 mt-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#16835B] animate-pulse" />
+                  <span>Online · Scanner ready</span>
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* MAIN 2-PANEL / 3-PANEL INTERFACE */}
-          <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0 overflow-hidden">
-            {/* LEFT: Product Catalog & Continuous Barcode Scanner */}
-            <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-white rounded-2xl border border-slate-200/80 shadow-2xs">
-              {/* Barcode & Search Controls Toolbar */}
-              <div className="p-3.5 border-b border-slate-200/80 space-y-3 shrink-0">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* CONTINUOUS PHYSICAL BARCODE SCANNER FIELD */}
-                  <form onSubmit={handleBarcodeSubmit} className="relative">
-                    <BarcodeIcon className="w-4 h-4 text-blue-600 absolute left-3 top-1/2 -translate-y-1/2" />
+          {/* WORKFLOW STEPPER RIBBON (Horizontal 6-Step Banner) */}
+          <div className="bg-[#DCEDE6] rounded-xl px-4 py-2.5 flex items-center justify-between text-xs overflow-x-auto shadow-2xs border border-[#C7D2CD]/60">
+            {/* Step 1: Scan (Active) */}
+            <div className="flex items-center gap-1.5 font-bold text-[#125E45] shrink-0">
+              <span className="w-4 h-4 rounded-full bg-[#125E45] text-white flex items-center justify-center text-[10px]">
+                1
+              </span>
+              <span>Scan</span>
+              <span className="text-[#8A9590] ml-2 font-normal">&gt;</span>
+            </div>
+
+            {/* Step 2: Search */}
+            <div className="flex items-center gap-1.5 text-[#66726D] font-medium shrink-0">
+              <span className="w-4 h-4 rounded-full border border-[#8A9590] flex items-center justify-center text-[10px]">
+                2
+              </span>
+              <span>Search</span>
+              <span className="text-[#8A9590] ml-2 font-normal">&gt;</span>
+            </div>
+
+            {/* Step 3: Select */}
+            <div className="flex items-center gap-1.5 text-[#66726D] font-medium shrink-0">
+              <span className="w-4 h-4 rounded-full border border-[#8A9590] flex items-center justify-center text-[10px]">
+                3
+              </span>
+              <span>Select</span>
+              <span className="text-[#8A9590] ml-2 font-normal">&gt;</span>
+            </div>
+
+            {/* Step 4: Add to Cart */}
+            <div className="flex items-center gap-1.5 text-[#66726D] font-medium shrink-0">
+              <span className="w-4 h-4 rounded-full border border-[#8A9590] flex items-center justify-center text-[10px]">
+                4
+              </span>
+              <span>Add to Cart</span>
+              <span className="text-[#8A9590] ml-2 font-normal">&gt;</span>
+            </div>
+
+            {/* Step 5: Review */}
+            <div className="flex items-center gap-1.5 text-[#66726D] font-medium shrink-0">
+              <span className="w-4 h-4 rounded-full border border-[#8A9590] flex items-center justify-center text-[10px]">
+                5
+              </span>
+              <span>Review</span>
+              <span className="text-[#8A9590] ml-2 font-normal">&gt;</span>
+            </div>
+
+            {/* Step 6: Payment */}
+            <div className="flex items-center gap-1.5 text-[#66726D] font-medium shrink-0">
+              <span className="w-4 h-4 rounded-full border border-[#8A9590] flex items-center justify-center text-[10px]">
+                6
+              </span>
+              <span>Payment</span>
+            </div>
+          </div>
+
+          {/* MAIN TWO-COLUMN BODY */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+            {/* LEFT COLUMN: Catalog, Search & Cards (8 Columns) */}
+            <div className="lg:col-span-8 space-y-4">
+              {/* Row 1: Barcode Input with Green Focus Border + Scan Button */}
+              <div className="flex items-center gap-3">
+                <form
+                  onSubmit={handleBarcodeSubmit}
+                  className="flex-1 flex items-center justify-between border-2 border-[#197A5A] rounded-xl bg-white px-3.5 py-2.5 shadow-2xs"
+                >
+                  <div className="flex items-center gap-2.5 flex-1 mr-2">
+                    <BarcodeIcon className="w-4 h-4 text-[#66726D] shrink-0" />
                     <input
                       ref={barcodeInputRef}
                       type="text"
-                      placeholder="Scan barcode sticker & press Enter (F2)..."
+                      placeholder="Scan or enter barcode"
                       value={barcodeInput}
                       onChange={e => setBarcodeInput(e.target.value)}
-                      className="w-full pl-9 pr-14 py-2 text-xs bg-blue-50/50 border border-blue-200 rounded-xl text-blue-950 placeholder:text-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-mono transition-all"
-                    />
-                    <button
-                      type="submit"
-                      className="absolute right-1.5 top-1/2 -translate-y-1/2 px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-[10px] font-bold shadow-xs"
-                    >
-                      Scan
-                    </button>
-                  </form>
-
-                  {/* Product text search query */}
-                  <div className="relative">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      placeholder="Search fabric name, SKU, or category..."
-                      value={searchQuery}
-                      onChange={e => setSearchQuery(e.target.value)}
-                      className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all font-medium"
+                      className="w-full text-xs font-mono text-[#17211D] placeholder:text-[#8A9590] bg-transparent focus:outline-none"
                     />
                   </div>
-                </div>
+                  <span className="px-1.5 py-0.5 rounded bg-[#F0F4F2] text-[10px] text-[#8A9590] font-mono border border-[#DCE3E0]">
+                    F1
+                  </span>
+                </form>
 
-                {/* Category Filter Pills */}
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
-                  {categories.map(cat => (
+                <button
+                  type="button"
+                  onClick={handleBarcodeSubmit}
+                  className="bg-[#125E45] hover:bg-[#197A5A] text-white px-6 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-colors shadow-2xs cursor-pointer h-[42px]"
+                >
+                  <Scan className="w-4 h-4" />
+                  <span>Scan</span>
+                </button>
+              </div>
+
+              {/* Row 2: Text Search Input */}
+              <div className="flex items-center justify-between border border-[#DCE3E0] rounded-xl bg-white px-3.5 py-2.5 shadow-2xs">
+                <div className="flex items-center gap-2.5 flex-1 mr-2">
+                  <Search className="w-4 h-4 text-[#8A9590] shrink-0" />
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    placeholder="Search fabric name, SKU, or category..."
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    className="w-full text-xs font-medium text-[#17211D] placeholder:text-[#8A9590] bg-transparent focus:outline-none"
+                  />
+                </div>
+                <span className="px-1.5 py-0.5 rounded bg-[#F0F4F2] text-[10px] text-[#8A9590] font-mono border border-[#DCE3E0]">
+                  F2
+                </span>
+              </div>
+
+              {/* Row 3: Category Filter Pills */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar text-xs">
+                {categories.map(cat => {
+                  const isActive = selectedCategory === cat;
+                  return (
                     <button
                       key={cat}
                       type="button"
                       onClick={() => setSelectedCategory(cat)}
-                      className={`px-3 py-1.5 rounded-lg whitespace-nowrap font-medium transition-colors ${
-                        selectedCategory === cat
-                          ? 'bg-slate-900 text-white shadow-2xs font-bold'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      className={`whitespace-nowrap px-3.5 py-1.5 rounded-full font-semibold transition-all cursor-pointer ${
+                        isActive
+                          ? 'bg-[#125E45] text-white shadow-2xs'
+                          : 'bg-white border border-[#DCE3E0] text-[#17211D] hover:bg-[#F0F4F2]'
                       }`}
                     >
                       {cat}
                     </button>
-                  ))}
+                  );
+                })}
+              </div>
+
+              {/* Row 4: Product Catalog Header */}
+              <div className="flex items-center justify-between pt-1">
+                <div>
+                  <h2 className="text-base font-bold text-[#17211D]">Product catalog</h2>
+                  <p className="text-xs text-[#66726D]">
+                    {displayedProducts.length} of {filteredProducts.length} products shown
+                  </p>
+                </div>
+
+                <div className="relative">
+                  <select
+                    value={sortOption}
+                    onChange={e => setSortOption(e.target.value as any)}
+                    className="appearance-none border border-[#DCE3E0] rounded-xl bg-white pl-3 pr-7 py-1 text-xs text-[#17211D] font-medium shadow-2xs focus:outline-none cursor-pointer"
+                  >
+                    <option value="inStock">Recent Added First</option>
+                    <option value="priceAsc">Price: Low to High</option>
+                    <option value="priceDesc">Price: High to Low</option>
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-[#8A9590] absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
               </div>
 
-              {/* Product Catalog Grid */}
-              <div className="flex-1 overflow-y-auto p-3.5">
-                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
-                  {filteredProducts.map(prod => {
-                    const inCart = retailCart.find(i => i.product.id === prod.id);
-                    const isOutOfStock = prod.stock <= 0;
-                    const season = prod.seasonCategory || (['Khaddar', 'Wash & Wear'].includes(prod.category) ? 'Winter' : 'Summer');
-                    const hasDiscount = (prod.retailDiscount || 0) > 0;
-                    const finalRetail = Math.max(0, prod.retailPrice - (prod.retailDiscount || 0));
+              {/* Row 5: Real Products Grid (Cards using actual user suit/cloth data) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
+                {displayedProducts.map(prod => {
+                  const isOutOfStock = prod.stock <= 0;
+                  const seasonTag = prod.seasonCategory
+                    ? `${prod.seasonCategory} '26`
+                    : prod.subcategory || 'Standard';
 
-                    return (
-                      <div
-                        key={prod.id}
-                        onClick={() => !isOutOfStock && addToRetailCart(prod)}
-                        className={`relative p-3 rounded-xl border flex flex-col justify-between transition-all duration-150 cursor-pointer select-none group ${
-                          isOutOfStock
-                            ? 'opacity-50 bg-slate-50 border-slate-200 pointer-events-none'
-                            : inCart
-                            ? 'border-blue-500 bg-blue-50/20 shadow-xs'
-                            : 'border-slate-200/80 bg-white hover:border-blue-300 hover:shadow-md'
-                        }`}
-                      >
-                        <div>
-                          <div className="flex items-center justify-between text-[10px] text-slate-500 mb-1">
-                            <span className="font-mono">{prod.sku}</span>
-                            <span
-                              className={`font-semibold ${
-                                prod.stock <= prod.minStockAlert ? 'text-rose-600 font-bold' : 'text-slate-600'
-                              }`}
-                            >
-                              {prod.stock} {prod.unit}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-1.5 flex-wrap mb-1">
-                            <h3 className="text-xs font-bold text-slate-900 line-clamp-2 leading-snug group-hover:text-blue-600 transition-colors">
-                              {prod.name}
-                            </h3>
-                          </div>
-                          <div className="flex items-center gap-1 mt-0.5">
-                            <span
-                              className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${
-                                season === 'Winter'
-                                  ? 'bg-blue-50 text-blue-700 border-blue-200'
-                                  : 'bg-amber-50 text-amber-700 border-amber-200'
-                              }`}
-                            >
-                              {season === 'Winter' ? '❄️ Winter' : '☀️ Summer'}
-                            </span>
-                            <span className="text-[10px] text-slate-400">{prod.subcategory}</span>
-                          </div>
-                        </div>
-
-                        <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between">
-                          <div className="space-y-0.5">
-                            <div className="text-xs font-bold text-slate-900 font-mono">
-                              Price: Rs. {prod.retailPrice.toLocaleString()}
-                            </div>
-                            {hasDiscount ? (
-                              <>
-                                <div className="text-[11px] font-semibold text-emerald-600 font-mono">
-                                  Discount: − Rs. {(prod.retailDiscount || 0).toLocaleString()}
-                                </div>
-                                <div className="text-xs font-black text-blue-700 font-mono">
-                                  Total: Rs. {finalRetail.toLocaleString()}
-                                </div>
-                              </>
-                            ) : null}
-                          </div>
-                          <div
-                            className={`w-6 h-6 rounded-md flex items-center justify-center text-xs transition-colors ${
-                              inCart
-                                ? 'bg-blue-600 text-white font-bold'
-                                : 'bg-slate-100 text-slate-600 group-hover:bg-blue-600 group-hover:text-white'
+                  return (
+                    <div
+                      key={prod.id}
+                      className={`bg-white rounded-2xl border border-[#DCE3E0] p-4 flex flex-col justify-between hover:border-[#197A5A]/60 transition-all shadow-2xs group ${
+                        isOutOfStock ? 'opacity-60 bg-[#F6F8F7]' : ''
+                      }`}
+                    >
+                      <div>
+                        {/* SKU & Available Count */}
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="font-mono text-[#8A9590]">{prod.sku}</span>
+                          <span
+                            className={`font-medium flex items-center gap-1 ${
+                              isOutOfStock ? 'text-rose-600' : 'text-[#16835B]'
                             }`}
                           >
-                            {inCart ? inCart.quantity : <Plus className="w-3.5 h-3.5" />}
-                          </div>
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                isOutOfStock ? 'bg-rose-500' : 'bg-[#16835B]'
+                              }`}
+                            />
+                            {prod.stock > 0 ? `${prod.stock} available` : 'Out of stock'}
+                          </span>
+                        </div>
+
+                        {/* Product Name */}
+                        <h3 className="font-bold text-sm text-[#17211D] mt-2 line-clamp-1 leading-snug">
+                          {prod.name}
+                        </h3>
+
+                        {/* Category Label */}
+                        <p className="text-xs text-[#66726D] mt-0.5">{prod.category}</p>
+
+                        {/* Season / Collection Tag */}
+                        <div className="mt-2.5">
+                          <span className="bg-[#E9F3EF] text-[#125E45] text-[10px] font-semibold px-2 py-0.5 rounded-md inline-block">
+                            {seasonTag}
+                          </span>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
+
+                      {/* Bottom Price & Add Button */}
+                      <div className="flex items-center justify-between mt-4 pt-3 border-t border-[#DCE3E0]/60">
+                        <div className="text-base font-bold text-[#17211D]">
+                          Rs {prod.retailPrice.toLocaleString()}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => !isOutOfStock && addToRetailCart(prod, 1)}
+                          disabled={isOutOfStock}
+                          className="w-8 h-8 rounded-lg bg-[#125E45] hover:bg-[#197A5A] disabled:bg-slate-300 text-white flex items-center justify-center font-bold text-lg transition-colors shadow-2xs cursor-pointer active:scale-95 disabled:cursor-not-allowed"
+                          title={`Add ${prod.name} to cart`}
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
-              {/* Mobile Bottom Cart Bar */}
-              <div className="lg:hidden p-3 border-t border-slate-200 bg-slate-900 text-white flex items-center justify-between">
-                <div>
-                  <div className="text-[10px] text-slate-400">{retailCart.length} item(s) in Cart</div>
-                  <div className="text-sm font-black font-mono">Rs. {retailGrandTotal.toLocaleString()}</div>
+              {/* Show More Products Button (+9 per click) */}
+              {visibleCount < filteredProducts.length && (
+                <div className="flex justify-center pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setVisibleCount(prev => prev + 9)}
+                    className="flex items-center gap-2 px-6 py-2.5 rounded-xl border border-[#DCE3E0] bg-white hover:bg-[#F0F4F2] text-xs font-bold text-[#125E45] shadow-2xs transition-all cursor-pointer hover:border-[#125E45] active:scale-98"
+                  >
+                    <span>Show More Products</span>
+                    <span className="text-[10px] text-[#66726D] font-normal">
+                      (+9 of {filteredProducts.length - visibleCount} remaining)
+                    </span>
+                    <ChevronDown className="w-4 h-4 text-[#125E45]" />
+                  </button>
                 </div>
-                <Button
-                  size="sm"
-                  variant="accent"
-                  onClick={() => setIsMobileCartOpen(true)}
-                  className="gap-1.5 font-bold"
-                >
-                  View Cart <ChevronRight className="w-4 h-4" />
-                </Button>
+              )}
+
+              {/* Row 6: Alternate State Banner */}
+              <div className="bg-white rounded-2xl border border-[#DCE3E0] p-4 flex items-center gap-3.5 shadow-2xs">
+                <div className="w-9 h-9 rounded-full bg-[#E9F3EF] text-[#197A5A] flex items-center justify-center shrink-0">
+                  <ShoppingBag className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-[#8A9590] uppercase tracking-wider block">
+                    ALTERNATE STATE · NEW SALE
+                  </span>
+                  <h4 className="font-bold text-xs text-[#17211D]">
+                    Your cart is ready for the first item
+                  </h4>
+                  <p className="text-xs text-[#66726D] mt-0.5">
+                    Scan a barcode, search the catalog, or select a product to begin.
+                  </p>
+                </div>
               </div>
             </div>
 
-            {/* RIGHT: Current Cart Panel (Desktop & Mobile Drawer) */}
-            <div
-              className={`w-full lg:w-96 shrink-0 flex flex-col h-full bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden ${
-                isMobileCartOpen ? 'fixed inset-0 z-50 rounded-none p-4' : 'hidden lg:flex'
-              }`}
-            >
-              {/* Cart Header */}
-              <div className="p-3.5 border-b border-slate-200 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <ShoppingBag className="w-4 h-4 text-blue-600" />
-                  <h3 className="font-bold text-sm text-slate-900">Current Cart</h3>
-                  <span className="text-[11px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-semibold">
-                    {retailCart.length}
-                  </span>
-                </div>
-                {retailCart.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={clearRetailCart}
-                    className="text-[11px] text-slate-400 hover:text-rose-600 flex items-center gap-1 font-medium transition-colors"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Clear</span>
-                  </button>
-                )}
-                {isMobileCartOpen && (
-                  <button
-                    type="button"
-                    onClick={() => setIsMobileCartOpen(false)}
-                    className="lg:hidden p-1 text-slate-500"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                )}
-              </div>
-
-              {/* Optional Customer Name Tag in Cart */}
-              <div className="px-3.5 py-2 bg-slate-50 border-b border-slate-100 flex items-center justify-between text-xs">
-                <span className="text-slate-500 font-medium">Customer:</span>
-                <span className="font-bold text-slate-800 truncate max-w-[180px]">
-                  {customerName.trim() ? customerName : 'Optional / Blank'}
-                </span>
-              </div>
-
-              {/* Cart Items List */}
-              <div className="flex-1 overflow-y-auto p-3.5 space-y-2.5">
-                {retailCart.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-400">
-                    <ShoppingBag className="w-12 h-12 stroke-1 text-slate-300 mb-2" />
-                    <p className="text-xs font-semibold text-slate-700">Retail Cart is Empty</p>
-                    <p className="text-[11px] text-slate-400 mt-1 max-w-[200px]">
-                      Scan fabric barcode or click catalog items to build invoice.
-                    </p>
+            {/* RIGHT COLUMN: Current Cart Panel (4 Columns) - COMFORTABLE FIXED IN VIEW */}
+            <div className="lg:col-span-4 bg-white rounded-2xl border border-[#DCE3E0] p-4 shadow-2xs flex flex-col justify-between sticky top-4 min-h-[580px] max-h-[calc(100vh-8.5rem)] overflow-hidden">
+              <div className="shrink-0 space-y-3">
+                {/* Cart Header */}
+                <div className="flex items-center justify-between pb-2 border-b border-[#DCE3E0]/70">
+                  <div className="flex items-center gap-2">
+                    <h2 className="font-bold text-base text-[#17211D]">Current Cart</h2>
+                    <span className="bg-[#DCEDE6] text-[#125E45] text-xs font-semibold px-2 py-0.5 rounded-full">
+                      {totalItemsCount} items
+                    </span>
                   </div>
-                ) : (
-                  retailCart.map(item => {
-                    const itemSeason = item.product.seasonCategory || (['Khaddar', 'Wash & Wear'].includes(item.product.category) ? 'Winter' : 'Summer');
-                    const unitDiscount = item.discountPerUnit ?? item.product.retailDiscount ?? 0;
-                    const netUnit = Math.max(0, item.price - unitDiscount);
 
-                    return (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (retailCart.length > 0 && confirm('Clear active cart?')) {
+                        clearRetailCart();
+                      }
+                    }}
+                    className="p-1.5 rounded-lg border border-[#DCE3E0] text-[#8A9590] hover:text-[#17211D] hover:bg-[#F0F4F2] transition-colors cursor-pointer"
+                    title="Cart Options"
+                  >
+                    <MoreHorizontal className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Customer Section */}
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-[#17211D] block">
+                    Customer
+                  </label>
+                  <div className="relative">
+                    <User className="w-3.5 h-3.5 text-[#8A9590] absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Search customer by name or phone"
+                      value={customerName === 'Walk-in customer' ? '' : customerName}
+                      onChange={e => setCustomerName(e.target.value)}
+                      className="w-full border border-[#DCE3E0] rounded-xl pl-9 pr-3 py-2 text-xs text-[#17211D] placeholder:text-[#8A9590] bg-white focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-xs pt-0.5">
+                    <span className="text-[#66726D]">{customerName || 'Walk-in customer'}</span>
+                    <button
+                      type="button"
+                      onClick={() => setIsCustomerModalOpen(true)}
+                      className="font-semibold text-[#125E45] hover:underline cursor-pointer"
+                    >
+                      + Add details
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Cart Items List - Internally Scrollable with comfortable height */}
+              <div className="flex-1 overflow-y-auto pr-1 space-y-2.5 my-2 min-h-[200px] max-h-[340px]">
+                  {retailCart.length === 0 ? (
+                    <div className="py-6 text-center text-[#8A9590] text-xs space-y-1.5">
+                      <ShoppingBag className="w-7 h-7 text-[#C7D2CD] mx-auto" />
+                      <p className="font-semibold text-[#17211D]">Cart is empty</p>
+                      <p className="text-[11px] text-[#66726D]">
+                        Scan fabric barcode or click [+] on a suit to add to invoice.
+                      </p>
+                    </div>
+                  ) : (
+                    retailCart.map(item => (
                       <div
                         key={item.product.id}
-                        className="p-3 bg-slate-50/70 border border-slate-200/80 rounded-xl space-y-2"
+                        className="space-y-1.5 pb-3 border-b border-[#DCE3E0]/60 last:border-b-0"
                       >
+                        {/* Line 1: Title + Red Trash Button */}
                         <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <h4 className="text-xs font-bold text-slate-900 truncate leading-snug">
-                                {item.product.name}
-                              </h4>
-                              <span
-                                className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${
-                                  itemSeason === 'Winter'
-                                    ? 'bg-blue-50 text-blue-700 border-blue-200'
-                                    : 'bg-amber-50 text-amber-700 border-amber-200'
-                                }`}
-                              >
-                                {itemSeason === 'Winter' ? '❄️ Winter' : '☀️ Summer'}
-                              </span>
-                            </div>
-
-                            {/* Item Price & Discount Breakdown */}
-                            <div className="mt-1 space-y-0.5 text-[11px] font-mono">
-                              <div className="text-slate-600">
-                                {item.quantity > 1 ? 'Original Unit Price:' : 'Original Price:'}{' '}
-                                <span className="font-semibold text-slate-900">Rs. {item.price.toLocaleString()}</span>
-                                <span className="text-[10px] text-slate-400 font-sans ml-1">/{item.product.unit}</span>
-                              </div>
-                              {unitDiscount > 0 ? (
-                                <>
-                                  <div className="text-emerald-600 font-semibold">
-                                    {item.quantity > 1 ? 'Discount per unit:' : 'Discount:'} − Rs. {unitDiscount.toLocaleString()}
-                                  </div>
-                                  {item.quantity > 1 && (
-                                    <div className="text-emerald-700 text-[10px]">
-                                      Total Discount ({item.quantity} units): − Rs. {(unitDiscount * item.quantity).toLocaleString()}
-                                    </div>
-                                  )}
-                                  <div className="text-blue-700 font-bold text-[10px]">
-                                    Final Unit Price: Rs. {netUnit.toLocaleString()}
-                                  </div>
-                                </>
-                              ) : null}
-                            </div>
-                          </div>
+                          <h4 className="font-bold text-xs text-[#17211D] leading-tight">
+                            {item.product.name}
+                          </h4>
                           <button
                             type="button"
                             onClick={() => removeFromRetailCart(item.product.id)}
-                            className="text-slate-400 hover:text-rose-600 p-1"
+                            className="text-[#C23D45] hover:opacity-80 p-0.5 cursor-pointer shrink-0 transition-opacity"
+                            title="Remove item"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
 
-                        {/* Quantity & Discount Controls */}
-                        <div className="flex items-center justify-between pt-1.5 border-t border-slate-200/60">
-                          <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg p-0.5">
+                        {/* Line 2: Spec / SKU & Unit Rate */}
+                        <div className="flex items-center justify-between text-[11px] text-[#66726D]">
+                          <span>
+                            {item.product.sku} · {item.quantity} {item.product.unit}
+                          </span>
+                          <span className="text-[#8A9590] text-[10px]">
+                            Rs {item.price.toLocaleString()}
+                          </span>
+                        </div>
+
+                        {/* Line 3: Quantity Controls + Line Total */}
+                        <div className="flex items-center justify-between pt-1">
+                          <div className="border border-[#DCE3E0] rounded-lg flex items-center gap-2.5 px-2 py-0.5 text-xs text-[#17211D] bg-white">
                             <button
                               type="button"
                               onClick={() => updateRetailQuantity(item.product.id, item.quantity - 1)}
-                              className="w-5 h-5 rounded flex items-center justify-center hover:bg-slate-100 text-slate-600"
+                              className="text-[#66726D] hover:text-[#17211D] font-bold text-sm cursor-pointer"
                             >
-                              <Minus className="w-3 h-3" />
+                              −
                             </button>
-                            <span className="w-6 text-center text-xs font-black font-mono">
+                            <span className="font-bold min-w-[14px] text-center">
                               {item.quantity}
                             </span>
                             <button
                               type="button"
                               onClick={() => updateRetailQuantity(item.product.id, item.quantity + 1)}
-                              className="w-5 h-5 rounded flex items-center justify-center hover:bg-slate-100 text-slate-600"
+                              className="text-[#66726D] hover:text-[#17211D] font-bold text-sm cursor-pointer"
                             >
-                              <Plus className="w-3 h-3" />
+                              +
                             </button>
                           </div>
 
-                          {/* Item Line Total */}
-                          <div className="text-right">
-                            <div className="text-[10px] text-slate-400 font-medium">
-                              {item.quantity > 1 ? 'Line Total:' : 'Total:'}
-                            </div>
-                            <div className="text-xs font-black text-slate-900 font-mono">
-                              Rs. {item.lineTotal.toLocaleString()}
-                            </div>
-                            {item.discountPercent > 0 && (
-                              <span className="text-[9px] text-emerald-600 font-bold block">
-                                {item.discountPercent}% Extra Off
-                              </span>
-                            )}
+                          <div className="font-bold text-sm text-[#17211D]">
+                            Rs {item.lineTotal.toLocaleString()}
                           </div>
                         </div>
                       </div>
-                    );
-                  })
-                )}
-              </div>
+                    ))
+                  )}
+                </div>
 
-              {/* Cart Summary & Checkout Action */}
-              <div className="p-3.5 border-t border-slate-200 bg-slate-50 space-y-2.5">
+              {/* Bottom Financial Totals & Checkout Button (Compact Fixed) */}
+              <div className="shrink-0 pt-2 border-t border-[#DCE3E0] space-y-2 bg-white">
                 <div className="space-y-1 text-xs">
-                  <div className="flex justify-between text-slate-600">
-                    <span>Subtotal:</span>
-                    <span className="font-mono font-bold">Rs. {retailSubtotal.toLocaleString()}</span>
+                  <div className="flex items-center justify-between text-[#66726D]">
+                    <span>Subtotal</span>
+                    <span className="font-medium text-[#17211D]">
+                      Rs {retailSubtotal.toLocaleString()}
+                    </span>
                   </div>
+
                   {retailDiscountTotal > 0 && (
-                    <div className="flex justify-between text-emerald-600 font-semibold">
-                      <span>Total Product Discounts:</span>
-                      <span className="font-mono font-bold">− Rs. {retailDiscountTotal.toLocaleString()}</span>
+                    <div className="flex items-center justify-between text-[#66726D]">
+                      <span>Discount</span>
+                      <span className="font-semibold text-[#16835B]">
+                        − Rs {retailDiscountTotal.toLocaleString()}
+                      </span>
                     </div>
                   )}
-                  <div className="flex justify-between text-sm font-black text-slate-900 pt-1.5 border-t border-slate-200">
-                    <span>FINAL TOTAL:</span>
-                    <span className="font-mono text-base text-blue-600">
-                      Rs. {retailGrandTotal.toLocaleString()}
+
+                  <div className="border-t border-[#DCE3E0] pt-1.5 mt-1 flex items-center justify-between">
+                    <span className="font-semibold text-sm text-[#17211D]">Total</span>
+                    <span className="font-black text-xl text-[#17211D]">
+                      Rs {retailGrandTotal.toLocaleString()}
                     </span>
                   </div>
                 </div>
 
-                <Button
-                  size="lg"
-                  variant="primary"
+                {/* Primary Proceed to Tender Button (F8) */}
+                <button
                   type="button"
-                  onClick={openCheckout}
-                  disabled={retailCart.length === 0}
-                  className="w-full justify-center gap-2 font-bold py-3 shadow-md shadow-blue-600/20"
+                  onClick={handleOpenCheckout}
+                  className="w-full bg-[#125E45] hover:bg-[#197A5A] text-white py-2.5 px-3.5 rounded-xl font-bold text-xs flex items-center justify-between transition-colors shadow-2xs cursor-pointer active:scale-[0.99]"
                 >
-                  <Sparkles className="w-4 h-4" />
-                  Proceed to Tender (F8)
-                </Button>
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="w-4 h-4" />
+                    <span>Proceed to Tender</span>
+                  </div>
+                  <span className="px-1.5 py-0.5 bg-white/20 rounded text-xs font-mono font-medium">
+                    F8
+                  </span>
+                </button>
+
+                <p className="text-[10px] text-[#8A9590] text-center">
+                  Cash, card, bank transfer, or split payment
+                </p>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* MODAL 1: CHECKOUT / TENDER MODAL */}
-        <Modal
-          isOpen={isCheckoutOpen}
-          onClose={() => setIsCheckoutOpen(false)}
-          title="Retail POS Checkout"
-          maxWidth="lg"
-        >
-          <div className="space-y-4">
-            {/* Grand Total Highlight with Breakdown */}
-            <div className="p-4 bg-slate-900 text-white rounded-2xl space-y-2">
-              <div className="flex items-center justify-between text-xs text-slate-400">
-                <span>Original Subtotal:</span>
-                <span className="font-mono font-bold text-slate-200">Rs. {retailSubtotal.toLocaleString()}</span>
-              </div>
-              {retailDiscountTotal > 0 && (
-                <div className="flex items-center justify-between text-xs text-emerald-400">
-                  <span>Total Product Discounts:</span>
-                  <span className="font-mono font-bold">− Rs. {retailDiscountTotal.toLocaleString()}</span>
-                </div>
-              )}
-              <div className="flex items-center justify-between pt-2 border-t border-slate-800">
+          {/* CHECKOUT / TENDER MODAL */}
+          <Modal
+            isOpen={isCheckoutOpen}
+            onClose={() => setIsCheckoutOpen(false)}
+            title="Complete Retail Sale Tender"
+            maxWidth="md"
+          >
+            <div className="space-y-4 select-none">
+              {/* Net Due Header */}
+              <div className="p-4 bg-[#F0F4F2] rounded-2xl border border-[#DCE3E0] flex items-center justify-between">
                 <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
-                    Final Payable Amount
-                  </span>
-                  <div className="text-2xl font-black font-mono text-blue-400">
+                  <span className="text-xs text-[#66726D]">Net Amount Due:</span>
+                  <div className="text-2xl font-black text-[#17211D]">
                     Rs. {retailGrandTotal.toLocaleString()}
                   </div>
                 </div>
-                <span className="text-xs bg-slate-800 px-3 py-1 rounded-full text-slate-300 font-mono">
-                  {retailCart.length} Item(s)
+                <span className="bg-[#DCEDE6] text-[#125E45] text-xs font-semibold px-2.5 py-1 rounded-full">
+                  Retail Counter
                 </span>
               </div>
-            </div>
 
-            {/* Optional Customer Information */}
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
-              <div className="text-xs font-bold text-slate-700 flex items-center justify-between">
-                <span>Customer Information (Optional):</span>
-                <span className="text-[10px] text-slate-400 font-normal">
-                  Leave blank if not registered
-                </span>
+              {/* Payment Method Switcher */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-[#17211D]">Payment Method</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('Cash')}
+                    className={`p-3 rounded-xl border flex items-center justify-center gap-2 text-xs font-bold transition-all cursor-pointer ${
+                      paymentMethod === 'Cash'
+                        ? 'bg-[#DCEDE6] text-[#125E45] border-[#125E45]'
+                        : 'bg-white border-[#DCE3E0] text-[#66726D] hover:bg-[#F0F4F2]'
+                    }`}
+                  >
+                    <Banknote className="w-4 h-4" />
+                    <span>Cash Tender</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaymentMethod('Card');
+                      if (!isCardTerminalEnabled) {
+                        toast({
+                          title: 'Card Terminal Disabled',
+                          description: 'Retail Card Terminal is disabled in Store Settings. Bill cannot be submitted via card.',
+                          type: 'warning',
+                        });
+                      }
+                    }}
+                    className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 text-xs font-bold transition-all cursor-pointer ${
+                      paymentMethod === 'Card'
+                        ? isCardTerminalEnabled
+                          ? 'bg-[#DCEDE6] text-[#125E45] border-[#125E45]'
+                          : 'bg-rose-50 text-rose-800 border-rose-300'
+                        : 'bg-white border-[#DCE3E0] text-[#66726D] hover:bg-[#F0F4F2]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <CreditCard className="w-4 h-4" />
+                      <span>Card / POS Swipe</span>
+                    </div>
+                    {!isCardTerminalEnabled && (
+                      <span className="text-[10px] text-rose-600 font-normal">
+                        (Disabled in Settings)
+                      </span>
+                    )}
+                  </button>
+                </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <input
-                  type="text"
-                  placeholder="Customer Name (optional)"
-                  value={customerName}
-                  onChange={e => setCustomerName(e.target.value)}
-                  className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
-                />
-                <input
-                  type="text"
-                  placeholder="Phone Number (optional)"
-                  value={customerPhone}
-                  onChange={e => setCustomerPhone(e.target.value)}
-                  className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
-                />
-              </div>
-            </div>
 
-            {/* PAYMENT METHODS (Cash and Card ONLY - Bank Transfer REMOVED) */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                Payment Method:
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod('Cash')}
-                  className={`flex items-center justify-center gap-2 p-3 rounded-xl border font-bold text-xs transition-all ${
-                    paymentMethod === 'Cash'
-                      ? 'border-blue-600 bg-blue-600 text-white shadow-sm shadow-blue-600/20'
-                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                  }`}
-                >
-                  <Banknote className="w-4 h-4" />
-                  <span>CASH</span>
-                </button>
+              {/* Card Terminal Settings Status Warning */}
+              {paymentMethod === 'Card' && !isCardTerminalEnabled && (
+                <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs space-y-1">
+                  <div className="font-bold flex items-center gap-1.5 text-rose-900">
+                    <span className="w-2 h-2 rounded-full bg-rose-600" />
+                    <span>Card Terminal Disabled in Store Settings</span>
+                  </div>
+                  <p className="text-[11px] text-rose-700 leading-relaxed">
+                    Retail Card Terminal is currently turned OFF in Admin Store Settings. Card payment cannot be authorized and this bill cannot be submitted or created via card until enabled in Settings.
+                  </p>
+                </div>
+              )}
 
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod('Card')}
-                  className={`flex items-center justify-center gap-2 p-3 rounded-xl border font-bold text-xs transition-all ${
-                    paymentMethod === 'Card'
-                      ? 'border-blue-600 bg-blue-600 text-white shadow-sm shadow-blue-600/20'
-                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                  }`}
-                >
-                  <CreditCard className="w-4 h-4" />
-                  <span>CARD TERMINAL</span>
-                </button>
-              </div>
-            </div>
-
-            {/* CASH TENDER WORKFLOW */}
-            {paymentMethod === 'Cash' && (
-              <div className="space-y-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Cash Received (Rs.)
-                    </label>
+              {/* Cash Tender Details & Quick Cash Buttons */}
+              {paymentMethod === 'Cash' && (
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-[#17211D]">Cash Received</label>
                     <input
                       type="number"
-                      value={amountReceived || ''}
-                      onChange={e => setAmountReceived(parseFloat(e.target.value) || 0)}
-                      className="w-full h-10 px-3 border border-slate-200 rounded-lg text-base font-bold text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                      placeholder="Enter cash received (e.g. 5000)"
+                      value={cashReceivedInput}
+                      onChange={e => setCashReceivedInput(e.target.value)}
+                      className="w-full p-2.5 text-sm font-bold text-[#17211D] border border-[#DCE3E0] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#197A5A] placeholder:text-[#8A9590]"
                     />
                   </div>
 
+                  {/* Quick Cash Buttons (500, 1000, 2000, 5000, 10000) */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Change to Return
+                    <label className="text-[11px] font-bold text-[#66726D] block mb-1.5">
+                      Quick Cash Suggestions:
                     </label>
-                    <div
-                      className={`h-10 px-3 flex items-center rounded-lg text-base font-black font-mono border ${
-                        amountReceived >= retailGrandTotal
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          : 'bg-rose-50 text-rose-700 border-rose-200'
-                      }`}
-                    >
-                      {amountReceived >= retailGrandTotal
-                        ? `Rs. ${(amountReceived - retailGrandTotal).toLocaleString()}`
-                        : `Remaining: Rs. ${(retailGrandTotal - amountReceived).toLocaleString()}`}
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {quickCashOptions.map(amount => (
+                        <button
+                          key={amount}
+                          type="button"
+                          onClick={() => setCashReceivedInput(String(amount))}
+                          className="py-1.5 rounded-lg border border-[#DCE3E0] bg-[#F6F8F7] hover:bg-[#DCEDE6] hover:text-[#125E45] hover:border-[#125E45] text-xs font-bold text-[#17211D] transition-colors cursor-pointer"
+                        >
+                          {amount.toLocaleString()}
+                        </button>
+                      ))}
                     </div>
                   </div>
+
+                  {/* Change Due Display */}
+                  {parsedCashReceived >= retailGrandTotal && (
+                    <div className="p-3 bg-[#DCEDE6] rounded-xl text-xs flex justify-between font-bold text-[#125E45]">
+                      <span>Change Due to Customer:</span>
+                      <span className="text-sm font-black">
+                        Rs. {changeDue.toLocaleString()}
+                      </span>
+                    </div>
+                  )}
                 </div>
-
-                {/* Quick denomination pills */}
-                <div>
-                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                    Quick Cash Tender:
-                  </div>
-                  <div className="flex gap-1.5 flex-wrap">
-                    {quickCashOptions.map(val => (
-                      <button
-                        key={val}
-                        type="button"
-                        onClick={() => setAmountReceived(val)}
-                        className="px-2.5 py-1 bg-white border border-slate-200 hover:border-blue-400 rounded-md text-[11px] font-mono font-semibold text-slate-700"
-                      >
-                        Rs. {val.toLocaleString()}
-                      </button>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => setAmountReceived(retailGrandTotal)}
-                      className="px-2.5 py-1 bg-blue-100 border border-blue-300 rounded-md text-[11px] font-semibold text-blue-800"
-                    >
-                      Exact (Rs. {retailGrandTotal.toLocaleString()})
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* CARD TENDER SUMMARY */}
-            {paymentMethod === 'Card' && (
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs space-y-1 text-blue-950">
-                <div className="font-bold flex items-center gap-1.5">
-                  <CreditCard className="w-4 h-4 text-blue-600" />
-                  Ready to send to Card Terminal
-                </div>
-                <p className="text-blue-800 text-[11px]">
-                  Clicking proceed will trigger card swipe/tap prompt on the payment terminal.
-                </p>
-              </div>
-            )}
-
-            {/* Action Buttons */}
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-              <Button variant="outline" size="md" type="button" onClick={() => setIsCheckoutOpen(false)}>
-                Cancel
-              </Button>
-
-              {paymentMethod === 'Cash' ? (
-                <Button
-                  variant="primary"
-                  size="md"
-                  type="button"
-                  onClick={handleInitiateCashPayment}
-                  disabled={amountReceived < retailGrandTotal}
-                  className="gap-2 font-bold shadow-sm"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  Confirm Cash & Open Drawer
-                </Button>
-              ) : (
-                <Button
-                  variant="primary"
-                  size="md"
-                  type="button"
-                  onClick={handleInitiateCardPayment}
-                  className="gap-2 font-bold shadow-sm"
-                >
-                  <CreditCard className="w-4 h-4" />
-                  Process Card Terminal
-                </Button>
               )}
-            </div>
-          </div>
-        </Modal>
 
-        {/* MODAL 2: CASH DRAWER WORKFLOW */}
-        <CashDrawerModal
-          isOpen={isCashDrawerModalOpen}
-          onClose={() => setIsCashDrawerModalOpen(false)}
-          grandTotal={retailGrandTotal}
-          cashReceived={amountReceived}
-          changeDue={Math.max(0, amountReceived - retailGrandTotal)}
-          onCompleteSale={() =>
-            finalizeSale({
-              paymentMethod: 'Cash',
-              amountReceived,
-            })
-          }
-        />
-
-        {/* MODAL 3: CARD TERMINAL WORKFLOW */}
-        <CardTerminalModal
-          isOpen={isCardTerminalModalOpen}
-          onClose={() => setIsCardTerminalModalOpen(false)}
-          grandTotal={retailGrandTotal}
-          onPaymentSuccess={(authData: CardPaymentResponse) =>
-            finalizeSale({
-              paymentMethod: 'Card',
-              amountReceived: retailGrandTotal,
-              cardTransactionId: authData.transactionId,
-            })
-          }
-        />
-
-        {/* MODAL 4: ISOLATED THERMAL RECEIPT PRINT MODAL */}
-        <Modal
-          isOpen={isReceiptModalOpen}
-          onClose={() => setIsReceiptModalOpen(false)}
-          title="Print Thermal Receipt"
-          maxWidth="md"
-        >
-          {completedBill && (
-            <ThermalReceipt bill={completedBill} onClose={() => setIsReceiptModalOpen(false)} />
-          )}
-        </Modal>
-
-        {/* MODAL 5: SEARCH BILLS (CUSTOMER OR INVOICE NUMBER) */}
-        <CustomerBillSearchModal
-          isOpen={isSearchBillsOpen}
-          onClose={() => setIsSearchBillsOpen(false)}
-          initialMode={searchBillsMode}
-          onSelectReturn={(bill: Bill) => {
-            setIsSearchBillsOpen(false);
-            setSelectedBillForAction(bill);
-            setIsReturnModalOpen(true);
-          }}
-          onSelectExchange={(bill: Bill) => {
-            setIsSearchBillsOpen(false);
-            setSelectedBillForAction(bill);
-            setIsExchangeModalOpen(true);
-          }}
-          onSelectPrint={(bill: Bill) => {
-            setIsSearchBillsOpen(false);
-            setCompletedBill(bill);
-            setIsReceiptModalOpen(true);
-          }}
-          onViewBill={(bill: Bill) => {
-            setViewingBillDetails(bill);
-          }}
-        />
-
-        {/* MODAL 6: RETURN PROCESS */}
-        <ReturnModal
-          isOpen={isReturnModalOpen}
-          onClose={() => setIsReturnModalOpen(false)}
-          bill={selectedBillForAction}
-          onReturnCompleted={(updatedBill: Bill) => {
-            setCompletedBill(updatedBill);
-            setProducts(productsService.getAll());
-            setIsReceiptModalOpen(true);
-          }}
-        />
-
-        {/* MODAL 7: EXCHANGE PROCESS */}
-        <ExchangeModal
-          isOpen={isExchangeModalOpen}
-          onClose={() => setIsExchangeModalOpen(false)}
-          bill={selectedBillForAction}
-          onExchangeCompleted={(updatedBill: Bill) => {
-            setCompletedBill(updatedBill);
-            setProducts(productsService.getAll());
-            setIsReceiptModalOpen(true);
-          }}
-        />
-
-        {/* MODAL 8: KEYBOARD SHORTCUTS REFERENCE */}
-        <KeyboardShortcutsModal
-          isOpen={isShortcutsModalOpen}
-          onClose={() => setIsShortcutsModalOpen(false)}
-        />
-
-        {/* MODAL 9: QUICK BILL VIEW */}
-        {viewingBillDetails && (
-          <Modal
-            isOpen={!!viewingBillDetails}
-            onClose={() => setViewingBillDetails(null)}
-            title={`Invoice #${viewingBillDetails.invoiceNumber}`}
-            maxWidth="md"
-          >
-            <div className="space-y-3 text-xs">
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Customer:</span>
-                  <span className="font-bold">{viewingBillDetails.customerName || 'None'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Date:</span>
-                  <span>{new Date(viewingBillDetails.date).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Status:</span>
-                  <span className="font-bold text-blue-600">{viewingBillDetails.status}</span>
-                </div>
-              </div>
-
-              <div className="border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-48 overflow-y-auto">
-                {viewingBillDetails.items.map((it, idx) => (
-                  <div key={idx} className="p-2.5 flex justify-between items-center">
-                    <div>
-                      <div className="font-bold text-slate-900">{it.productName}</div>
-                      <div className="text-[10px] text-slate-400">
-                        {it.quantity} × Rs. {it.price.toLocaleString()}
-                      </div>
-                    </div>
-                    <div className="font-mono font-bold">Rs. {it.subtotal.toLocaleString()}</div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="p-3 bg-slate-900 text-white rounded-xl flex justify-between items-center font-bold">
-                <span>Grand Total:</span>
-                <span className="text-base font-mono text-emerald-400">
-                  Rs. {viewingBillDetails.grandTotal.toLocaleString()}
-                </span>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <Button variant="outline" size="sm" onClick={() => setViewingBillDetails(null)}>
-                  Close
-                </Button>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => {
-                    setCompletedBill(viewingBillDetails);
-                    setViewingBillDetails(null);
-                    setIsReceiptModalOpen(true);
-                  }}
-                  className="gap-1 font-bold"
+              {/* Modal Action Controls */}
+              <div className="flex items-center justify-between pt-3 border-t border-[#DCE3E0]">
+                <button
+                  type="button"
+                  onClick={() => setIsCheckoutOpen(false)}
+                  className="px-4 py-2 border border-[#DCE3E0] rounded-xl text-xs font-semibold text-[#66726D] hover:bg-[#F0F4F2] cursor-pointer"
                 >
-                  <Printer className="w-3.5 h-3.5" />
-                  Print Receipt
-                </Button>
+                  Cancel
+                </button>
+
+                {paymentMethod === 'Cash' ? (
+                  <button
+                    type="button"
+                    onClick={handleConfirmCashAndOpenDrawer}
+                    className="px-5 py-2.5 bg-[#125E45] hover:bg-[#197A5A] text-white rounded-xl text-xs font-bold transition-colors shadow-2xs cursor-pointer"
+                  >
+                    Confirm Cash & Open Drawer
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!isCardTerminalEnabled) {
+                        toast({
+                          title: 'Card Payment Blocked',
+                          description: 'Retail Card Terminal is disabled in Store Settings. Bill cannot be submitted.',
+                          type: 'error',
+                        });
+                        return;
+                      }
+                      setIsCheckoutOpen(false);
+                      setIsCardTerminalModalOpen(true);
+                    }}
+                    disabled={!isCardTerminalEnabled}
+                    className="px-5 py-2.5 bg-[#125E45] hover:bg-[#197A5A] disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold transition-colors shadow-2xs cursor-pointer"
+                  >
+                    {isCardTerminalEnabled ? 'Authorize Card Terminal' : 'Card Terminal Disabled in Settings'}
+                  </button>
+                )}
               </div>
             </div>
           </Modal>
-        )}
+
+          {/* CASH DRAWER MODAL (Exact flow from user screenshot) */}
+          <CashDrawerModal
+            isOpen={isCashDrawerModalOpen}
+            onClose={() => setIsCashDrawerModalOpen(false)}
+            grandTotal={retailGrandTotal}
+            cashReceived={parsedCashReceived}
+            changeDue={changeDue}
+            onCompleteSale={() => handleFinalizeSale()}
+          />
+
+          {/* CARD TERMINAL MODAL */}
+          <CardTerminalModal
+            isOpen={isCardTerminalModalOpen}
+            onClose={() => setIsCardTerminalModalOpen(false)}
+            grandTotal={retailGrandTotal}
+            onPaymentSuccess={authData => handleFinalizeSale({ cardAuth: authData })}
+          />
+
+          {/* CUSTOMER DETAILS MODAL */}
+          <Modal
+            isOpen={isCustomerModalOpen}
+            onClose={() => setIsCustomerModalOpen(false)}
+            title="Customer Information"
+            maxWidth="sm"
+          >
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="font-bold text-[#17211D] block mb-1">Customer Name</label>
+                <input
+                  type="text"
+                  value={customerName === 'Walk-in customer' ? '' : customerName}
+                  onChange={e => setCustomerName(e.target.value)}
+                  placeholder="e.g. Sana Iqbal"
+                  className="w-full border border-[#DCE3E0] rounded-xl p-2 text-xs text-[#17211D]"
+                />
+              </div>
+              <div>
+                <label className="font-bold text-[#17211D] block mb-1">Phone Number</label>
+                <input
+                  type="text"
+                  value={customerPhone}
+                  onChange={e => setCustomerPhone(e.target.value)}
+                  placeholder="e.g. 0300 1234567"
+                  className="w-full border border-[#DCE3E0] rounded-xl p-2 text-xs text-[#17211D]"
+                />
+              </div>
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsCustomerModalOpen(false)}
+                  className="px-4 py-2 bg-[#125E45] text-white rounded-xl font-bold cursor-pointer"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </Modal>
+
+          {/* SEARCH BILLS MODAL */}
+          <CustomerBillSearchModal
+            isOpen={isSearchBillsOpen}
+            onClose={() => setIsSearchBillsOpen(false)}
+            initialMode={searchBillsMode}
+            onSelectReturn={bill => {
+              setSelectedBillForAction(bill);
+              setIsSearchBillsOpen(false);
+              setIsReturnModalOpen(true);
+            }}
+            onSelectExchange={bill => {
+              setSelectedBillForAction(bill);
+              setIsSearchBillsOpen(false);
+              setIsExchangeModalOpen(true);
+            }}
+            onSelectPrint={bill => {
+              setCompletedBill(bill);
+              setIsReceiptModalOpen(true);
+            }}
+            onViewBill={bill => {
+              setCompletedBill(bill);
+              setIsReceiptModalOpen(true);
+            }}
+          />
+
+          {/* KEYBOARD SHORTCUTS MODAL */}
+          <KeyboardShortcutsModal
+            isOpen={isShortcutsModalOpen}
+            onClose={() => setIsShortcutsModalOpen(false)}
+          />
+
+          {/* RETURN MODAL */}
+          <ReturnModal
+            isOpen={isReturnModalOpen}
+            onClose={() => {
+              setIsReturnModalOpen(false);
+              setSelectedBillForAction(null);
+            }}
+            bill={selectedBillForAction}
+            onReturnCompleted={() => {
+              loadRealData();
+              setIsReturnModalOpen(false);
+              setSelectedBillForAction(null);
+              toast({ title: 'Return Processed', description: 'Stock updated in system', type: 'success' });
+            }}
+          />
+
+          {/* EXCHANGE MODAL */}
+          <ExchangeModal
+            isOpen={isExchangeModalOpen}
+            onClose={() => {
+              setIsExchangeModalOpen(false);
+              setSelectedBillForAction(null);
+            }}
+            bill={selectedBillForAction}
+            onExchangeCompleted={() => {
+              loadRealData();
+              setIsExchangeModalOpen(false);
+              setSelectedBillForAction(null);
+              toast({ title: 'Exchange Completed', description: 'Stock & bill updated', type: 'success' });
+            }}
+          />
+
+          {/* THERMAL RECEIPT MODAL */}
+          {completedBill && (
+            <Modal
+              isOpen={isReceiptModalOpen}
+              onClose={() => setIsReceiptModalOpen(false)}
+              title={`Thermal Receipt #${completedBill.invoiceNumber}`}
+              maxWidth="md"
+            >
+              <ThermalReceipt
+                bill={completedBill}
+                onClose={() => setIsReceiptModalOpen(false)}
+              />
+            </Modal>
+          )}
+        </div>
       </AppShell>
     </ProtectedRoute>
   );

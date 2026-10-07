@@ -72,17 +72,15 @@ export function ThermalReceipt({ bill, onClose }: ThermalReceiptProps) {
             Close
           </Button>
 
-          <Button
-            size="sm"
-            variant="primary"
+          <button
             type="button"
             onClick={handlePrint}
             disabled={isPrinting}
-            className="gap-1.5 font-bold shadow-sm"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold text-white bg-[#125E45] hover:bg-[#197A5A] disabled:opacity-50 shadow-2xs transition-colors cursor-pointer"
           >
             <Printer className="w-4 h-4" />
-            {isPrinting ? 'Printing...' : 'Print Receipt'}
-          </Button>
+            <span>{isPrinting ? 'Printing...' : 'Print Receipt'}</span>
+          </button>
         </div>
       </div>
 

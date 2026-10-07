@@ -17,6 +17,9 @@ import {
   CheckCircle2,
   Lock,
   Sparkles,
+  CreditCard,
+  Radio,
+  Usb,
 } from 'lucide-react';
 import { storageService } from '@/services/storageService';
 import { useToast } from '@/context/ToastContext';
@@ -188,6 +191,333 @@ export default function SettingsPage() {
                       onChange={e => setSettings({ ...settings, lowStockThreshold: parseInt(e.target.value, 10) || 10 })}
                     />
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Hardware Card Payment Terminals Card (Retail, Wholesale, Khata) - Optional */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-sm font-bold flex items-center gap-2">
+                      <CreditCard className="w-4 h-4 text-[#125E45]" /> Hardware Card Payment Terminals (Optional)
+                    </CardTitle>
+                    <CardDescription>
+                      Configure wired (USB/Ethernet) or wireless (Wi-Fi/Bluetooth) bank card POS terminals for customer card swipe, chip insert & PIN authorization.
+                    </CardDescription>
+                  </div>
+                  <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-[#E9F3EF] text-[#125E45] border border-[#DCEDE6]">
+                    Optional Hardware Integration
+                  </span>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* 1. Retail Card Terminal */}
+                <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-[#125E45]" />
+                      <h4 className="text-xs font-bold text-slate-900">1. Retail POS Card Terminal</h4>
+                    </div>
+                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settings.retailCardTerminal?.enabled ?? false}
+                        onChange={e =>
+                          setSettings({
+                            ...settings,
+                            retailCardTerminal: {
+                              ...settings.retailCardTerminal,
+                              enabled: e.target.checked,
+                              terminalName: settings.retailCardTerminal?.terminalName || 'Retail POS Counter Terminal',
+                              connectionType: settings.retailCardTerminal?.connectionType || 'Wireless (Wi-Fi / Bluetooth)',
+                              deviceModel: settings.retailCardTerminal?.deviceModel || 'PAX A920 Pro Smart POS',
+                              ipOrPort: settings.retailCardTerminal?.ipOrPort || '192.168.1.120:8080',
+                              merchantId: settings.retailCardTerminal?.merchantId || 'MID-ALNOOR-RET01',
+                              autoPrintSlip: settings.retailCardTerminal?.autoPrintSlip ?? true,
+                            },
+                          })
+                        }
+                        className="rounded text-[#125E45] focus:ring-[#197A5A] accent-[#125E45]"
+                      />
+                      <span>Enable Retail Terminal</span>
+                    </label>
+                  </div>
+
+                  {settings.retailCardTerminal?.enabled && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                          Connection Interface
+                        </label>
+                        <select
+                          value={settings.retailCardTerminal?.connectionType || 'Wireless (Wi-Fi / Bluetooth)'}
+                          onChange={e =>
+                            setSettings({
+                              ...settings,
+                              retailCardTerminal: {
+                                ...settings.retailCardTerminal,
+                                connectionType: e.target.value as any,
+                              },
+                            })
+                          }
+                          className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-white"
+                        >
+                          <option value="Wireless (Wi-Fi / Bluetooth)">Wireless (Wi-Fi / Bluetooth)</option>
+                          <option value="Wired (USB / Ethernet)">Wired (USB / Ethernet)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                          Terminal Model / Brand
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. PAX A920 / Ingenico Move"
+                          value={settings.retailCardTerminal?.deviceModel || ''}
+                          onChange={e =>
+                            setSettings({
+                              ...settings,
+                              retailCardTerminal: {
+                                ...settings.retailCardTerminal,
+                                deviceModel: e.target.value,
+                              },
+                            })
+                          }
+                          className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-white"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                          IP Address / COM Port
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. 192.168.1.120:8080 or COM3"
+                          value={settings.retailCardTerminal?.ipOrPort || ''}
+                          onChange={e =>
+                            setSettings({
+                              ...settings,
+                              retailCardTerminal: {
+                                ...settings.retailCardTerminal,
+                                ipOrPort: e.target.value,
+                              },
+                            })
+                          }
+                          className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-white"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. Wholesale Card Terminal */}
+                <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-blue-600" />
+                      <h4 className="text-xs font-bold text-slate-900">2. Wholesale POS Card Terminal</h4>
+                    </div>
+                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settings.wholesaleCardTerminal?.enabled ?? false}
+                        onChange={e =>
+                          setSettings({
+                            ...settings,
+                            wholesaleCardTerminal: {
+                              ...settings.wholesaleCardTerminal,
+                              enabled: e.target.checked,
+                              terminalName: settings.wholesaleCardTerminal?.terminalName || 'Wholesale B2B Terminal',
+                              connectionType: settings.wholesaleCardTerminal?.connectionType || 'Wired (USB / Ethernet)',
+                              deviceModel: settings.wholesaleCardTerminal?.deviceModel || 'Ingenico Move 5000',
+                              ipOrPort: settings.wholesaleCardTerminal?.ipOrPort || 'COM3',
+                              merchantId: settings.wholesaleCardTerminal?.merchantId || 'MID-ALNOOR-WS01',
+                              autoPrintSlip: settings.wholesaleCardTerminal?.autoPrintSlip ?? true,
+                            },
+                          })
+                        }
+                        className="rounded text-blue-600 focus:ring-blue-500 accent-blue-600"
+                      />
+                      <span>Enable Wholesale Terminal</span>
+                    </label>
+                  </div>
+
+                  {settings.wholesaleCardTerminal?.enabled && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                          Connection Interface
+                        </label>
+                        <select
+                          value={settings.wholesaleCardTerminal?.connectionType || 'Wired (USB / Ethernet)'}
+                          onChange={e =>
+                            setSettings({
+                              ...settings,
+                              wholesaleCardTerminal: {
+                                ...settings.wholesaleCardTerminal,
+                                connectionType: e.target.value as any,
+                              },
+                            })
+                          }
+                          className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-white"
+                        >
+                          <option value="Wired (USB / Ethernet)">Wired (USB / Ethernet)</option>
+                          <option value="Wireless (Wi-Fi / Bluetooth)">Wireless (Wi-Fi / Bluetooth)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                          Terminal Model / Brand
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Ingenico / Verifone"
+                          value={settings.wholesaleCardTerminal?.deviceModel || ''}
+                          onChange={e =>
+                            setSettings({
+                              ...settings,
+                              wholesaleCardTerminal: {
+                                ...settings.wholesaleCardTerminal,
+                                deviceModel: e.target.value,
+                              },
+                            })
+                          }
+                          className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-white"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                          IP Address / COM Port
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. COM3 or 192.168.1.122:8080"
+                          value={settings.wholesaleCardTerminal?.ipOrPort || ''}
+                          onChange={e =>
+                            setSettings({
+                              ...settings,
+                              wholesaleCardTerminal: {
+                                ...settings.wholesaleCardTerminal,
+                                ipOrPort: e.target.value,
+                              },
+                            })
+                          }
+                          className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-white"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 3. Khata Card Terminal */}
+                <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-amber-600" />
+                      <h4 className="text-xs font-bold text-slate-900">3. Khata & Ledger Card Terminal</h4>
+                    </div>
+                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settings.khataCardTerminal?.enabled ?? false}
+                        onChange={e =>
+                          setSettings({
+                            ...settings,
+                            khataCardTerminal: {
+                              ...settings.khataCardTerminal,
+                              enabled: e.target.checked,
+                              terminalName: settings.khataCardTerminal?.terminalName || 'Recovery & Khata Terminal',
+                              connectionType: settings.khataCardTerminal?.connectionType || 'Wireless (Wi-Fi / Bluetooth)',
+                              deviceModel: settings.khataCardTerminal?.deviceModel || 'PAX D210 Mobile POS',
+                              ipOrPort: settings.khataCardTerminal?.ipOrPort || '192.168.1.125:8080',
+                              merchantId: settings.khataCardTerminal?.merchantId || 'MID-ALNOOR-KH01',
+                              autoPrintSlip: settings.khataCardTerminal?.autoPrintSlip ?? true,
+                            },
+                          })
+                        }
+                        className="rounded text-amber-600 focus:ring-amber-500 accent-amber-600"
+                      />
+                      <span>Enable Khata Terminal</span>
+                    </label>
+                  </div>
+
+                  {settings.khataCardTerminal?.enabled && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                          Connection Interface
+                        </label>
+                        <select
+                          value={settings.khataCardTerminal?.connectionType || 'Wireless (Wi-Fi / Bluetooth)'}
+                          onChange={e =>
+                            setSettings({
+                              ...settings,
+                              khataCardTerminal: {
+                                ...settings.khataCardTerminal,
+                                connectionType: e.target.value as any,
+                              },
+                            })
+                          }
+                          className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-white"
+                        >
+                          <option value="Wireless (Wi-Fi / Bluetooth)">Wireless (Wi-Fi / Bluetooth)</option>
+                          <option value="Wired (USB / Ethernet)">Wired (USB / Ethernet)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                          Terminal Model / Brand
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. PAX D210 Mobile POS"
+                          value={settings.khataCardTerminal?.deviceModel || ''}
+                          onChange={e =>
+                            setSettings({
+                              ...settings,
+                              khataCardTerminal: {
+                                ...settings.khataCardTerminal,
+                                deviceModel: e.target.value,
+                              },
+                            })
+                          }
+                          className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-white"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                          IP Address / COM Port
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. 192.168.1.125:8080"
+                          value={settings.khataCardTerminal?.ipOrPort || ''}
+                          onChange={e =>
+                            setSettings({
+                              ...settings,
+                              khataCardTerminal: {
+                                ...settings.khataCardTerminal,
+                                ipOrPort: e.target.value,
+                              },
+                            })
+                          }
+                          className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-white"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="text-[11px] text-slate-500 bg-slate-100/70 p-3 rounded-lg leading-relaxed">
+                  💡 <strong>Card Payment Workflow:</strong> When initiating Card checkout, total payable amount is dispatched to the active terminal. The customer taps (NFC Contactless) or inserts EMV chip card, enters secret PIN, and the terminal prints authorized transaction slips automatically for Retail POS, Wholesale POS, or Khata settlements.
                 </div>
               </CardContent>
             </Card>

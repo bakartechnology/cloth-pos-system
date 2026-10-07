@@ -87,39 +87,39 @@ export function CustomerBillSearchModal({
     >
       <div className="space-y-4">
         {/* Two Independent Search Bars */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-[#F6F8F7] p-3 rounded-xl border border-[#DCE3E0]">
           {/* SEARCH BAR 1: Customer Name */}
           <div className="space-y-1">
-            <label className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
-              <User className="w-3.5 h-3.5 text-blue-600" />
+            <label className="flex items-center gap-1.5 text-xs font-bold text-[#17211D]">
+              <User className="w-3.5 h-3.5 text-[#197A5A]" />
               Search Customer
             </label>
             <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Search className="w-4 h-4 text-[#8A9590] absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 placeholder="Enter customer name..."
                 value={customerQuery}
                 onChange={e => handleCustomerSearchChange(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-[#DCE3E0] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#197A5A] font-medium text-[#17211D]"
               />
             </div>
           </div>
 
           {/* SEARCH BAR 2: Invoice Number */}
           <div className="space-y-1">
-            <label className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
-              <FileText className="w-3.5 h-3.5 text-indigo-600" />
+            <label className="flex items-center gap-1.5 text-xs font-bold text-[#17211D]">
+              <FileText className="w-3.5 h-3.5 text-[#197A5A]" />
               Search Invoice
             </label>
             <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Search className="w-4 h-4 text-[#8A9590] absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 placeholder="Enter invoice number (e.g. RET-2026-...)"
                 value={invoiceQuery}
                 onChange={e => handleInvoiceSearchChange(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-[#DCE3E0] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#197A5A] font-mono text-[#17211D]"
               />
             </div>
           </div>

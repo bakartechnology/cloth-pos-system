@@ -7,9 +7,9 @@ import {
   Vault,
   CreditCard,
   CheckCircle,
-  AlertTriangle,
   Play,
   Settings2,
+  X,
 } from 'lucide-react';
 import { cashDrawerService } from '@/services/hardware/cashDrawerService';
 import { cardTerminalService } from '@/services/hardware/cardTerminalService';
@@ -20,11 +20,6 @@ import { useToast } from '@/context/ToastContext';
 export function HardwareStatusBar() {
   const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
-
-  const [scannerReady, setScannerReady] = useState(true);
-  const [printerReady, setPrinterReady] = useState(true);
-  const [drawerReady, setDrawerReady] = useState(true);
-  const [terminalReady, setTerminalReady] = useState(true);
 
   const handleTestDrawer = async () => {
     toast({ title: 'Testing Cash Drawer...', description: 'Sending kick signal', type: 'info' });
@@ -56,112 +51,113 @@ export function HardwareStatusBar() {
   };
 
   return (
-    <div className="relative">
+    <div className="relative inline-flex items-center">
+      {/* Compact pulsing green dot button */}
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 transition-colors"
-        title="POS Hardware Status & Device Diagnostics"
+        className="flex items-center justify-center p-2 rounded-xl border border-[#DCE3E0] bg-white hover:bg-[#F0F4F2] shadow-2xs transition-colors cursor-pointer"
+        title="Hardware: Devices Online & Ready (Click to test diagnostics)"
       >
-        <span className="flex h-2 w-2 relative">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+        <span className="relative flex h-2.5 w-2.5">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#16835B] opacity-75" />
+          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#16835B]" />
         </span>
-        <span className="hidden sm:inline">Hardware:</span>
-        <span className="text-emerald-700 font-bold">Devices Ready</span>
-        <Settings2 className="w-3.5 h-3.5 text-slate-500" />
       </button>
 
       {/* Dropdown Diagnostic Popover */}
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-2xl border border-slate-200 shadow-xl p-3 z-50 animate-in fade-in zoom-in-95 select-none">
-          <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
-            <h4 className="text-xs font-bold text-slate-900">Hardware Abstraction Layer</h4>
-            <span className="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-mono font-semibold">
-              Bridge Ready
-            </span>
+        <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-2xl border border-[#DCE3E0] shadow-xl p-3.5 z-50 animate-in fade-in zoom-in-95 select-none">
+          <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-[#DCE3E0]">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-[#16835B]" />
+              <h4 className="text-xs font-bold text-[#17211D]">Hardware Diagnostics</h4>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsOpen(false)}
+              className="p-1 rounded-md text-[#8A9590] hover:text-[#17211D] hover:bg-[#F0F4F2]"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
           </div>
 
           <div className="space-y-2 text-xs">
             {/* Barcode Scanner */}
-            <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100">
+            <div className="flex items-center justify-between p-2 rounded-xl bg-[#F6F8F7] border border-[#DCE3E0]">
               <div className="flex items-center gap-2">
-                <ScanBarcode className="w-4 h-4 text-blue-600" />
+                <ScanBarcode className="w-4 h-4 text-[#125E45]" />
                 <div>
-                  <div className="font-semibold text-slate-900 leading-tight">Barcode Scanner</div>
-                  <div className="text-[10px] text-emerald-600 font-medium">HID Wedge (Ready)</div>
+                  <div className="font-semibold text-[#17211D] leading-tight">Barcode Scanner</div>
+                  <div className="text-[10px] text-[#16835B] font-medium">HID Wedge (Ready)</div>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={handleTestScanner}
-                className="p-1 hover:bg-white rounded border border-transparent hover:border-slate-200 text-slate-600 hover:text-blue-600"
+                className="px-2 py-0.5 rounded-lg border border-[#DCE3E0] bg-white text-[10px] font-semibold text-[#17211D] hover:bg-[#F0F4F2]"
                 title="Test Scanner Beep"
               >
-                <Play className="w-3.5 h-3.5" />
+                Test
               </button>
             </div>
 
             {/* Receipt Printer */}
-            <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100">
+            <div className="flex items-center justify-between p-2 rounded-xl bg-[#F6F8F7] border border-[#DCE3E0]">
               <div className="flex items-center gap-2">
-                <Printer className="w-4 h-4 text-indigo-600" />
+                <Printer className="w-4 h-4 text-[#125E45]" />
                 <div>
-                  <div className="font-semibold text-slate-900 leading-tight">Receipt Printer</div>
-                  <div className="text-[10px] text-emerald-600 font-medium">ESC/POS 80mm/58mm</div>
+                  <div className="font-semibold text-[#17211D] leading-tight">Receipt Printer</div>
+                  <div className="text-[10px] text-[#16835B] font-medium">ESC/POS (Ready)</div>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={handleTestPrinter}
-                className="p-1 hover:bg-white rounded border border-transparent hover:border-slate-200 text-slate-600 hover:text-indigo-600"
-                title="Test Printer"
+                className="px-2 py-0.5 rounded-lg border border-[#DCE3E0] bg-white text-[10px] font-semibold text-[#17211D] hover:bg-[#F0F4F2]"
+                title="Send self-test pulse"
               >
-                <Play className="w-3.5 h-3.5" />
+                Test
               </button>
             </div>
 
             {/* Cash Drawer */}
-            <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100">
+            <div className="flex items-center justify-between p-2 rounded-xl bg-[#F6F8F7] border border-[#DCE3E0]">
               <div className="flex items-center gap-2">
-                <Vault className="w-4 h-4 text-amber-600" />
+                <Vault className="w-4 h-4 text-[#125E45]" />
                 <div>
-                  <div className="font-semibold text-slate-900 leading-tight">Cash Drawer</div>
-                  <div className="text-[10px] text-emerald-600 font-medium">Pulse Kick Ready</div>
+                  <div className="font-semibold text-[#17211D] leading-tight">Cash Drawer</div>
+                  <div className="text-[10px] text-[#16835B] font-medium">RJ11 Solenoid (Ready)</div>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={handleTestDrawer}
-                className="p-1 hover:bg-white rounded border border-transparent hover:border-slate-200 text-slate-600 hover:text-amber-600"
-                title="Kick Drawer"
+                className="px-2 py-0.5 rounded-lg border border-[#DCE3E0] bg-white text-[10px] font-semibold text-[#17211D] hover:bg-[#F0F4F2]"
+                title="Trigger kick solenoid"
               >
-                <Play className="w-3.5 h-3.5" />
+                Kick
               </button>
             </div>
 
             {/* Card Terminal */}
-            <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100">
+            <div className="flex items-center justify-between p-2 rounded-xl bg-[#F6F8F7] border border-[#DCE3E0]">
               <div className="flex items-center gap-2">
-                <CreditCard className="w-4 h-4 text-cyan-600" />
+                <CreditCard className="w-4 h-4 text-[#125E45]" />
                 <div>
-                  <div className="font-semibold text-slate-900 leading-tight">Card Terminal</div>
-                  <div className="text-[10px] text-emerald-600 font-medium">LAN/Serial Standby</div>
+                  <div className="font-semibold text-[#17211D] leading-tight">Card Terminal</div>
+                  <div className="text-[10px] text-[#16835B] font-medium">LAN / Wireless (Ready)</div>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={handleTestTerminal}
-                className="p-1 hover:bg-white rounded border border-transparent hover:border-slate-200 text-slate-600 hover:text-cyan-600"
-                title="Test Terminal"
+                className="px-2 py-0.5 rounded-lg border border-[#DCE3E0] bg-white text-[10px] font-semibold text-[#17211D] hover:bg-[#F0F4F2]"
+                title="Ping terminal interface"
               >
-                <Play className="w-3.5 h-3.5" />
+                Ping
               </button>
             </div>
-          </div>
-
-          <div className="mt-3 pt-2 border-t border-slate-100 text-[10px] text-slate-400 text-center">
-            Hardware interface ready for local USB/Serial POS bridge.
           </div>
         </div>
       )}

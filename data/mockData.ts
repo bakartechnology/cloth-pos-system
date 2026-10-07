@@ -109,6 +109,33 @@ export const INITIAL_SETTINGS: StoreSettings = {
       isActive: true,
     },
   ],
+  retailCardTerminal: {
+    enabled: false,
+    terminalName: 'Retail Counter POS Terminal',
+    connectionType: 'Wireless (Wi-Fi / Bluetooth)',
+    deviceModel: 'PAX A920 Pro Smart POS',
+    ipOrPort: '192.168.1.120:8080',
+    merchantId: 'MID-ALNOOR-RET01',
+    autoPrintSlip: true,
+  },
+  wholesaleCardTerminal: {
+    enabled: false,
+    terminalName: 'Wholesale B2B Terminal',
+    connectionType: 'Wired (USB / Ethernet)',
+    deviceModel: 'Ingenico Move 5000',
+    ipOrPort: 'COM3',
+    merchantId: 'MID-ALNOOR-WS01',
+    autoPrintSlip: true,
+  },
+  khataCardTerminal: {
+    enabled: false,
+    terminalName: 'Recovery & Khata Terminal',
+    connectionType: 'Wireless (Wi-Fi / Bluetooth)',
+    deviceModel: 'PAX D210 Mobile POS',
+    ipOrPort: '192.168.1.125:8080',
+    merchantId: 'MID-ALNOOR-KH01',
+    autoPrintSlip: true,
+  },
 };
 
 export const INITIAL_STAFF: Staff[] = [

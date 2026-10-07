@@ -381,6 +381,16 @@ export interface BankAccount {
   isActive: boolean;
 }
 
+export interface CardTerminalConfig {
+  enabled?: boolean;
+  terminalName?: string;
+  connectionType?: 'Wired (USB / Ethernet)' | 'Wireless (Wi-Fi / Bluetooth)';
+  deviceModel?: string;
+  ipOrPort?: string;
+  merchantId?: string;
+  autoPrintSlip?: boolean;
+}
+
 export interface StoreSettings {
   storeName: string;
   storeTagline: string;
@@ -396,6 +406,9 @@ export interface StoreSettings {
   receiptFooterMessage: string;
   dataRetentionYears: number;
   bankAccounts?: BankAccount[];
+  retailCardTerminal?: CardTerminalConfig;
+  wholesaleCardTerminal?: CardTerminalConfig;
+  khataCardTerminal?: CardTerminalConfig;
 }
 
 export interface WholesaleSessionDraft {

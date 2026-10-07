@@ -121,6 +121,12 @@ export default function KhataPOSPage() {
   const [cardPaymentState, setCardPaymentState] = useState<CardPaymentState>('idle');
   const [cardStatusMessage, setCardStatusMessage] = useState('');
   const [cardTransactionId, setCardTransactionId] = useState<string | undefined>(undefined);
+  const [isKhataTerminalEnabled, setIsKhataTerminalEnabled] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return Boolean(storageService.getSettings().khataCardTerminal?.enabled);
+    }
+    return false;
+  });
 
   // Statement Print Modal
   const [isStatementModalOpen, setIsStatementModalOpen] = useState(false);
@@ -147,6 +153,7 @@ export default function KhataPOSPage() {
       setProducts(productsService.getAll());
       setNextInvoiceNumber(salesService.peekNextInvoiceNumber('Khata'));
       const settings = storageService.getSettings();
+      setIsKhataTerminalEnabled(Boolean(settings.khataCardTerminal?.enabled));
       setBankAccounts(settings.bankAccounts || []);
       syncWithLatestProducts();
     };
@@ -316,6 +323,15 @@ export default function KhataPOSPage() {
 
   // Trigger Card Payment
   const handleStartCardPayment = async () => {
+    if (!isKhataTerminalEnabled) {
+      toast({
+        title: 'Card Terminal Disabled',
+        description: 'Khata Card Terminal is disabled in Store Settings. Please enable it in Settings first.',
+        type: 'error',
+      });
+      return;
+    }
+
     setCardPaymentState('waiting_card');
     setCardStatusMessage('Waiting for customer card tap/insert on terminal...');
     const result = await cardTerminalService.startCardPayment(khataGrandTotal, (state, msg) => {
@@ -357,6 +373,14 @@ export default function KhataPOSPage() {
         return;
       }
     } else if (paymentMethod === 'Card') {
+      if (!isKhataTerminalEnabled) {
+        toast({
+          title: 'Card Terminal Disabled',
+          description: 'Khata Card Terminal is disabled in Store Settings. Cannot finalize or submit bill.',
+          type: 'error',
+        });
+        return;
+      }
       if (cardPaymentState !== 'authorized' || !cardTransactionId) {
         toast({
           title: 'Card Payment Incomplete',
@@ -980,29 +1004,46 @@ export default function KhataPOSPage() {
                 Settlement / Ledger Method
               </label>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {(['Credit/Khata', 'Cash', 'Bank Transfer', 'Card'] as PaymentMethod[]).map(pm => (
-                  <button
-                    key={pm}
-                    type="button"
-                    onClick={() => {
-                      setPaymentMethod(pm);
-                      if (pm === 'Cash') {
-                        setCashReceived(khataGrandTotal);
-                      }
-                    }}
-                    className={`flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl border font-bold text-xs transition-all ${
-                      paymentMethod === pm
-                        ? 'border-amber-600 bg-amber-600 text-white shadow-sm shadow-amber-600/20'
-                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    {pm === 'Credit/Khata' && <BookOpen className="w-4 h-4" />}
-                    {pm === 'Cash' && <Banknote className="w-4 h-4" />}
-                    {pm === 'Bank Transfer' && <Building className="w-4 h-4" />}
-                    {pm === 'Card' && <CreditCard className="w-4 h-4" />}
-                    <span>{pm === 'Credit/Khata' ? 'Debit to Khata' : pm}</span>
-                  </button>
-                ))}
+                {(['Credit/Khata', 'Cash', 'Bank Transfer', 'Card'] as PaymentMethod[]).map(pm => {
+                  const isCardDisabled = pm === 'Card' && !isKhataTerminalEnabled;
+                  return (
+                    <button
+                      key={pm}
+                      type="button"
+                      onClick={() => {
+                        if (isCardDisabled) {
+                          toast({
+                            title: 'Card Terminal Disabled',
+                            description: 'Khata Card Terminal is disabled in Store Settings. Please enable it in Settings first.',
+                            type: 'error',
+                          });
+                        }
+                        setPaymentMethod(pm);
+                        if (pm === 'Cash') {
+                          setCashReceived(khataGrandTotal);
+                        }
+                      }}
+                      className={`flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl border font-bold text-xs transition-all relative ${
+                        paymentMethod === pm
+                          ? isCardDisabled
+                            ? 'border-amber-400 bg-amber-50 text-amber-900 shadow-sm'
+                            : 'border-amber-600 bg-amber-600 text-white shadow-sm shadow-amber-600/20'
+                          : isCardDisabled
+                          ? 'border-slate-200 bg-slate-100/70 text-slate-400 hover:bg-slate-100'
+                          : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      {pm === 'Credit/Khata' && <BookOpen className="w-4 h-4" />}
+                      {pm === 'Cash' && <Banknote className="w-4 h-4" />}
+                      {pm === 'Bank Transfer' && <Building className="w-4 h-4" />}
+                      {pm === 'Card' && <CreditCard className="w-4 h-4" />}
+                      <span>{pm === 'Credit/Khata' ? 'Debit to Khata' : pm}</span>
+                      {isCardDisabled && (
+                        <span className="text-[10px] text-rose-500 font-bold">Disabled</span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -1114,11 +1155,20 @@ export default function KhataPOSPage() {
             {/* CARD TERMINAL WORKFLOW */}
             {paymentMethod === 'Card' && (
               <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                {!isKhataTerminalEnabled && (
+                  <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                    <span>Khata Card Terminal is disabled in Store Settings. Cannot authorize payment or submit bill.</span>
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-slate-800">Card Terminal Machine</span>
                   <span
                     className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
-                      cardPaymentState === 'authorized'
+                      !isKhataTerminalEnabled
+                        ? 'bg-rose-100 text-rose-700'
+                        : cardPaymentState === 'authorized'
                         ? 'bg-emerald-100 text-emerald-800'
                         : cardPaymentState === 'failed'
                         ? 'bg-rose-100 text-rose-800'
@@ -1127,7 +1177,7 @@ export default function KhataPOSPage() {
                         : 'bg-slate-200 text-slate-700'
                     }`}
                   >
-                    {cardPaymentState}
+                    {!isKhataTerminalEnabled ? 'Disabled in Settings' : cardPaymentState}
                   </span>
                 </div>
 
@@ -1143,8 +1193,12 @@ export default function KhataPOSPage() {
                     variant="primary"
                     size="md"
                     onClick={handleStartCardPayment}
-                    disabled={cardPaymentState === 'processing' || cardPaymentState === 'waiting_card'}
-                    className="w-full font-bold gap-2 bg-amber-600 hover:bg-amber-700 text-white"
+                    disabled={!isKhataTerminalEnabled || cardPaymentState === 'processing' || cardPaymentState === 'waiting_card'}
+                    className={`w-full font-bold gap-2 ${
+                      !isKhataTerminalEnabled
+                        ? 'bg-slate-300 text-slate-500 cursor-not-allowed hover:bg-slate-300'
+                        : 'bg-amber-600 hover:bg-amber-700 text-white'
+                    }`}
                   >
                     <CreditCard className="w-4 h-4" /> Start Card Terminal Payment
                   </Button>
@@ -1183,7 +1237,7 @@ export default function KhataPOSPage() {
                 disabled={
                   (paymentMethod === 'Cash' && isCashInsufficient) ||
                   (paymentMethod === 'Bank Transfer' && !isBankPaymentConfirmed) ||
-                  (paymentMethod === 'Card' && cardPaymentState !== 'authorized')
+                  (paymentMethod === 'Card' && (!isKhataTerminalEnabled || cardPaymentState !== 'authorized'))
                 }
                 className="gap-2 font-bold shadow-sm bg-amber-600 hover:bg-amber-700 text-white"
               >

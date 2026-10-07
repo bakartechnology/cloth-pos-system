@@ -3,7 +3,6 @@
 import React from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
-import { Keyboard, Command } from 'lucide-react';
 
 interface KeyboardShortcutsModalProps {
   isOpen: boolean;
@@ -12,13 +11,14 @@ interface KeyboardShortcutsModalProps {
 
 export function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsModalProps) {
   const shortcuts = [
-    { key: 'F2', label: 'Barcode Scanner Focus', desc: 'Instantly jump to continuous barcode scanner input' },
+    { key: 'F1', label: 'Barcode Scanner Focus', desc: 'Jump to barcode scanner input field' },
+    { key: 'F2', label: 'Search Catalog Focus', desc: 'Jump to fabric name and SKU text search' },
     { key: 'F3', label: 'Search Customer Bills', desc: 'Open previous bills search by customer name' },
     { key: 'F4', label: 'Search Invoice', desc: 'Look up past bill directly by invoice number' },
-    { key: 'F8', label: 'Payment / Checkout', desc: 'Open checkout & tender modal for active cart' },
+    { key: 'F8', label: 'Proceed to Tender', desc: 'Open checkout & payment tender modal' },
     { key: 'F9', label: 'Print Receipt', desc: 'Trigger thermal printer for completed sale' },
-    { key: 'ESC', label: 'Close Active Modal', desc: 'Dismiss any open dialog, search, or drawer' },
-    { key: 'Enter', label: 'Confirm Tender / Action', desc: 'Submit scanned barcode or confirm tender amount' },
+    { key: 'ESC', label: 'Close Active Modal', desc: 'Dismiss any open dialog or modal' },
+    { key: 'Enter', label: 'Confirm Action', desc: 'Submit scanned barcode or confirm tender amount' },
   ];
 
   return (
@@ -28,19 +28,19 @@ export function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsMod
       title="Retail POS Keyboard Shortcuts"
       maxWidth="md"
     >
-      <div className="space-y-3">
-        <p className="text-xs text-slate-500">
-          Supercharge cashier productivity with high-speed POS keyboard function keys:
+      <div className="space-y-3 select-none">
+        <p className="text-xs text-[#66726D]">
+          Keyboard function shortcuts designed for high-speed cashier checkout:
         </p>
 
-        <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-white text-xs">
+        <div className="divide-y divide-[#DCE3E0]/70 border border-[#DCE3E0] rounded-xl overflow-hidden bg-white text-xs">
           {shortcuts.map((item, idx) => (
-            <div key={idx} className="p-2.5 flex items-center justify-between hover:bg-slate-50 transition-colors">
+            <div key={idx} className="p-3 flex items-center justify-between hover:bg-[#F6F8F7] transition-colors">
               <div>
-                <div className="font-bold text-slate-900">{item.label}</div>
-                <div className="text-[11px] text-slate-400">{item.desc}</div>
+                <div className="font-bold text-[#17211D]">{item.label}</div>
+                <div className="text-[11px] text-[#8A9590] mt-0.5">{item.desc}</div>
               </div>
-              <kbd className="px-2.5 py-1 bg-slate-100 border border-slate-300 rounded text-xs font-mono font-black text-slate-800 shadow-2xs">
+              <kbd className="px-2.5 py-1 bg-[#F0F4F2] border border-[#DCE3E0] rounded-lg text-xs font-mono font-bold text-[#17211D] shadow-2xs">
                 {item.key}
               </kbd>
             </div>

@@ -72,19 +72,19 @@ export function CardTerminalModal({
         <div
           className={`p-5 rounded-2xl border text-center transition-all ${
             terminalState === 'authorized'
-              ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+              ? 'bg-[#E9F3EF] border-[#DCEDE6] text-[#125E45]'
               : terminalState === 'failed'
               ? 'bg-rose-50 border-rose-300 text-rose-950'
-              : 'bg-blue-50 border-blue-200 text-blue-950'
+              : 'bg-[#E9F3EF] border-[#DCEDE6] text-[#125E45]'
           }`}
         >
           <div
-            className={`w-14 h-14 rounded-2xl flex items-center justify-center mx-auto shadow-xs mb-3 ${
+            className={`w-14 h-14 rounded-2xl flex items-center justify-center mx-auto shadow-2xs mb-3 ${
               terminalState === 'authorized'
-                ? 'bg-emerald-600 text-white'
+                ? 'bg-[#125E45] text-white'
                 : terminalState === 'failed'
                 ? 'bg-rose-600 text-white'
-                : 'bg-blue-600 text-white'
+                : 'bg-[#125E45] text-white'
             }`}
           >
             {terminalState === 'authorized' ? (
@@ -96,7 +96,7 @@ export function CardTerminalModal({
             )}
           </div>
 
-          <h3 className="text-sm font-bold capitalize">
+          <h3 className="text-sm font-bold capitalize text-[#17211D]">
             {terminalState === 'waiting_card' && 'Present Customer Card'}
             {terminalState === 'processing' && 'Authorizing Transaction...'}
             {terminalState === 'authorized' && 'Payment Authorized'}
@@ -104,40 +104,40 @@ export function CardTerminalModal({
             {terminalState === 'cancelled' && 'Transaction Cancelled'}
           </h3>
 
-          <p className="text-xs opacity-80 mt-1 max-w-xs mx-auto">
+          <p className="text-xs text-[#66726D] mt-1 max-w-xs mx-auto">
             {statusMessage}
           </p>
         </div>
 
         {/* Amount & Transaction Details */}
-        <div className="p-3.5 bg-slate-900 text-white rounded-xl space-y-2 text-xs">
-          <div className="flex justify-between items-center text-slate-300">
+        <div className="p-3.5 bg-[#F6F8F7] border border-[#DCE3E0] rounded-xl space-y-2 text-xs">
+          <div className="flex justify-between items-center text-[#66726D]">
             <span>Payable Amount:</span>
-            <span className="text-base font-black font-mono text-white">
+            <span className="text-base font-black font-mono text-[#125E45]">
               Rs. {grandTotal.toLocaleString()}
             </span>
           </div>
 
           {authResponse?.transactionId && (
-            <div className="border-t border-slate-700 pt-2 space-y-1 text-[11px]">
+            <div className="border-t border-[#DCE3E0] pt-2 space-y-1 text-[11px]">
               <div className="flex justify-between">
-                <span className="text-slate-400">Transaction ID:</span>
-                <span className="font-mono text-emerald-400 font-bold">{authResponse.transactionId}</span>
+                <span className="text-[#66726D]">Transaction ID:</span>
+                <span className="font-mono text-[#125E45] font-bold">{authResponse.transactionId}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Card Scheme:</span>
-                <span className="font-semibold">{authResponse.cardBrand} (**** {authResponse.lastFourDigits})</span>
+                <span className="text-[#66726D]">Card Scheme:</span>
+                <span className="font-semibold text-[#17211D]">{authResponse.cardBrand} (**** {authResponse.lastFourDigits})</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Bank Auth Code:</span>
-                <span className="font-mono text-cyan-300 font-bold">{authResponse.authCode}</span>
+                <span className="text-[#66726D]">Bank Auth Code:</span>
+                <span className="font-mono text-[#17211D] font-bold">{authResponse.authCode}</span>
               </div>
             </div>
           )}
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+        <div className="flex items-center justify-between pt-2 border-t border-[#DCE3E0]">
           <Button variant="outline" size="sm" type="button" onClick={handleCancel}>
             Cancel
           </Button>
@@ -156,17 +156,15 @@ export function CardTerminalModal({
               </Button>
             )}
 
-            <Button
-              variant="primary"
-              size="md"
+            <button
               type="button"
               onClick={handleConfirmAndComplete}
               disabled={terminalState !== 'authorized'}
-              className="gap-1.5 font-bold bg-emerald-600 hover:bg-emerald-700 shadow-sm"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-[#125E45] hover:bg-[#197A5A] disabled:opacity-50 disabled:cursor-not-allowed shadow-2xs cursor-pointer transition-colors"
             >
               <CheckCircle2 className="w-4 h-4" />
-              Complete Sale & Print
-            </Button>
+              <span>Complete Sale & Print</span>
+            </button>
           </div>
         </div>
       </div>

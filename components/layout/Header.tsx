@@ -27,7 +27,7 @@ interface HeaderProps {
 }
 
 export function Header({ onOpenMobileMenu, onOpenSearch }: HeaderProps) {
-  const { currentStaff, switchRole, hasPermission, updateCounter } = useAuth();
+  const { currentStaff, switchRole, hasPermission } = useAuth();
 
   const getStaffInitials = (name?: string) => {
     if (!name) return 'AR';
@@ -272,34 +272,6 @@ export function Header({ onOpenMobileMenu, onOpenSearch }: HeaderProps) {
                 <div className="text-[11px] text-[#197A5A] font-semibold mt-0.5 flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#197A5A]" />
                   <span>Terminal: {currentStaff?.counter || 'Counter 03'}</span>
-                </div>
-              </div>
-
-              {/* Counter Switcher */}
-              <div className="py-2 border-b border-[#DCE3E0]">
-                <div className="px-3 py-1 text-[10px] font-bold text-[#8A9590] uppercase tracking-wider">
-                  Select Active Counter
-                </div>
-                <div className="grid grid-cols-2 gap-1 px-2 mt-1">
-                  {['Counter 01', 'Counter 02', 'Counter 03', 'Counter 04', 'Accounts Desk', 'Main Office'].map(c => {
-                    const isActive = (currentStaff?.counter || '').toLowerCase().startsWith(c.toLowerCase());
-                    return (
-                      <button
-                        key={c}
-                        onClick={() => {
-                          updateCounter(c);
-                          toast({ title: 'Counter Updated', description: `Active counter set to ${c}`, type: 'success' });
-                        }}
-                        className={`px-2 py-1.5 rounded-lg text-[11px] font-medium transition-colors text-center cursor-pointer ${
-                          isActive
-                            ? 'bg-[#DCEDE6] text-[#125E45] font-bold shadow-2xs'
-                            : 'bg-[#F0F4F2] text-[#17211D] hover:bg-[#E2EAE6]'
-                        }`}
-                      >
-                        {c}
-                      </button>
-                    );
-                  })}
                 </div>
               </div>
 

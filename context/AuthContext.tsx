@@ -10,7 +10,6 @@ interface AuthContextType {
   isLoading: boolean;
   switchRole: (role: StaffRole) => void;
   setStaff: (staffId: string) => void;
-  updateCounter: (counter: string) => void;
   hasPermission: (permission: PermissionKey) => boolean;
   refreshStaff: () => void;
 }
@@ -45,13 +44,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const handleUpdateCounter = (counter: string) => {
-    const updated = authService.updateCounter(counter);
-    if (updated) {
-      setCurrentStaff(updated);
-    }
-  };
-
   const hasPermission = (permission: PermissionKey): boolean => {
     if (!currentStaff) return false;
     if (currentStaff.role === 'Admin') return true;
@@ -65,7 +57,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         switchRole: handleSwitchRole,
         setStaff: handleSetStaff,
-        updateCounter: handleUpdateCounter,
         hasPermission,
         refreshStaff,
       }}

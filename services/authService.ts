@@ -5,12 +5,9 @@ export const authService = {
   getCurrentStaff(): Staff {
     const activeId = storageService.getActiveStaffId();
     const staffList = storageService.getStaff();
-    const found = staffList.find(s => s.id === activeId) || staffList[0];
-    const sessionCounter = storageService.getItem<string | null>('anf_active_counter_session', null);
-    if (sessionCounter && found) {
-      return { ...found, counter: sessionCounter };
-    }
-    return found;
+    const found = staffList.find(s => s.id === activeId);
+    if (found) return found;
+    return staffList[0];
   },
 
   setCurrentStaff(staffId: string): Staff | null {
@@ -18,20 +15,7 @@ export const authService = {
     const found = staffList.find(s => s.id === staffId);
     if (!found) return null;
     storageService.setActiveStaffId(staffId);
-    // When switching staff, adopt their default counter
-    storageService.setItem('anf_active_counter_session', found.counter);
     return found;
-  },
-
-  updateCounter(newCounter: string): Staff | null {
-    const current = this.getCurrentStaff();
-    if (!current) return null;
-    const cleanCounter = newCounter.trim();
-    storageService.setItem('anf_active_counter_session', cleanCounter);
-    const staffList = storageService.getStaff();
-    const updatedList = staffList.map(s => (s.id === current.id ? { ...s, counter: cleanCounter } : s));
-    storageService.setStaff(updatedList);
-    return { ...current, counter: cleanCounter };
   },
 
   switchRole(role: StaffRole): Staff | null {
@@ -39,7 +23,6 @@ export const authService = {
     const found = staffList.find(s => s.role === role);
     if (found) {
       storageService.setActiveStaffId(found.id);
-      storageService.setItem('anf_active_counter_session', found.counter);
       return found;
     }
     return null;
@@ -53,7 +36,7 @@ export const authService = {
     return current.permissions.includes(permission);
   },
 
-  login(username: string, password?: string, selectedCounter?: string): { success: boolean; staff?: Staff; error?: string } {
+  login(username: string, password?: string): { success: boolean; staff?: Staff; error?: string } {
     const cleanUser = username.trim().toLowerCase();
     const staffList = storageService.getStaff();
     const found = staffList.find(s => s.username.toLowerCase() === cleanUser);
@@ -71,18 +54,10 @@ export const authService = {
     }
 
     storageService.setActiveStaffId(found.id);
-    if (selectedCounter && selectedCounter.trim()) {
-      storageService.setItem('anf_active_counter_session', selectedCounter.trim());
-      found.counter = selectedCounter.trim();
-      const updatedList = staffList.map(s => (s.id === found.id ? { ...s, counter: selectedCounter.trim() } : s));
-      storageService.setStaff(updatedList);
-    } else {
-      storageService.setItem('anf_active_counter_session', found.counter);
-    }
     return { success: true, staff: found };
   },
 
   logout(): void {
-    storageService.removeItem('anf_active_counter_session');
+    // Retain default or reset
   },
 };

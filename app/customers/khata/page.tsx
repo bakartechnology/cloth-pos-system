@@ -123,7 +123,7 @@ export default function KhataLedgerPage() {
   }, [khataCustomers, searchQuery]);
 
   return (
-    <ProtectedRoute permission="customers_view">
+    <ProtectedRoute permission="khata_ledger_view">
       <AppShell>
         <div className="space-y-6">
           {/* Header */}

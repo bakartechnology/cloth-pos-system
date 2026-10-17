@@ -24,7 +24,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Product } from '@/types';
 
 export default function DashboardPage() {
-  const { currentStaff } = useAuth();
+  const { currentStaff, hasPermission } = useAuth();
 
   const [activeTimeframe, setActiveTimeframe] = useState<'today' | 'week' | 'month' | 'year'>('today');
   const [hoveredBar, setHoveredBar] = useState<number | null>(null);
@@ -572,54 +572,64 @@ const timeframeConfigs: Record<'today' | 'week' | 'month' | 'year', TimeframeCon
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mt-4">
               {/* 1. New Retail Sale */}
-              <Link
-                href="/pos/retail"
-                prefetch={false}
-                className="bg-[#125E45] hover:bg-[#197A5A] text-white rounded-xl py-3 px-4 font-medium text-xs flex items-center justify-center gap-2 transition-colors shadow-2xs"
-              >
-                <ShoppingBag className="w-4 h-4 text-white" />
-                <span>New Retail Sale</span>
-              </Link>
+              {hasPermission('pos_retail') && (
+                <Link
+                  href="/pos/retail"
+                  prefetch={false}
+                  className="bg-[#125E45] hover:bg-[#197A5A] text-white rounded-xl py-3 px-4 font-medium text-xs flex items-center justify-center gap-2 transition-colors shadow-2xs cursor-pointer"
+                >
+                  <ShoppingBag className="w-4 h-4 text-white" />
+                  <span>New Retail Sale</span>
+                </Link>
+              )}
 
               {/* 2. New Wholesale Sale */}
-              <Link
-                href="/pos/wholesale"
-                prefetch={false}
-                className="bg-white hover:bg-[#F0F4F2] border border-[#DCE3E0] text-[#17211D] rounded-xl py-3 px-4 font-medium text-xs flex items-center justify-center gap-2 transition-colors shadow-2xs"
-              >
-                <Package className="w-4 h-4 text-[#66726D]" />
-                <span>New Wholesale Sale</span>
-              </Link>
+              {hasPermission('pos_wholesale') && (
+                <Link
+                  href="/pos/wholesale"
+                  prefetch={false}
+                  className="bg-white hover:bg-[#F0F4F2] border border-[#DCE3E0] text-[#17211D] rounded-xl py-3 px-4 font-medium text-xs flex items-center justify-center gap-2 transition-colors shadow-2xs cursor-pointer"
+                >
+                  <Package className="w-4 h-4 text-[#66726D]" />
+                  <span>New Wholesale Sale</span>
+                </Link>
+              )}
 
               {/* 3. Add Product */}
-              <Link
-                href="/products"
-                prefetch={false}
-                className="bg-white hover:bg-[#F0F4F2] border border-[#DCE3E0] text-[#17211D] rounded-xl py-3 px-4 font-medium text-xs flex items-center justify-center gap-2 transition-colors shadow-2xs"
-              >
-                <Tag className="w-4 h-4 text-[#66726D]" />
-                <span>Add Product</span>
-              </Link>
+              {(hasPermission('stock_add') || hasPermission('stock_view')) && (
+                <Link
+                  href="/products"
+                  prefetch={false}
+                  className="bg-white hover:bg-[#F0F4F2] border border-[#DCE3E0] text-[#17211D] rounded-xl py-3 px-4 font-medium text-xs flex items-center justify-center gap-2 transition-colors shadow-2xs cursor-pointer"
+                >
+                  <Tag className="w-4 h-4 text-[#66726D]" />
+                  <span>Add Product</span>
+                </Link>
+              )}
 
               {/* 4. Add Customer */}
-              <Link
-                href="/customers"
-                prefetch={false}
-                className="bg-white hover:bg-[#F0F4F2] border border-[#DCE3E0] text-[#17211D] rounded-xl py-3 px-4 font-medium text-xs flex items-center justify-center gap-2 transition-colors shadow-2xs"
-              >
-                <UserPlus className="w-4 h-4 text-[#66726D]" />
-                <span>Add Customer</span>
-              </Link>
+              {hasPermission('customers_view') && (
+                <Link
+                  href="/customers"
+                  prefetch={false}
+                  className="bg-white hover:bg-[#F0F4F2] border border-[#DCE3E0] text-[#17211D] rounded-xl py-3 px-4 font-medium text-xs flex items-center justify-center gap-2 transition-colors shadow-2xs cursor-pointer"
+                >
+                  <UserPlus className="w-4 h-4 text-[#66726D]" />
+                  <span>Add Customer</span>
+                </Link>
+              )}
 
               {/* 5. Receive Payment */}
-              <Link
-                href="/payments"
-                prefetch={false}
-                className="bg-white hover:bg-[#F0F4F2] border border-[#DCE3E0] text-[#17211D] rounded-xl py-3 px-4 font-medium text-xs flex items-center justify-center gap-2 transition-colors shadow-2xs"
-              >
-                <CreditCard className="w-4 h-4 text-[#66726D]" />
-                <span>Receive Payment</span>
-              </Link>
+              {hasPermission('payment_collection') && (
+                <Link
+                  href="/payments"
+                  prefetch={false}
+                  className="bg-white hover:bg-[#F0F4F2] border border-[#DCE3E0] text-[#17211D] rounded-xl py-3 px-4 font-medium text-xs flex items-center justify-center gap-2 transition-colors shadow-2xs cursor-pointer"
+                >
+                  <CreditCard className="w-4 h-4 text-[#66726D]" />
+                  <span>Receive Payment</span>
+                </Link>
+              )}
             </div>
           </div>
         </div>

@@ -167,7 +167,7 @@ function PandiStatementContent() {
   };
 
   return (
-    <ProtectedRoute permission="wholesale_statement_view">
+    <ProtectedRoute permission="pandi_view">
       <AppShell>
         <div className="space-y-6 max-w-[1700px] mx-auto select-none pb-12">
           {/* TOP HEADER */}

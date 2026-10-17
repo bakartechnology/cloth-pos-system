@@ -1,6 +1,8 @@
 import { Staff, PermissionKey, StaffRole } from '@/types';
 import { storageService } from './storageService';
 
+const ADMIN_SESSION_KEY = 'anf_session_admin_active';
+
 export const authService = {
   getCurrentStaff(): Staff {
     const activeId = storageService.getActiveStaffId();
@@ -8,6 +10,12 @@ export const authService = {
     const found = staffList.find(s => s.id === activeId);
     if (found) return found;
     return staffList[0];
+  },
+
+  isAdminSession(): boolean {
+    const current = this.getCurrentStaff();
+    if (current && current.role === 'Admin') return true;
+    return storageService.getItem<boolean>(ADMIN_SESSION_KEY, false);
   },
 
   setCurrentStaff(staffId: string): Staff | null {
@@ -19,9 +27,17 @@ export const authService = {
   },
 
   switchRole(role: StaffRole): Staff | null {
+    // Only permit role switching if an Administrator session is active
+    if (!this.isAdminSession()) {
+      console.warn('Unauthorized role switch attempt blocked: Only Admins can switch roles.');
+      return null;
+    }
+
     const staffList = storageService.getStaff();
     const found = staffList.find(s => s.role === role);
     if (found) {
+      // Retain admin session state so admin can switch back to Admin role
+      storageService.setItem(ADMIN_SESSION_KEY, true);
       storageService.setActiveStaffId(found.id);
       return found;
     }
@@ -53,11 +69,19 @@ export const authService = {
       return { success: false, error: 'Incorrect password. Please verify your counter security credentials.' };
     }
 
+    // Set or clear admin session flag based on the logging in staff's role
+    if (found.role === 'Admin') {
+      storageService.setItem(ADMIN_SESSION_KEY, true);
+    } else {
+      storageService.removeItem(ADMIN_SESSION_KEY);
+    }
+
     storageService.setActiveStaffId(found.id);
     return { success: true, staff: found };
   },
 
   logout(): void {
-    // Retain default or reset
+    storageService.removeItem(ADMIN_SESSION_KEY);
   },
 };
+

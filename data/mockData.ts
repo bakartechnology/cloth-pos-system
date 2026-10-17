@@ -178,7 +178,7 @@ export const INITIAL_STAFF: Staff[] = [
     status: 'Active',
     counter: 'Counter 02 (Wholesale)',
     joinedDate: '2022-06-20',
-    permissions: ['dashboard_view', 'pos_wholesale', 'bills_view', 'customers_view', 'wholesale_statement_view'],
+    permissions: ['dashboard_view', 'pos_wholesale', 'bills_view', 'customers_view', 'wholesale_statement_view', 'pandi_view'],
   },
   {
     id: 'stf-004',

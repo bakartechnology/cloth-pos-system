@@ -27,7 +27,7 @@ interface HeaderProps {
 }
 
 export function Header({ onOpenMobileMenu, onOpenSearch }: HeaderProps) {
-  const { currentStaff, switchRole, hasPermission } = useAuth();
+  const { currentStaff, switchRole, hasPermission, isAdminSession, logout } = useAuth();
 
   const getStaffInitials = (name?: string) => {
     if (!name) return 'AR';
@@ -83,13 +83,23 @@ export function Header({ onOpenMobileMenu, onOpenSearch }: HeaderProps) {
   ];
 
   const handleRoleChange = (role: StaffRole) => {
-    switchRole(role);
+    if (!isAdminSession) {
+      toast({
+        title: 'Access Restricted',
+        description: 'Only Administrator accounts have permission to switch roles.',
+        type: 'error',
+      });
+      return;
+    }
+    const success = switchRole(role);
     setIsRoleMenuOpen(false);
-    toast({
-      title: `Switched Role to ${role}`,
-      description: `Screen permissions updated for ${role}.`,
-      type: 'info',
-    });
+    if (success) {
+      toast({
+        title: `Switched Role to ${role}`,
+        description: `Screen permissions updated for ${role}.`,
+        type: 'info',
+      });
+    }
   };
 
   return (
@@ -275,44 +285,52 @@ export function Header({ onOpenMobileMenu, onOpenSearch }: HeaderProps) {
                 </div>
               </div>
 
-              {/* Role Switcher */}
-              <div className="py-1 space-y-0.5">
-                <div className="px-3 py-1 text-[10px] font-bold text-[#8A9590] uppercase tracking-wider">
-                  Switch Role
-                </div>
-                {roles.map(role => {
-                  const isSelected = currentStaff?.role === role;
-                  return (
-                    <button
-                      key={role}
-                      onClick={() => handleRoleChange(role)}
-                      className={`w-full flex items-center justify-between px-3 py-1.5 rounded-xl text-xs font-medium transition-colors text-left cursor-pointer ${
-                        isSelected
-                          ? 'bg-[#DCEDE6] text-[#125E45] font-semibold'
-                          : 'text-[#17211D] hover:bg-[#F0F4F2]'
-                      }`}
-                    >
-                      <span className="flex items-center gap-2">
-                        {role === 'Admin' ? (
-                          <Shield className="w-3.5 h-3.5 text-[#197A5A]" />
-                        ) : (
-                          <UserCheck className="w-3.5 h-3.5 text-[#8A9590]" />
+              {/* Role Switcher - STRICTLY for Administrator Only */}
+              {isAdminSession && (
+                <div className="py-1 space-y-0.5 border-t border-[#DCE3E0] mt-1 pt-1">
+                  <div className="px-3 py-1 text-[10px] font-bold text-[#8A9590] uppercase tracking-wider flex items-center justify-between">
+                    <span>Switch Role (Admin Only)</span>
+                    <span className="text-[9px] font-bold bg-[#DCEDE6] text-[#125E45] px-1.5 py-0.5 rounded">
+                      Admin Mode
+                    </span>
+                  </div>
+                  {roles.map(role => {
+                    const isSelected = currentStaff?.role === role;
+                    return (
+                      <button
+                        key={role}
+                        onClick={() => handleRoleChange(role)}
+                        className={`w-full flex items-center justify-between px-3 py-1.5 rounded-xl text-xs font-medium transition-colors text-left cursor-pointer ${
+                          isSelected
+                            ? 'bg-[#DCEDE6] text-[#125E45] font-semibold'
+                            : 'text-[#17211D] hover:bg-[#F0F4F2]'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          {role === 'Admin' ? (
+                            <Shield className="w-3.5 h-3.5 text-[#197A5A]" />
+                          ) : (
+                            <UserCheck className="w-3.5 h-3.5 text-[#8A9590]" />
+                          )}
+                          {role}
+                        </span>
+                        {isSelected && (
+                          <span className="w-2 h-2 rounded-full bg-[#125E45] shrink-0" />
                         )}
-                        {role}
-                      </span>
-                      {isSelected && (
-                        <span className="w-2 h-2 rounded-full bg-[#125E45] shrink-0" />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
               <div className="pt-2 border-t border-[#DCE3E0]">
                 <Link
                   href="/login"
                   prefetch={false}
-                  onClick={() => setIsRoleMenuOpen(false)}
+                  onClick={() => {
+                    logout();
+                    setIsRoleMenuOpen(false);
+                  }}
                   className="flex items-center gap-2 px-3 py-2 text-xs text-[#66726D] hover:text-[#17211D] rounded-xl hover:bg-[#F0F4F2] transition-colors"
                 >
                   <LogOut className="w-3.5 h-3.5" />

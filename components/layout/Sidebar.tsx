@@ -105,7 +105,6 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
       label: 'Products',
       href: '/products',
       icon: Tag,
-      permission: 'stock_view',
       subItems: [
         { label: 'All Products', href: '/products', icon: Tag, permission: 'stock_view' },
         { label: 'Barcode Studio', href: '/barcodes', icon: Barcode, permission: 'barcode_view' },
@@ -116,7 +115,6 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
       label: 'Stock',
       href: '/inventory/stock',
       icon: Layers,
-      permission: 'stock_view',
       subItems: [
         { label: 'Stock Overview', href: '/inventory/stock', icon: Layers, permission: 'stock_view' },
         { label: 'Stock Movements', href: '/inventory/stock-history', icon: History, permission: 'stock_view' },
@@ -137,7 +135,6 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
       label: 'Receivables',
       href: '/payments',
       icon: Banknote,
-      permission: 'payment_collection',
       subItems: [
         { label: 'Field Recovery', href: '/payments', icon: Banknote, permission: 'payment_collection' },
         { label: 'Wholesale Recovery', href: '/payments/wholesale', icon: Receipt, permission: 'wholesale_recovery' },
@@ -149,7 +146,6 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
       label: 'Sales Reports',
       href: '/reports',
       icon: TrendingUp,
-      permission: 'reports_view',
       subItems: [
         { label: 'Reports Hub (5-Yr)', href: '/reports', icon: TrendingUp, permission: 'reports_view' },
         { label: 'Bill History', href: '/bills', icon: Receipt, permission: 'bills_view' },
@@ -160,11 +156,10 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
       label: 'Statements',
       href: '/statements/retail',
       icon: FileText,
-      permission: 'retail_statement_view',
       subItems: [
         { label: 'Retail Statement', href: '/statements/retail', icon: FileText, permission: 'retail_statement_view' },
         { label: 'Wholesale Statement', href: '/statements/wholesale', icon: Receipt, permission: 'wholesale_statement_view' },
-        { label: 'Khata Ledgers (5-Yr)', href: '/customers/khata', icon: BookOpen, permission: 'customers_view' },
+        { label: 'Khata Ledgers (5-Yr)', href: '/customers/khata', icon: BookOpen, permission: 'khata_ledger_view' },
       ],
     },
     {
@@ -172,11 +167,10 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
       label: 'Pandi Management',
       href: '/pandi',
       icon: Truck,
-      permission: 'wholesale_statement_view',
       subItems: [
-        { label: 'All Pandis', href: '/pandi', icon: Users, permission: 'wholesale_statement_view' },
-        { label: 'Add New Pandi', href: '/pandi?action=add', icon: Plus, permission: 'wholesale_statement_view' },
-        { label: 'Pandi Statement', href: '/statements/pandi', icon: FileText, permission: 'wholesale_statement_view' },
+        { label: 'All Pandis', href: '/pandi', icon: Users, permission: 'pandi_view' },
+        { label: 'Add New Pandi', href: '/pandi?action=add', icon: Plus, permission: 'pandi_manage' },
+        { label: 'Pandi Statement', href: '/statements/pandi', icon: FileText, permission: 'pandi_view' },
       ],
     },
     {
@@ -295,6 +289,19 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
     return false;
   };
 
+  const isCategoryAllowed = (item: NavCategory) => {
+    if (item.subItems && item.subItems.length > 0) {
+      return item.subItems.some(sub => !sub.permission || hasPermission(sub.permission));
+    }
+    return !item.permission || hasPermission(item.permission);
+  };
+
+  const getCategoryHref = (item: NavCategory) => {
+    if (!item.subItems || item.subItems.length === 0) return item.href;
+    const firstAllowed = item.subItems.find(sub => !sub.permission || hasPermission(sub.permission));
+    return firstAllowed ? firstAllowed.href : item.href;
+  };
+
   const renderSidebarContent = (isMobileDrawer: boolean) => {
     const collapsed = isMobileDrawer ? false : isCollapsed;
 
@@ -397,18 +404,20 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
           className="flex-1 overflow-y-auto px-3 py-3 space-y-1 scrollbar-thin touch-pan-y"
         >
           {navigation.map(item => {
-            if (item.permission && !hasPermission(item.permission)) return null;
+            if (!isCategoryAllowed(item)) return null;
 
+            const categoryHref = getCategoryHref(item);
             const Icon = item.icon;
             const isActive = isCategoryActive(item);
-            const hasChildren = item.subItems && item.subItems.length > 0;
+            const visibleSubItems = item.subItems?.filter(sub => !sub.permission || hasPermission(sub.permission)) || [];
+            const hasChildren = visibleSubItems.length > 0;
             const isExpanded = !!expandedCategories[item.id];
 
             return (
               <div key={item.id} className="space-y-0.5">
                 <div className="flex items-center">
                   <Link
-                    href={item.href}
+                    href={categoryHref}
                     prefetch={false}
                     onClick={() => {
                       if (hasChildren && !isExpanded) {
@@ -463,8 +472,7 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
                 {/* Sub-items dropdown */}
                 {hasChildren && isExpanded && !collapsed && (
                   <div className="pl-6 pr-2 py-1 space-y-0.5 border-l-2 border-[#DCE3E0] ml-4 my-0.5 animate-in slide-in-from-top-1 duration-150">
-                    {item.subItems!.map((sub, sIdx) => {
-                      if (sub.permission && !hasPermission(sub.permission)) return null;
+                    {visibleSubItems.map((sub, sIdx) => {
                       const isSubActive = isExactActive(sub.href);
                       const SubIcon = sub.icon;
 

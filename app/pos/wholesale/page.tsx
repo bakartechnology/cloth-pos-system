@@ -4,8 +4,6 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
 import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
-import { Card } from '@/components/ui/Card';
 import { Modal } from '@/components/ui/Modal';
 import { WholesaleInvoicePrint } from '@/components/print/WholesaleInvoicePrint';
 import { PrintableWholesaleReturn } from '@/components/print/PrintableWholesaleReturn';
@@ -16,8 +14,8 @@ import { WholesaleHardwareStatus } from '@/components/wholesale-pos/WholesaleHar
 import { WholesaleBillSearchModal } from '@/components/wholesale-pos/WholesaleBillSearchModal';
 import { WholesaleReturnModal } from '@/components/wholesale-pos/WholesaleReturnModal';
 import { WholesaleExchangeModal } from '@/components/wholesale-pos/WholesaleExchangeModal';
+import { WholesaleKeyboardShortcutsModal } from '@/components/wholesale-pos/WholesaleKeyboardShortcutsModal';
 import {
-  Truck,
   Search,
   Plus,
   Minus,
@@ -29,18 +27,18 @@ import {
   Banknote,
   BookOpen,
   ArrowRight,
-  Printer,
-  ChevronRight,
+  ChevronDown,
   Barcode as BarcodeIcon,
   RotateCcw,
   ArrowLeftRight,
-  AlertCircle,
   FileText,
   Clock,
   Sparkles,
   Check,
-  X,
-  History,
+  Scan,
+  Keyboard,
+  ShieldCheck,
+  ShoppingBag,
 } from 'lucide-react';
 import { productsService } from '@/services/productsService';
 import { customersService } from '@/services/customersService';
@@ -73,7 +71,6 @@ export default function WholesalePOSPage() {
     removeFromWholesaleCart,
     updateWholesaleQuantity,
     updateWholesaleDiscount,
-    updateWholesaleExtraDiscount,
     clearWholesaleCart,
     wholesaleSubtotal,
     wholesaleDiscountTotal,
@@ -81,13 +78,17 @@ export default function WholesalePOSPage() {
     syncWithLatestProducts,
   } = useCart();
 
-  // Products & Client Data
+  // Products & Client Data (Clean defaults: NO pre-filled Ahmed Raza)
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null); // Wholesale Client
-  const [customerName, setCustomerName] = useState(''); // Individual shopper/collector name
+  const [customerName, setCustomerName] = useState(''); // Clean empty by default
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All fabrics');
+  const [sortOption, setSortOption] = useState<'inStock' | 'recent' | 'priceAsc' | 'priceDesc'>('inStock');
   const [barcodeInput, setBarcodeInput] = useState('');
-  const [nextInvoiceNumber, setNextInvoiceNumber] = useState('WHO-2026-000001');
+  const [visibleCount, setVisibleCount] = useState<number>(9);
+  const [nextInvoiceNumber, setNextInvoiceNumber] = useState('WB-026184');
+  const [currentTime, setCurrentTime] = useState('');
 
   // Work Session Resume State (Across reboots/shutdowns)
   const [availableDraft, setAvailableDraft] = useState<WholesaleSessionDraft | null>(null);
@@ -95,7 +96,7 @@ export default function WholesalePOSPage() {
 
   // Wholesale Checkout State
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Bank Transfer');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Cash');
   const [cashReceived, setCashReceived] = useState<number>(0);
   const [amountPaidNow, setAmountPaidNow] = useState<number>(0);
   const [notes, setNotes] = useState('');
@@ -118,8 +119,9 @@ export default function WholesalePOSPage() {
   const [completedBill, setCompletedBill] = useState<Bill | null>(null);
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
 
-  // Two Independent Bill Searches & Return/Exchange Modals
+  // Search Past Bills, Shortcuts, and Return/Exchange Modals
   const [isBillSearchOpen, setIsBillSearchOpen] = useState(false);
+  const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false);
   const [billForAction, setBillForAction] = useState<Bill | null>(null);
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
   const [isExchangeModalOpen, setIsExchangeModalOpen] = useState(false);
@@ -129,12 +131,14 @@ export default function WholesalePOSPage() {
   const [isExchangePrintOpen, setIsExchangePrintOpen] = useState(false);
 
   const barcodeInputRef = useRef<HTMLInputElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Initial Data Load, Sequence Peek, and live focus/storage sync
   useEffect(() => {
     const refreshData = () => {
       setProducts(productsService.getAll());
-      setNextInvoiceNumber(salesService.peekNextInvoiceNumber('Wholesale'));
+      const nextInv = salesService.peekNextInvoiceNumber('Wholesale');
+      setNextInvoiceNumber(nextInv ? `#${nextInv}` : '#WB-026184');
       const settings = storageService.getSettings();
       setIsWholesaleTerminalEnabled(Boolean(settings.wholesaleCardTerminal?.enabled));
       const banks = settings.bankAccounts || [];
@@ -147,32 +151,73 @@ export default function WholesalePOSPage() {
 
     refreshData();
 
+    // Live clock update
+    const updateClock = () => {
+      const now = new Date();
+      setCurrentTime(
+        now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
+      );
+    };
+    updateClock();
+    const clockTimer = setInterval(updateClock, 1000);
+
     window.addEventListener('focus', refreshData);
     window.addEventListener('storage', refreshData);
 
     return () => {
+      clearInterval(clockTimer);
       window.removeEventListener('focus', refreshData);
       window.removeEventListener('storage', refreshData);
     };
   }, []);
 
-  // Staff-specific draft detection on mount / staff switch
+  // Keyboard Shortcuts (F1: Barcode, F2: Search, F3: Bills, F8: Checkout)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F1') {
+        e.preventDefault();
+        barcodeInputRef.current?.focus();
+        barcodeInputRef.current?.select();
+      } else if (e.key === 'F2') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      } else if (e.key === 'F3') {
+        e.preventDefault();
+        setIsBillSearchOpen(true);
+      } else if (e.key === 'F8') {
+        e.preventDefault();
+        handleOpenCheckout();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  });
+
+  // Reset visible count to 9 when filter or search changes
+  useEffect(() => {
+    setVisibleCount(9);
+  }, [selectedCategory, searchQuery, sortOption]);
+
+  // Staff-specific draft detection on mount: ONLY prompt if draft has real cart items!
   useEffect(() => {
     if (currentStaff?.id && !hasCheckedDraft) {
       const draft = wholesaleSessionService.getDraft(currentStaff.id);
-      if (draft) {
+      if (draft && draft.cartItems && draft.cartItems.length > 0) {
         setAvailableDraft(draft);
+      } else if (draft) {
+        wholesaleSessionService.clearDraft(currentStaff.id);
       }
       setHasCheckedDraft(true);
     }
   }, [currentStaff?.id, hasCheckedDraft]);
 
-  // Auto-save active wholesale draft to persistent storage whenever state changes
+  // Auto-save active wholesale draft ONLY when there are products in the cart!
   useEffect(() => {
     if (!currentStaff?.id || !hasCheckedDraft) return;
 
-    // Save only if staff has active cart items, entered a customer, or selected a client
-    if (wholesaleCart.length > 0 || customerName.trim() || selectedCustomer) {
+    if (wholesaleCart.length > 0) {
       wholesaleSessionService.saveDraft(currentStaff.id, {
         customerName: customerName.trim() || undefined,
         selectedClient: selectedCustomer,
@@ -185,6 +230,9 @@ export default function WholesalePOSPage() {
         subtotal: wholesaleSubtotal,
         grandTotal: wholesaleGrandTotal,
       });
+    } else {
+      // Clean up draft when cart is empty so refresh does not prompt "resume work"
+      wholesaleSessionService.clearDraft(currentStaff.id);
     }
   }, [
     currentStaff?.id,
@@ -205,7 +253,6 @@ export default function WholesalePOSPage() {
   const handleResumeDraft = () => {
     if (!availableDraft) return;
 
-    // Restore customer name & client
     if (availableDraft.customerName) {
       setCustomerName(availableDraft.customerName);
     }
@@ -213,7 +260,6 @@ export default function WholesalePOSPage() {
       setSelectedCustomer(availableDraft.selectedClient);
     }
 
-    // Restore cart items
     if (availableDraft.cartItems && availableDraft.cartItems.length > 0) {
       clearWholesaleCart();
       availableDraft.cartItems.forEach(item => {
@@ -224,7 +270,6 @@ export default function WholesalePOSPage() {
       });
     }
 
-    // Restore payment and note states
     if (availableDraft.paymentMethod) {
       setPaymentMethod(availableDraft.paymentMethod);
     }
@@ -242,7 +287,7 @@ export default function WholesalePOSPage() {
     setAvailableDraft(null);
     toast({
       title: 'Previous Work Resumed',
-      description: 'Your previous wholesale work session has been restored exactly where you stopped.',
+      description: 'Your previous wholesale work session has been restored.',
       type: 'success',
     });
   };
@@ -265,19 +310,85 @@ export default function WholesalePOSPage() {
     });
   };
 
-  // Product Filter (Memoized for smooth 60fps rendering)
+  // Dynamic Category List from real products + standard suits/fabrics
+  const categories = useMemo(() => {
+    const base = ['All fabrics', 'Lawn', 'Cotton', 'Khaddar', 'Wash & Wear', 'Silk & Chiffon'];
+    const fromProds = Array.from(new Set(products.map(p => p.category).filter(Boolean)));
+    const merged = Array.from(new Set([...base, ...fromProds]));
+    return merged;
+  }, [products]);
+
+  // Product Filter & Sorting (Real Data)
   const filteredProducts = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
-    return products.filter(p => {
-      return (
+    let list = products.filter(p => {
+      const matchesQuery =
         !q ||
         p.name.toLowerCase().includes(q) ||
         p.sku.toLowerCase().includes(q) ||
         p.wholesaleBarcode.includes(q) ||
-        p.category.toLowerCase().includes(q)
-      );
+        p.category.toLowerCase().includes(q) ||
+        (p.subcategory && p.subcategory.toLowerCase().includes(q));
+
+      const matchesCategory =
+        selectedCategory === 'All fabrics' ||
+        selectedCategory === 'All' ||
+        p.category.toLowerCase() === selectedCategory.toLowerCase();
+
+      return matchesQuery && matchesCategory;
     });
-  }, [products, searchQuery]);
+
+    if (sortOption === 'priceAsc') {
+      list.sort((a, b) => a.wholesalePrice - b.wholesalePrice);
+    } else if (sortOption === 'priceDesc') {
+      list.sort((a, b) => b.wholesalePrice - a.wholesalePrice);
+    } else if (sortOption === 'recent') {
+      list.sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateB - dateA;
+      });
+    } else {
+      // In stock first
+      list.sort((a, b) => (b.stock > 0 ? 1 : 0) - (a.stock > 0 ? 1 : 0));
+    }
+
+    return list;
+  }, [products, searchQuery, selectedCategory, sortOption]);
+
+  // Paginated list showing 9 products initially, +9 on each "Load more" click
+  const displayedProducts = useMemo(() => {
+    return filteredProducts.slice(0, visibleCount);
+  }, [filteredProducts, visibleCount]);
+
+  // Total metres / units in cart
+  const totalCartMetres = useMemo(() => {
+    return wholesaleCart.reduce((acc, item) => acc + item.quantity, 0);
+  }, [wholesaleCart]);
+
+  // Dynamic tax calculation: only when taxRate is set in stock/products or store settings
+  const { wholesaleTaxAmount, wholesaleTaxRate } = useMemo(() => {
+    const storeTaxRate = storageService.getSettings()?.defaultTaxRate || 0;
+    let taxSum = 0;
+    let taxableBase = 0;
+    wholesaleCart.forEach(item => {
+      const rate =
+        item.product.taxRate !== undefined && item.product.taxRate !== null && item.product.taxRate > 0
+          ? item.product.taxRate
+          : storeTaxRate;
+      if (rate > 0) {
+        taxSum += (item.lineTotal * rate) / 100;
+        taxableBase += item.lineTotal;
+      }
+    });
+    const avgRate = taxableBase > 0 ? Math.round((taxSum / taxableBase) * 100) : storeTaxRate;
+    return {
+      wholesaleTaxAmount: Math.round(taxSum),
+      wholesaleTaxRate: avgRate,
+    };
+  }, [wholesaleCart]);
+
+  const finalWholesaleGrandTotal = wholesaleSubtotal - wholesaleDiscountTotal + wholesaleTaxAmount;
 
   // Barcode Scanner Handler
   const handleBarcodeSubmit = (e?: React.FormEvent) => {
@@ -285,7 +396,6 @@ export default function WholesalePOSPage() {
     const code = barcodeInput.trim();
     if (!code) return;
 
-    // Use live persistent productsService lookup to avoid stale data
     const matched =
       productsService.getByBarcodeOrSku(code) ||
       products.find(
@@ -304,17 +414,11 @@ export default function WholesalePOSPage() {
           type: 'error',
         });
       } else {
-        const discount = matched.wholesaleDiscount || 0;
-        const finalPrice = Math.max(0, matched.wholesalePrice - discount);
-
         addToWholesaleCart(matched);
         barcodeScannerService.playSuccessBeep();
         toast({
-          title: `Scanned: ${matched.name}`,
-          description:
-            discount > 0
-              ? `Price: Rs. ${matched.wholesalePrice.toLocaleString()} | Discount: − Rs. ${discount.toLocaleString()} | Total: Rs. ${finalPrice.toLocaleString()}`
-              : `Price: Rs. ${matched.wholesalePrice.toLocaleString()}`,
+          title: `Added: ${matched.name}`,
+          description: `Price: PKR ${matched.wholesalePrice.toLocaleString()}`,
           type: 'success',
         });
       }
@@ -341,7 +445,6 @@ export default function WholesalePOSPage() {
       });
       return;
     }
-    // PART 2 - Req 6: Customer Name alone is sufficient to enable checkout
     if (!customerName.trim() && !selectedCustomer) {
       toast({
         title: 'Customer Name Required',
@@ -351,9 +454,8 @@ export default function WholesalePOSPage() {
       return;
     }
 
-    // Default cash received to grand total for convenience
-    setCashReceived(wholesaleGrandTotal);
-    setAmountPaidNow(paymentMethod === 'Credit/Khata' ? 0 : wholesaleGrandTotal);
+    setCashReceived(Math.round(finalWholesaleGrandTotal));
+    setAmountPaidNow(paymentMethod === 'Credit/Khata' ? 0 : Math.round(finalWholesaleGrandTotal));
     setIsBankPaymentConfirmed(false);
     setCardPaymentState('idle');
     setCardTransactionId(undefined);
@@ -366,7 +468,7 @@ export default function WholesalePOSPage() {
     if (!isEnabled) {
       toast({
         title: 'Card Terminal Access Disabled',
-        description: 'Wholesale Card Terminal is disabled in Store Settings. Please enable it in Settings first.',
+        description: 'Wholesale Card Terminal is disabled in Store Settings.',
         type: 'error',
       });
       return;
@@ -398,40 +500,16 @@ export default function WholesalePOSPage() {
     }
   };
 
-  // Confirm Cash Payment & Trigger Cash Drawer
-  const handleCashDrawerWorkflow = async () => {
-    if (cashReceived < wholesaleGrandTotal) {
-      toast({
-        title: 'Insufficient Cash',
-        description: `Received Rs. ${cashReceived.toLocaleString()} is less than total Rs. ${wholesaleGrandTotal.toLocaleString()}`,
-        type: 'error',
-      });
-      return;
-    }
-
-    // Send kick pulse to cash drawer
-    setIsCashDrawerOpen(true);
-    const drawerRes = await cashDrawerService.openCashDrawer();
-    if (drawerRes.success) {
-      toast({
-        title: 'Cash Drawer Opened',
-        description: 'Place cash into drawer and return change to customer.',
-        type: 'info',
-      });
-    }
-  };
-
   // Complete Wholesale Sale & Save Invoice
   const handleCompleteWholesaleSale = () => {
     if (!currentStaff) return;
     if (!customerName.trim() && !selectedCustomer) return;
 
-    // Validation per payment method
     if (paymentMethod === 'Cash') {
-      if (cashReceived < wholesaleGrandTotal) {
+      if (Math.round(cashReceived) < Math.round(finalWholesaleGrandTotal)) {
         toast({
           title: 'Insufficient Cash Tendered',
-          description: 'Cannot finalize invoice with insufficient cash received.',
+          description: `Received PKR ${cashReceived.toLocaleString()} is less than total payable PKR ${finalWholesaleGrandTotal.toLocaleString()}.`,
           type: 'error',
         });
         return;
@@ -441,7 +519,7 @@ export default function WholesalePOSPage() {
       if (!isEnabled) {
         toast({
           title: 'Card Payment Blocked',
-          description: 'Wholesale Card Terminal is disabled in Store Settings. Invoice cannot be created or submitted.',
+          description: 'Wholesale Card Terminal is disabled in Store Settings.',
           type: 'error',
         });
         return;
@@ -450,7 +528,7 @@ export default function WholesalePOSPage() {
       if (cardPaymentState !== 'authorized' || !cardTransactionId) {
         toast({
           title: 'Card Payment Incomplete',
-          description: 'Please wait for the card terminal payment to be approved.',
+          description: 'Please start card terminal payment and wait for approval before finalizing.',
           type: 'error',
         });
         return;
@@ -459,7 +537,7 @@ export default function WholesalePOSPage() {
       if (!isBankPaymentConfirmed || !selectedBank) {
         toast({
           title: 'Payment Verification Required',
-          description: 'Please verify the bank transfer slip and click "Confirm Payment" before completing.',
+          description: 'Please select a bank account and confirm the transfer slip received.',
           type: 'error',
         });
         return;
@@ -475,11 +553,9 @@ export default function WholesalePOSPage() {
       }
     }
 
-    const calculatedChange = paymentMethod === 'Cash' ? Math.max(0, cashReceived - wholesaleGrandTotal) : 0;
     const effectiveCustomerName = customerName.trim() || selectedCustomer?.name || 'Walk-in Wholesale Customer';
     const effectivePhone = selectedCustomer?.phone || '';
 
-    // If no client selected, ensure customer is tracked in customer service
     let billCustomer = selectedCustomer;
     if (!billCustomer && customerName.trim()) {
       billCustomer = customersService.getAll().find(
@@ -498,9 +574,9 @@ export default function WholesalePOSPage() {
       saleType: 'Wholesale',
       cartItems: wholesaleCart,
       paymentMethod,
-      amountReceived: paymentMethod === 'Credit/Khata' ? 0 : paymentMethod === 'Cash' ? cashReceived : wholesaleGrandTotal,
+      amountReceived: paymentMethod === 'Credit/Khata' ? 0 : paymentMethod === 'Cash' ? cashReceived : finalWholesaleGrandTotal,
       discountTotal: wholesaleDiscountTotal,
-      taxTotal: 0,
+      taxTotal: wholesaleTaxAmount,
       staffId: currentStaff.id,
       staffName: currentStaff.name,
       customer: billCustomer || undefined,
@@ -525,7 +601,6 @@ export default function WholesalePOSPage() {
       notes,
     });
 
-    // Clear saved work session draft upon successful completion
     wholesaleSessionService.clearDraft(currentStaff.id);
 
     setCompletedBill(bill);
@@ -538,7 +613,8 @@ export default function WholesalePOSPage() {
     setIsCheckoutOpen(false);
     setIsInvoiceModalOpen(true);
     setProducts(productsService.getAll());
-    setNextInvoiceNumber(salesService.peekNextInvoiceNumber('Wholesale'));
+    const nextInv = salesService.peekNextInvoiceNumber('Wholesale');
+    setNextInvoiceNumber(nextInv ? `#${nextInv}` : '#WB-026184');
 
     toast({
       title: 'Wholesale Invoice Finalized',
@@ -547,402 +623,677 @@ export default function WholesalePOSPage() {
     });
   };
 
-  const calculatedChange = Math.max(0, cashReceived - wholesaleGrandTotal);
-  const isCashInsufficient = paymentMethod === 'Cash' && cashReceived < wholesaleGrandTotal;
+  const calculatedChange = Math.max(0, cashReceived - finalWholesaleGrandTotal);
+  const isCashInsufficient = paymentMethod === 'Cash' && cashReceived < finalWholesaleGrandTotal;
 
   return (
     <ProtectedRoute permission="pos_wholesale">
       <AppShell>
-        <div className="flex flex-col lg:flex-row gap-5 h-[calc(100vh-7rem)] overflow-hidden">
-          {/* LEFT: Product Catalog & Wholesale Work Area */}
-          <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-white rounded-2xl border border-slate-200/80 shadow-2xs">
-            {/* Top Bar: Title, Hardware Status, and Two Bill Searches Trigger */}
-            <div className="p-3.5 border-b border-slate-200/80 space-y-3 shrink-0 bg-slate-50/50">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-cyan-600 to-blue-700 text-white flex items-center justify-center font-bold text-sm shadow-xs">
-                    <Truck className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-base font-black text-slate-900 leading-tight tracking-tight">
-                        Wholesale & Bulk POS
-                      </h2>
-                      <span className="text-[10px] font-mono font-bold bg-cyan-100 text-cyan-800 px-2 py-0.5 rounded-full border border-cyan-200">
-                        Next: {nextInvoiceNumber}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-500">Tiered Wholesale Price Engine (PKR)</p>
-                  </div>
+        <div className="space-y-4 max-w-[1700px] mx-auto select-none pb-12">
+          {/* ============================================================== */}
+          {/* 1. TOP HEADER / NAVBAR (Exact sequence matching Retail POS) */}
+          {/* ============================================================== */}
+          <div className="bg-white rounded-2xl border border-[#DCE3E0] px-4 py-2.5 shadow-2xs flex items-center justify-between gap-4 flex-wrap xl:flex-nowrap">
+            {/* Left: Logo & Title + Metadata */}
+            <div className="flex items-center gap-6 flex-wrap sm:flex-nowrap">
+              {/* Logo & Title */}
+              <div className="flex items-center gap-2.5 shrink-0">
+                <div className="w-8 h-8 rounded-lg bg-[#197A5A] flex items-center justify-center text-white shrink-0 shadow-2xs">
+                  <Scan className="w-4 h-4" />
                 </div>
-
-                {/* Right Utilities: Two Search Bars Trigger & Hardware Status */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setIsBillSearchOpen(true)}
-                    className="gap-1.5 font-bold text-xs bg-white shadow-2xs border-slate-300 hover:border-cyan-500 hover:text-cyan-700"
-                  >
-                    <History className="w-3.5 h-3.5 text-cyan-600" />
-                    <span>Search Past Bills / Returns</span>
-                  </Button>
-
-                  <WholesaleHardwareStatus />
+                <div>
+                  <h1 className="text-sm font-bold text-[#17211D] leading-none">
+                    Wholesale POS
+                  </h1>
+                  <p className="text-[11px] text-[#66726D] mt-0.5">
+                    Main Store Register
+                  </p>
                 </div>
               </div>
 
-              {/* PERSISTENT WORK SESSION: Resume Previous Work Banner */}
-              {availableDraft && (
-                <div className="p-3 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs animate-in fade-in duration-200">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-lg bg-amber-500 text-white flex items-center justify-center font-bold shrink-0">
-                      <Clock className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="font-bold text-amber-950 flex items-center gap-2">
-                        <span>Unfinished Wholesale Session Detected</span>
-                        <span className="text-[10px] bg-amber-200 text-amber-900 px-1.5 py-0.2 rounded font-mono">
-                          {new Date(availableDraft.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-amber-800">
-                        {availableDraft.cartItems?.length || 0} item(s) • Total: Rs.{' '}
-                        {availableDraft.grandTotal?.toLocaleString() || 0}
-                        {availableDraft.customerName ? ` • Shopper: ${availableDraft.customerName}` : ''}
-                        {availableDraft.selectedClient ? ` • Client: ${availableDraft.selectedClient.businessName || availableDraft.selectedClient.name}` : ''}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      type="button"
-                      onClick={handleDiscardDraft}
-                      className="px-2.5 py-1 text-amber-800 hover:text-rose-700 font-semibold hover:bg-amber-100/60 rounded-lg transition-colors"
-                    >
-                      Discard Draft
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleResumeDraft}
-                      className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg shadow-xs transition-colors flex items-center gap-1.5"
-                    >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>Resume Work</span>
-                    </button>
-                  </div>
+              {/* Metadata Columns on Same Line */}
+              <div className="flex items-center gap-6 text-left pl-4 sm:border-l sm:border-[#DCE3E0]">
+                <div>
+                  <span className="text-[9px] font-bold text-[#8A9590] uppercase tracking-wider block">
+                    INVOICE
+                  </span>
+                  <span className="text-xs font-bold text-[#17211D] font-mono">
+                    {nextInvoiceNumber}
+                  </span>
                 </div>
-              )}
 
-              {/* FIELD ORDER REQUIRED: 1. Customer Name -> 2. Client */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                {/* 1. CUSTOMER NAME (Shopper / Collector) */}
-                <WholesaleCustomerInput
-                  value={customerName}
-                  onChange={(name, cust) => {
-                    setCustomerName(name);
-                    // If selected an existing customer who has wholesale terms, optionally associate
-                    if (cust && (cust.type === 'Wholesale' || cust.type === 'Khata') && !selectedCustomer) {
-                      setSelectedCustomer(cust);
-                    }
-                  }}
-                />
+                <div>
+                  <span className="text-[9px] font-bold text-[#8A9590] uppercase tracking-wider block">
+                    CASHIER
+                  </span>
+                  <span className="text-xs font-bold text-[#17211D]">
+                    {currentStaff?.name || 'Staff'}
+                  </span>
+                </div>
 
-                {/* 2. CLIENT (Wholesale Business Account) */}
-                <WholesaleClientSearch
-                  selectedClient={selectedCustomer}
-                  onSelectClient={client => {
-                    setSelectedCustomer(client);
-                    if (client && !customerName) {
-                      setCustomerName(client.name);
-                    }
-                  }}
-                />
-              </div>
-
-              {/* Barcode Scanner & Search Filters Strip */}
-              <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 pt-1">
-                {/* Dedicated Barcode Input */}
-                <form
-                  onSubmit={handleBarcodeSubmit}
-                  className="sm:col-span-5 relative"
-                >
-                  <BarcodeIcon className="w-4 h-4 text-cyan-600 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    ref={barcodeInputRef}
-                    type="text"
-                    value={barcodeInput}
-                    onChange={e => setBarcodeInput(e.target.value)}
-                    placeholder="Scan or enter barcode / SKU (Press Enter)..."
-                    className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-cyan-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono font-bold text-slate-900 shadow-2xs placeholder:font-normal placeholder:text-slate-400"
-                  />
-                </form>
-
-                {/* Text Search Bar */}
-                <div className="sm:col-span-7 relative">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    placeholder="Search fabric name, category, or SKU for wholesale pricing..."
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                  />
+                <div>
+                  <span className="text-[9px] font-bold text-[#8A9590] uppercase tracking-wider block">
+                    COUNTER
+                  </span>
+                  <span className="text-xs font-bold text-[#17211D]">
+                    {currentStaff?.counter || 'Counter 03'}
+                  </span>
                 </div>
               </div>
             </div>
 
-            {/* Wholesale Product Catalog Grid */}
-            <div className="flex-1 overflow-y-auto p-4">
-              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
-                {filteredProducts.map(prod => {
-                  const inCart = wholesaleCart.find(i => i.product.id === prod.id);
+            {/* Right: Shortcuts -> Search Past Bills -> Hardware Dot -> Time */}
+            <div className="flex items-center gap-3 shrink-0 ml-auto">
+              {/* Search Past Bills/Returns Button */}
+              <button
+                type="button"
+                onClick={() => setIsBillSearchOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#DCE3E0] bg-white hover:bg-[#F0F4F2] text-xs font-semibold text-[#17211D] transition-colors shadow-2xs cursor-pointer"
+                title="Search past bills by customer or invoice (F3)"
+              >
+                <FileText className="w-3.5 h-3.5 text-[#66726D]" />
+                <span>Search Bills</span>
+              </button>
+
+              {/* Shortcuts Button */}
+              <button
+                type="button"
+                onClick={() => setIsShortcutsModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#DCE3E0] bg-white hover:bg-[#F0F4F2] text-xs font-semibold text-[#17211D] transition-colors shadow-2xs cursor-pointer"
+                title="View Keyboard Shortcuts"
+              >
+                <Keyboard className="w-3.5 h-3.5 text-[#66726D]" />
+                <span>Shortcuts</span>
+              </button>
+
+              {/* Hardware Status Popover Button */}
+              <WholesaleHardwareStatus />
+
+              {/* Clock & Status */}
+              <div className="text-right pl-3 border-l border-[#DCE3E0]">
+                <div className="font-bold text-xs text-[#17211D] font-mono leading-tight">
+                  {currentTime || '09:02 PM'}
+                </div>
+                <div className="text-[10px] text-[#66726D] flex items-center justify-end gap-1.5 mt-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#16835B] animate-pulse" />
+                  <span>Online · Scanner ready</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ============================================================== */}
+          {/* 2. WORKFLOW STEPPER RIBBON */}
+          {/* ============================================================== */}
+          <div className="bg-[#DCEDE6] rounded-xl px-4 py-2.5 flex items-center justify-between text-xs overflow-x-auto shadow-2xs border border-[#C7D2CD]/60 select-none">
+            {/* Step 1: Customer */}
+            <div className={`flex items-center gap-1.5 shrink-0 ${customerName.trim() ? 'font-bold text-[#125E45]' : 'text-[#66726D] font-medium'}`}>
+              <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${customerName.trim() ? 'bg-[#125E45] text-white' : 'border border-[#8A9590]'}`}>
+                {customerName.trim() ? '✓' : '1'}
+              </span>
+              <span>Customer</span>
+              <span className="text-[#8A9590] ml-2 font-normal">&gt;</span>
+            </div>
+
+            {/* Step 2: Client */}
+            <div className={`flex items-center gap-1.5 shrink-0 ${selectedCustomer ? 'font-bold text-[#125E45]' : 'text-[#66726D] font-medium'}`}>
+              <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${selectedCustomer ? 'bg-[#125E45] text-white' : 'border border-[#8A9590]'}`}>
+                {selectedCustomer ? '✓' : '2'}
+              </span>
+              <span>Client</span>
+              <span className="text-[#8A9590] ml-2 font-normal">&gt;</span>
+            </div>
+
+            {/* Step 3: Scan/Search */}
+            <div className={`flex items-center gap-1.5 shrink-0 ${wholesaleCart.length > 0 ? 'font-bold text-[#125E45]' : 'text-[#66726D] font-medium'}`}>
+              <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${wholesaleCart.length > 0 ? 'bg-[#125E45] text-white' : 'border border-[#8A9590]'}`}>
+                3
+              </span>
+              <span>Scan/Search</span>
+              <span className="text-[#8A9590] ml-2 font-normal">&gt;</span>
+            </div>
+
+            {/* Step 4: Bulk Quantity */}
+            <div className={`flex items-center gap-1.5 shrink-0 ${wholesaleCart.length > 0 ? 'font-bold text-[#125E45]' : 'text-[#66726D] font-medium'}`}>
+              <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${wholesaleCart.length > 0 ? 'bg-[#125E45] text-white' : 'border border-[#8A9590]'}`}>
+                4
+              </span>
+              <span>Bulk Quantity</span>
+              <span className="text-[#8A9590] ml-2 font-normal">&gt;</span>
+            </div>
+
+            {/* Step 5: Pricing */}
+            <div className="flex items-center gap-1.5 text-[#66726D] font-medium shrink-0">
+              <span className="w-4 h-4 rounded-full border border-[#8A9590] flex items-center justify-center text-[10px]">
+                5
+              </span>
+              <span>Pricing</span>
+              <span className="text-[#8A9590] ml-2 font-normal">&gt;</span>
+            </div>
+
+            {/* Step 6: Invoice */}
+            <div className="flex items-center gap-1.5 text-[#66726D] font-medium shrink-0">
+              <span className="w-4 h-4 rounded-full border border-[#8A9590] flex items-center justify-center text-[10px]">
+                6
+              </span>
+              <span>Invoice</span>
+              <span className="text-[#8A9590] ml-2 font-normal">&gt;</span>
+            </div>
+
+            {/* Step 7: Checkout */}
+            <div className="flex items-center gap-1.5 text-[#66726D] font-medium shrink-0">
+              <span className="w-4 h-4 rounded-full border border-[#8A9590] flex items-center justify-center text-[10px]">
+                7
+              </span>
+              <span>Checkout</span>
+            </div>
+          </div>
+
+          {/* DRAFT NOTIFICATION BANNER (ONLY shown when there were real items saved) */}
+          {availableDraft && availableDraft.cartItems && availableDraft.cartItems.length > 0 && (
+            <div className="p-3 rounded-2xl bg-[#F7EEDC] border border-[#9A6A16]/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-[#9A6A16] text-white flex items-center justify-center font-bold shrink-0">
+                  <Clock className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-bold text-[#17211D] flex items-center gap-2">
+                    <span>Unfinished Wholesale Work Session Detected</span>
+                    <span className="text-[10px] bg-[#9A6A16]/20 text-[#9A6A16] px-1.5 py-0.2 rounded font-mono font-bold">
+                      {new Date(availableDraft.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-[#66726D]">
+                    {availableDraft.cartItems.length} item(s) • Total: Rs {availableDraft.grandTotal?.toLocaleString() || 0}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleDiscardDraft}
+                  className="px-2.5 py-1 text-[#66726D] hover:text-[#C23D45] font-semibold transition-colors cursor-pointer"
+                >
+                  Discard Draft
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResumeDraft}
+                  className="px-3 py-1 bg-[#125E45] hover:bg-[#197A5A] text-white font-bold rounded-lg shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Resume Work</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ============================================================== */}
+          {/* 3. MAIN TWO-COLUMN BODY */}
+          {/* ============================================================== */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+            {/* ------------------------------------------------------------ */}
+            {/* LEFT COLUMN: Customer Card + Barcode/Search + Catalog */}
+            {/* ------------------------------------------------------------ */}
+            <div className="lg:col-span-8 space-y-4">
+              {/* CUSTOMER & WHOLESALE ACCOUNT BOX */}
+              <div className="bg-white rounded-2xl border border-[#DCE3E0] p-4 shadow-2xs space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-[#17211D]">
+                    Customer & wholesale account
+                  </h3>
+                  {(customerName.trim() || selectedCustomer) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomerName('');
+                        setSelectedCustomer(null);
+                      }}
+                      className="text-xs font-semibold text-[#125E45] hover:text-[#197A5A] hover:underline cursor-pointer"
+                    >
+                      Change account
+                    </button>
+                  )}
+                </div>
+
+                {/* Two dropdown fields: Customer Name & Wholesale Client */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <WholesaleCustomerInput
+                    value={customerName}
+                    onChange={(name, cust) => {
+                      setCustomerName(name);
+                      if (cust && (cust.type === 'Wholesale' || cust.type === 'Khata') && !selectedCustomer) {
+                        setSelectedCustomer(cust);
+                      }
+                    }}
+                  />
+
+                  <WholesaleClientSearch
+                    selectedClient={selectedCustomer}
+                    onSelectClient={client => {
+                      setSelectedCustomer(client);
+                      if (client && !customerName) {
+                        setCustomerName(client.name);
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* BARCODE SCANNER INPUT + SCAN BUTTON */}
+              <div className="flex items-center gap-3">
+                <form
+                  onSubmit={handleBarcodeSubmit}
+                  className="flex-1 flex items-center justify-between border-2 border-[#197A5A] rounded-xl bg-white px-3.5 py-2.5 shadow-2xs"
+                >
+                  <div className="flex items-center gap-2.5 flex-1 mr-2">
+                    <BarcodeIcon className="w-4 h-4 text-[#66726D] shrink-0" />
+                    <input
+                      ref={barcodeInputRef}
+                      type="text"
+                      placeholder="Scan or enter barcode / SKU"
+                      value={barcodeInput}
+                      onChange={e => setBarcodeInput(e.target.value)}
+                      className="w-full text-xs font-mono text-[#17211D] placeholder:text-[#8A9590] bg-transparent focus:outline-none"
+                    />
+                  </div>
+                  <span className="px-1.5 py-0.5 rounded bg-[#F0F4F2] text-[10px] text-[#8A9590] font-mono border border-[#DCE3E0]">
+                    F1
+                  </span>
+                </form>
+
+                <button
+                  type="button"
+                  onClick={handleBarcodeSubmit}
+                  className="bg-[#125E45] hover:bg-[#197A5A] text-white px-6 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-colors shadow-2xs cursor-pointer h-[42px]"
+                >
+                  <Scan className="w-4 h-4" />
+                  <span>Scan</span>
+                </button>
+              </div>
+
+              {/* SEARCH FABRIC NAME, SKU OR TYPE */}
+              <div className="flex items-center justify-between border border-[#DCE3E0] rounded-xl bg-white px-3.5 py-2.5 shadow-2xs">
+                <div className="flex items-center gap-2.5 flex-1 mr-2">
+                  <Search className="w-4 h-4 text-[#8A9590] shrink-0" />
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    placeholder="Search fabric name, SKU or type"
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    className="w-full text-xs font-medium text-[#17211D] placeholder:text-[#8A9590] bg-transparent focus:outline-none"
+                  />
+                </div>
+                <span className="px-1.5 py-0.5 rounded bg-[#F0F4F2] text-[10px] text-[#8A9590] font-mono border border-[#DCE3E0]">
+                  F2
+                </span>
+              </div>
+
+              {/* CATEGORY FILTER PILLS */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar text-xs">
+                {categories.map(cat => {
+                  const isActive = selectedCategory === cat;
+                  return (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setSelectedCategory(cat)}
+                      className={`whitespace-nowrap px-3.5 py-1.5 rounded-full font-semibold transition-all cursor-pointer ${
+                        isActive
+                          ? 'bg-[#125E45] text-white shadow-2xs'
+                          : 'bg-white border border-[#DCE3E0] text-[#17211D] hover:bg-[#F0F4F2]'
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* PRODUCT CATALOG HEADER (Count + Sorting Dropdown) */}
+              <div className="flex items-center justify-between pt-1">
+                <div>
+                  <h2 className="text-base font-bold text-[#17211D]">Product catalog</h2>
+                  <p className="text-xs text-[#66726D]">
+                    {filteredProducts.length} products · {displayedProducts.length} shown · Sold by metre
+                  </p>
+                </div>
+
+                <div className="relative">
+                  <select
+                    value={sortOption}
+                    onChange={e => setSortOption(e.target.value as any)}
+                    className="appearance-none border border-[#DCE3E0] rounded-xl bg-white pl-3 pr-7 py-1 text-xs text-[#17211D] font-medium shadow-2xs focus:outline-none cursor-pointer"
+                  >
+                    <option value="inStock">In stock first</option>
+                    <option value="recent">Recent added first</option>
+                    <option value="priceAsc">Price: Low to High</option>
+                    <option value="priceDesc">Price: High to Low</option>
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-[#8A9590] absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* PRODUCT CARDS GRID (3 Columns) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
+                {displayedProducts.map(prod => {
                   const isOutOfStock = prod.stock <= 0;
-                  const season = prod.seasonCategory || (['Khaddar', 'Wash & Wear'].includes(prod.category) ? 'Winter' : 'Summer');
-                  const hasDiscount = (prod.wholesaleDiscount || 0) > 0;
-                  const finalWholesale = Math.max(0, prod.wholesalePrice - (prod.wholesaleDiscount || 0));
+                  const seasonTag = prod.seasonCategory
+                    ? `${prod.seasonCategory} '26`
+                    : prod.subcategory || 'Summer \'26';
+
+                  const inCart = wholesaleCart.find(i => i.product.id === prod.id);
 
                   return (
                     <div
                       key={prod.id}
-                      onClick={() => !isOutOfStock && addToWholesaleCart(prod)}
-                      className={`relative p-3 rounded-xl border flex flex-col justify-between transition-all duration-150 cursor-pointer select-none group ${
-                        isOutOfStock
-                          ? 'opacity-50 bg-slate-50 border-slate-200 pointer-events-none'
-                          : inCart
-                          ? 'border-cyan-500 bg-cyan-50/20 shadow-xs'
-                          : 'border-slate-200/80 bg-white hover:border-cyan-300 hover:shadow-md'
+                      className={`bg-white rounded-2xl border border-[#DCE3E0] p-4 flex flex-col justify-between hover:border-[#197A5A]/60 transition-all shadow-2xs group ${
+                        isOutOfStock ? 'opacity-60 bg-[#F6F8F7]' : ''
                       }`}
                     >
                       <div>
-                        <div className="flex items-center justify-between text-[10px] text-slate-500 mb-1">
-                          <span className="font-mono">{prod.sku}</span>
-                          <span className="font-semibold text-slate-600">
-                            {prod.stock} {prod.unit}
+                        {/* Top: SKU & Available Stock */}
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="font-mono text-[#8A9590]">{prod.sku}</span>
+                          <span
+                            className={`font-medium flex items-center gap-1 ${
+                              isOutOfStock ? 'text-rose-600' : 'text-[#16835B]'
+                            }`}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                isOutOfStock ? 'bg-rose-500' : 'bg-[#16835B]'
+                              }`}
+                            />
+                            {prod.stock > 0 ? `${prod.stock} available` : 'Out of stock'}
                           </span>
                         </div>
 
-                        <h3 className="text-xs font-bold text-slate-900 line-clamp-2 leading-snug group-hover:text-cyan-600 transition-colors">
+                        {/* Product Title */}
+                        <h3 className="font-bold text-sm text-[#17211D] mt-2 line-clamp-1 leading-snug">
                           {prod.name}
                         </h3>
-                        <div className="flex items-center gap-1 mt-1">
-                          <span
-                            className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${
-                              season === 'Winter'
-                                ? 'bg-blue-50 text-blue-700 border-blue-200'
-                                : 'bg-amber-50 text-amber-700 border-amber-200'
-                            }`}
-                          >
-                            {season === 'Winter' ? '❄️ Winter' : '☀️ Summer'}
+
+                        {/* Category & Width Specs */}
+                        <p className="text-xs text-[#66726D] mt-0.5">
+                          {prod.category} · {prod.subcategory || '58-inch width'}
+                        </p>
+
+                        {/* Collection Tag */}
+                        <div className="mt-2.5">
+                          <span className="bg-[#E9F3EF] text-[#125E45] text-[10px] font-semibold px-2 py-0.5 rounded-md inline-block">
+                            {seasonTag}
                           </span>
-                          <span className="text-[10px] text-slate-400">{prod.unit}</span>
                         </div>
                       </div>
 
-                      <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between">
-                        <div className="space-y-0.5">
-                          <div className="text-xs font-bold text-slate-900 font-mono">
-                            Wholesale Price: Rs. {prod.wholesalePrice.toLocaleString()}
+                      {/* Bottom Pricing & Add Button */}
+                      <div className="flex items-center justify-between mt-4 pt-3 border-t border-[#DCE3E0]/60">
+                        <div>
+                          <div className="text-base font-bold text-[#17211D]">
+                            Rs {prod.wholesalePrice.toLocaleString()}
                           </div>
-                          {hasDiscount ? (
-                            <>
-                              <div className="text-[11px] font-semibold text-emerald-600 font-mono">
-                                Discount: − Rs. {(prod.wholesaleDiscount || 0).toLocaleString()}
-                              </div>
-                              <div className="text-xs font-black text-cyan-800 font-mono">
-                                Total: Rs. {finalWholesale.toLocaleString()}
-                              </div>
-                            </>
-                          ) : null}
+                          {inCart && (
+                            <div className="text-[10px] text-[#197A5A] font-semibold mt-0.5">
+                              {inCart.quantity} {prod.unit || 'm'} added
+                            </div>
+                          )}
                         </div>
-                        <div
-                          className={`w-6 h-6 rounded-md flex items-center justify-center text-xs transition-colors ${
-                            inCart
-                              ? 'bg-cyan-600 text-white font-bold'
-                              : 'bg-slate-100 text-slate-600 group-hover:bg-cyan-600 group-hover:text-white'
-                          }`}
+
+                        <button
+                          type="button"
+                          onClick={() => !isOutOfStock && addToWholesaleCart(prod)}
+                          disabled={isOutOfStock}
+                          className="w-8 h-8 rounded-lg bg-[#125E45] hover:bg-[#197A5A] disabled:bg-slate-300 text-white flex items-center justify-center font-bold text-lg transition-colors shadow-2xs cursor-pointer active:scale-95 disabled:cursor-not-allowed"
+                          title={`Add ${prod.name} to wholesale invoice`}
                         >
-                          {inCart ? inCart.quantity : <Plus className="w-3.5 h-3.5" />}
-                        </div>
+                          <Plus className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
                   );
                 })}
               </div>
-            </div>
-          </div>
 
-          {/* RIGHT: Wholesale Bill & Cart Panel */}
-          <div className="w-full lg:w-96 shrink-0 flex flex-col h-full bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
-            {/* Header */}
-            <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
-              <div className="flex items-center gap-2">
-                <Truck className="w-4 h-4 text-cyan-600" />
-                <h3 className="font-bold text-sm text-slate-900">Commercial Invoice</h3>
-                <span className="text-[11px] bg-cyan-100 text-cyan-800 px-2 py-0.5 rounded-full font-bold">
-                  {wholesaleCart.length} lines
-                </span>
-              </div>
-              {wholesaleCart.length > 0 && (
-                <button
-                  onClick={clearWholesaleCart}
-                  className="text-slate-400 hover:text-rose-600 text-xs flex items-center gap-1 transition-colors font-medium"
-                >
-                  <Trash2 className="w-3.5 h-3.5" /> Clear Cart
-                </button>
+              {/* BOTTOM BAR: Show More Products Button */}
+              {visibleCount < filteredProducts.length && (
+                <div className="flex justify-center pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setVisibleCount(prev => prev + 9)}
+                    className="flex items-center gap-2 px-6 py-2.5 rounded-xl border border-[#DCE3E0] bg-white hover:bg-[#F0F4F2] text-xs font-bold text-[#125E45] shadow-2xs transition-all cursor-pointer hover:border-[#125E45] active:scale-98"
+                  >
+                    <span>Show More Products</span>
+                    <span className="text-[10px] text-[#66726D] font-normal">
+                      (+9 of {filteredProducts.length - visibleCount} remaining)
+                    </span>
+                    <ChevronDown className="w-4 h-4 text-[#125E45]" />
+                  </button>
+                </div>
               )}
             </div>
 
-            {/* Cart Items List */}
-            <div className="flex-1 overflow-y-auto p-3 divide-y divide-slate-100">
-              {wholesaleCart.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-400">
-                  <Truck className="w-12 h-12 mb-2 stroke-1 text-slate-300" />
-                  <p className="text-xs font-semibold text-slate-700">Wholesale invoice is empty</p>
-                  <p className="text-[11px] text-slate-400 mt-1 max-w-[220px]">
-                    Scan fabric barcodes or click items from catalog to add wholesale lots.
-                  </p>
+            {/* ------------------------------------------------------------ */}
+            {/* RIGHT COLUMN: Current Cart Panel (4 Columns) - STICKY FIXED IN VIEW */}
+            {/* ------------------------------------------------------------ */}
+            <div className="lg:col-span-4 bg-white rounded-2xl border border-[#DCE3E0] p-4 shadow-2xs flex flex-col justify-between sticky top-4 min-h-[580px] max-h-[calc(100vh-8.5rem)] overflow-hidden">
+              <div className="shrink-0 space-y-3">
+                {/* Cart Header */}
+                <div className="flex items-center justify-between pb-2 border-b border-[#DCE3E0]/70">
+                  <div className="flex items-center gap-2">
+                    <h2 className="font-bold text-base text-[#17211D]">Current Cart</h2>
+                    <span className="bg-[#DCEDE6] text-[#125E45] text-xs font-semibold px-2 py-0.5 rounded-full">
+                      {totalCartMetres} items
+                    </span>
+                  </div>
+
+                  {wholesaleCart.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm('Clear active wholesale invoice?')) {
+                          clearWholesaleCart();
+                        }
+                      }}
+                      className="p-1.5 rounded-lg border border-[#DCE3E0] text-[#8A9590] hover:text-[#17211D] hover:bg-[#F0F4F2] transition-colors cursor-pointer"
+                      title="Clear Cart"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
-              ) : (
-                wholesaleCart.map(item => {
-                  const itemSeason = item.product.seasonCategory || (['Khaddar', 'Wash & Wear'].includes(item.product.category) ? 'Winter' : 'Summer');
-                  const unitDiscount = item.discountPerUnit ?? item.product.wholesaleDiscount ?? 0;
-                  const netUnit = Math.max(0, item.price - unitDiscount);
 
-                  return (
-                    <div key={item.product.id} className="p-3 bg-slate-50/70 border border-slate-200/80 rounded-xl space-y-2 mb-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-xs font-bold text-slate-900 leading-tight truncate">
-                              {item.product.name}
-                            </span>
-                            <span
-                              className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${
-                                itemSeason === 'Winter'
-                                  ? 'bg-blue-50 text-blue-700 border-blue-200'
-                                  : 'bg-amber-50 text-amber-700 border-amber-200'
-                              }`}
-                            >
-                              {itemSeason === 'Winter' ? '❄️ Winter' : '☀️ Summer'}
-                            </span>
-                          </div>
+                {/* Customer Section */}
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-[#17211D] block">
+                    Customer & Wholesale Client
+                  </label>
+                  <div className="border border-[#DCE3E0] rounded-xl px-3 py-2 text-xs text-[#17211D] bg-[#F0F4F2] flex items-center justify-between">
+                    <span className="font-semibold truncate">
+                      {selectedCustomer ? (selectedCustomer.businessName || selectedCustomer.name) : customerName.trim() || 'Walk-in Customer'}
+                    </span>
+                    {(selectedCustomer || customerName.trim()) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedCustomer(null);
+                          setCustomerName('');
+                        }}
+                        className="text-xs font-semibold text-[#125E45] hover:underline cursor-pointer ml-2 shrink-0"
+                      >
+                        Change
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between text-xs pt-0.5">
+                    <span className="text-[#66726D] truncate">
+                      {customerName.trim() ? customerName : 'No customer specified'} {selectedCustomer ? `· WC-${selectedCustomer.id.slice(0, 4)}` : ''}
+                    </span>
+                    <span className="text-[#8A9590] font-mono text-[10px]">
+                      {nextInvoiceNumber}
+                    </span>
+                  </div>
+                </div>
+              </div>
 
-                          {/* Wholesale Price & Discount Breakdown */}
-                          {/* Wholesale Price & Discount Breakdown */}
-                          <div className="mt-1 space-y-0.5 text-[11px] font-mono">
-                            <div className="text-slate-600">
-                              {item.quantity > 1 ? 'Unit Wholesale Price:' : 'Wholesale Price:'}{' '}
-                              <span className="font-semibold text-slate-900">Rs. {item.price.toLocaleString()}</span>
-                              <span className="text-[10px] text-slate-400 font-sans ml-1">/{item.product.unit}</span>
-                            </div>
-                            {unitDiscount > 0 ? (
-                              <div className="text-emerald-600 font-semibold">
-                                {item.quantity > 1 ? 'Wholesale Discount/unit:' : 'Wholesale Discount:'} − Rs. {unitDiscount.toLocaleString()}
-                              </div>
-                            ) : null}
-                            {(item.extraDiscountRupees || 0) > 0 ? (
-                              <div className="text-cyan-700 font-semibold">
-                                Extra Discount (Rs.): − Rs. {(item.extraDiscountRupees || 0).toLocaleString()}
-                              </div>
-                            ) : null}
-                            <div className="text-cyan-900 font-bold text-[10px]">
-                              Final Unit Price: Rs. {Math.max(0, item.price - unitDiscount - (item.extraDiscountRupees || 0)).toLocaleString()}
-                            </div>
-                          </div>
+              {/* Cart Items List - Internally Scrollable with comfortable height */}
+              <div className="flex-1 overflow-y-auto pr-1 space-y-2.5 my-2 min-h-[200px] max-h-[340px]">
+                {wholesaleCart.length === 0 ? (
+                  <div className="py-6 text-center text-[#8A9590] text-xs space-y-1.5">
+                    <ShoppingBag className="w-7 h-7 text-[#C7D2CD] mx-auto" />
+                    <p className="font-semibold text-[#17211D]">Cart is empty</p>
+                    <p className="text-[11px] text-[#66726D]">
+                      Scan fabric barcode or click [+] on a fabric to add to wholesale invoice.
+                    </p>
+                  </div>
+                ) : (
+                  wholesaleCart.map(item => {
+                    const unitPrice = Math.max(
+                      0,
+                      item.price - (item.discountPerUnit || 0) - (item.extraDiscountRupees || 0)
+                    );
+
+                    return (
+                      <div
+                        key={item.product.id}
+                        className="space-y-1.5 pb-3 border-b border-[#DCE3E0]/60 last:border-b-0"
+                      >
+                        {/* Line 1: Title + Red Trash Button */}
+                        <div className="flex items-start justify-between gap-2">
+                          <h4 className="font-bold text-xs text-[#17211D] leading-tight">
+                            {item.product.name}
+                          </h4>
+                          <button
+                            type="button"
+                            onClick={() => removeFromWholesaleCart(item.product.id)}
+                            className="text-[#C23D45] hover:opacity-80 p-0.5 cursor-pointer shrink-0 transition-opacity"
+                            title="Remove item"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
 
-                        <button
-                          onClick={() => removeFromWholesaleCart(item.product.id)}
-                          className="text-slate-400 hover:text-rose-500 p-1 rounded"
-                          title="Remove Line"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-
-                      {/* Quantity & Extra Rs. & Line Total */}
-                      <div className="flex items-center justify-between pt-1.5 border-t border-slate-200/60 text-xs">
-                        <div className="flex items-center gap-1 border border-slate-200 rounded-lg p-0.5 bg-white">
-                          <button
-                            onClick={() => updateWholesaleQuantity(item.product.id, item.quantity - 1)}
-                            className="w-5 h-5 flex items-center justify-center rounded text-slate-600 hover:bg-slate-100"
-                          >
-                            <Minus className="w-3 h-3" />
-                          </button>
-                          <span className="font-bold text-slate-900 text-xs px-2 min-w-[24px] text-center font-mono">
-                            {item.quantity}
+                        {/* Line 2: Spec / SKU & Unit Rate */}
+                        <div className="flex items-center justify-between text-[11px] text-[#66726D]">
+                          <span>
+                            {item.product.sku} · {item.quantity} {item.product.unit || 'm'}
                           </span>
-                          <button
-                            onClick={() => updateWholesaleQuantity(item.product.id, item.quantity + 1)}
-                            className="w-5 h-5 flex items-center justify-center rounded text-slate-600 hover:bg-slate-100"
-                          >
-                            <Plus className="w-3 h-3" />
-                          </button>
+                          <span className="text-[#8A9590] text-[10px]">
+                            Rs {unitPrice.toLocaleString()}
+                          </span>
                         </div>
 
-                        <div className="flex items-center gap-1">
-                          <span className="text-[10px] text-slate-500 font-semibold">Extra (Rs.):</span>
-                          <div className="relative flex items-center">
-                            <span className="text-[10px] text-slate-400 absolute left-1.5 font-mono">Rs.</span>
+                        {/* Line 3: Quantity Controls + Line Total */}
+                        <div className="flex items-center justify-between pt-1">
+                          <div className="border border-[#DCE3E0] rounded-lg flex items-center gap-2 px-2 py-0.5 text-xs text-[#17211D] bg-white">
+                            <button
+                              type="button"
+                              onClick={() => updateWholesaleQuantity(item.product.id, Math.max(1, item.quantity - 1))}
+                              disabled={item.quantity <= 1}
+                              className="text-[#66726D] hover:text-[#17211D] font-bold text-sm cursor-pointer disabled:opacity-30"
+                            >
+                              −
+                            </button>
                             <input
                               type="number"
-                              min="0"
-                              value={item.extraDiscountRupees || ''}
-                              placeholder="0"
-                              onChange={e =>
-                                updateWholesaleExtraDiscount(item.product.id, Math.max(0, parseFloat(e.target.value) || 0))
-                              }
-                              className="w-20 h-6 pl-6 pr-1 text-right text-xs border border-slate-200 rounded bg-white focus:bg-white focus:outline-none focus:ring-1 focus:ring-cyan-500 font-mono font-bold text-cyan-800"
+                              min="1"
+                              max={item.product.stock}
+                              value={item.quantity}
+                              onChange={e => {
+                                const raw = e.target.value;
+                                if (raw === '') return;
+                                const num = parseInt(raw, 10);
+                                if (!isNaN(num)) {
+                                  const clamped = Math.max(1, Math.min(item.product.stock, num));
+                                  updateWholesaleQuantity(item.product.id, clamped);
+                                }
+                              }}
+                              className="font-bold min-w-[20px] max-w-[42px] text-center text-xs text-[#17211D] bg-transparent focus:outline-none"
                             />
+                            <button
+                              type="button"
+                              onClick={() => updateWholesaleQuantity(item.product.id, Math.min(item.product.stock, item.quantity + 1))}
+                              disabled={item.quantity >= item.product.stock}
+                              className="text-[#66726D] hover:text-[#17211D] font-bold text-sm cursor-pointer disabled:opacity-30"
+                            >
+                              +
+                            </button>
                           </div>
-                        </div>
 
-                        <div className="text-right">
-                          <div className="text-[10px] text-slate-400 font-medium">
-                            {item.quantity > 1 ? 'Line Total:' : 'Total:'}
-                          </div>
-                          <div className="text-xs font-black text-slate-900 font-mono">
-                            Rs. {item.lineTotal.toLocaleString()}
+                          <div className="font-bold text-sm text-[#17211D]">
+                            Rs {item.lineTotal.toLocaleString()}
                           </div>
                         </div>
                       </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Bottom Financial Totals & Checkout Button (Compact Fixed matching Retail) */}
+              <div className="shrink-0 pt-2 border-t border-[#DCE3E0] space-y-2 bg-white">
+                <div className="space-y-1 text-xs">
+                  <div className="flex items-center justify-between text-[#66726D]">
+                    <span>Subtotal</span>
+                    <span className="font-medium text-[#17211D]">
+                      Rs {wholesaleSubtotal.toLocaleString()}
+                    </span>
+                  </div>
+
+                  {wholesaleDiscountTotal > 0 && (
+                    <div className="flex items-center justify-between text-[#66726D]">
+                      <span>Discount</span>
+                      <span className="font-semibold text-[#16835B]">
+                        − Rs {wholesaleDiscountTotal.toLocaleString()}
+                      </span>
                     </div>
-                  );
-                })
-              )}
-            </div>
+                  )}
 
-            {/* Calculations & Submit Button */}
-            <div className="p-4 border-t border-slate-200 bg-slate-50 space-y-2.5 text-xs">
-              <div className="flex justify-between text-slate-600">
-                <span>Subtotal:</span>
-                <span className="font-mono font-bold">Rs. {wholesaleSubtotal.toLocaleString()}</span>
-              </div>
-              {wholesaleDiscountTotal > 0 && (
-                <div className="flex justify-between text-emerald-700 font-semibold">
-                  <span>Total Wholesale Discounts:</span>
-                  <span className="font-mono font-bold">− Rs. {wholesaleDiscountTotal.toLocaleString()}</span>
+                  {wholesaleTaxAmount > 0 && (
+                    <div className="flex items-center justify-between text-[#66726D]">
+                      <span>Tax ({wholesaleTaxRate}%)</span>
+                      <span className="font-semibold text-[#17211D]">
+                        Rs {wholesaleTaxAmount.toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="border-t border-[#DCE3E0] pt-1.5 mt-1 flex items-center justify-between">
+                    <span className="font-semibold text-sm text-[#17211D]">Total</span>
+                    <span className="font-black text-xl text-[#17211D]">
+                      Rs {finalWholesaleGrandTotal.toLocaleString()}
+                    </span>
+                  </div>
                 </div>
-              )}
-              <div className="flex justify-between text-sm font-black text-slate-900 pt-1.5 border-t border-slate-200">
-                <span>FINAL TOTAL:</span>
-                <span className="text-cyan-800 font-mono text-base font-black">Rs. {wholesaleGrandTotal.toLocaleString()}</span>
-              </div>
 
-              <Button
-                variant="accent"
-                size="lg"
-                onClick={handleOpenCheckout}
-                disabled={wholesaleCart.length === 0 || (!customerName.trim() && !selectedCustomer)}
-                className="w-full mt-2 font-bold gap-2 text-sm shadow-md"
-              >
-                Checkout Wholesale Order <ArrowRight className="w-4 h-4" />
-              </Button>
+                {/* Primary Proceed to Tender Button (F8) */}
+                <button
+                  type="button"
+                  onClick={handleOpenCheckout}
+                  disabled={wholesaleCart.length === 0}
+                  className="w-full bg-[#125E45] hover:bg-[#197A5A] disabled:bg-slate-300 text-white py-2.5 px-3.5 rounded-xl font-bold text-xs flex items-center justify-between transition-colors shadow-2xs cursor-pointer active:scale-[0.99] disabled:cursor-not-allowed"
+                >
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="w-4 h-4" />
+                    <span>Proceed to Tender</span>
+                  </div>
+                  <span className="px-1.5 py-0.5 bg-white/20 rounded text-xs font-mono font-medium">
+                    F8
+                  </span>
+                </button>
+
+                <p className="text-[10px] text-[#8A9590] text-center">
+                  Cash, card, bank transfer, or credit / khata settlement
+                </p>
+              </div>
             </div>
           </div>
         </div>
+
+        {/* ============================================================== */}
+        {/* 4. MODALS & WORKFLOWS */}
+        {/* ============================================================== */}
 
         {/* MODAL: Wholesale Settlement & Payment Modes */}
         <Modal
@@ -952,49 +1303,34 @@ export default function WholesalePOSPage() {
           description="Confirm billing details, payment method, and settlement status."
           maxWidth="2xl"
         >
-          <div className="space-y-4 text-xs">
-            {/* Customer & Amount Summary with Detailed Breakdown */}
-            <div className="p-4 rounded-2xl bg-cyan-50/80 border border-cyan-200 space-y-2">
-              <div className="flex items-center justify-between text-xs text-slate-600">
-                <span>Wholesale Subtotal:</span>
-                <span className="font-mono font-bold text-slate-900">Rs. {wholesaleSubtotal.toLocaleString()}</span>
+          <div className="space-y-4 text-xs select-none">
+            {/* Net Due Header */}
+            <div className="p-4 bg-[#F0F4F2] rounded-2xl border border-[#DCE3E0] flex items-center justify-between">
+              <div>
+                <span className="text-xs text-[#66726D]">Net Amount Due:</span>
+                <div className="text-2xl font-black text-[#17211D]">
+                  Rs. {finalWholesaleGrandTotal.toLocaleString()}
+                </div>
               </div>
-              {wholesaleDiscountTotal > 0 && (
-                <div className="flex items-center justify-between text-xs text-emerald-700">
-                  <span>Total Wholesale Discounts:</span>
-                  <span className="font-mono font-bold">− Rs. {wholesaleDiscountTotal.toLocaleString()}</span>
-                </div>
-              )}
-              <div className="flex items-center justify-between pt-2 border-t border-cyan-200/80">
-                <div>
-                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">
-                    Invoice Net Payable
-                  </span>
-                  <div className="text-2xl font-black text-cyan-950 font-mono mt-0.5">
-                    Rs. {wholesaleGrandTotal.toLocaleString()}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <span className="text-slate-500 font-medium">Billed To:</span>
-                  <div className="font-bold text-slate-900 text-sm">
-                    {selectedCustomer ? (selectedCustomer.businessName || selectedCustomer.name) : customerName.trim()}
-                  </div>
-                  <div className="text-[11px] text-slate-600">
-                    Customer: <strong>{customerName.trim() || (selectedCustomer?.name ?? '')}</strong>
-                    {selectedCustomer?.city ? ` • City: ${selectedCustomer.city}` : ''}
-                  </div>
+              <div className="text-right">
+                <span className="bg-[#DCEDE6] text-[#125E45] text-xs font-semibold px-2.5 py-1 rounded-full inline-block mb-1">
+                  Wholesale Counter
+                </span>
+                <div className="text-[11px] text-[#66726D]">
+                  {selectedCustomer ? (selectedCustomer.businessName || selectedCustomer.name) : customerName.trim() || 'Walk-in Customer'}
                 </div>
               </div>
             </div>
 
             {/* Payment Method Selector */}
-            <div>
-              <label className="block text-xs font-bold text-slate-800 mb-1.5">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-[#17211D] block">
                 Settlement Method
               </label>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {(['Cash', 'Bank Transfer', 'Card', 'Credit/Khata'] as PaymentMethod[]).map(pm => {
                   const isCardDisabled = pm === 'Card' && !isWholesaleTerminalEnabled;
+                  const isSelected = paymentMethod === pm;
                   return (
                     <button
                       key={pm}
@@ -1004,25 +1340,25 @@ export default function WholesalePOSPage() {
                         if (isCardDisabled) {
                           toast({
                             title: 'Card Terminal Disabled',
-                            description: 'Wholesale Card Terminal is disabled in Store Settings. Invoice cannot be submitted via card.',
+                            description: 'Wholesale Card Terminal is disabled in Store Settings.',
                             type: 'warning',
                           });
                         }
                         if (pm === 'Credit/Khata') {
                           setAmountPaidNow(0);
                         } else {
-                          setAmountPaidNow(wholesaleGrandTotal);
+                          setAmountPaidNow(Math.round(finalWholesaleGrandTotal));
                         }
                         if (pm === 'Cash') {
-                          setCashReceived(wholesaleGrandTotal);
+                          setCashReceived(Math.round(finalWholesaleGrandTotal));
                         }
                       }}
-                      className={`flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl border font-bold text-xs transition-all ${
-                        paymentMethod === pm
+                      className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1.5 text-xs font-bold transition-all cursor-pointer ${
+                        isSelected
                           ? isCardDisabled
-                            ? 'border-rose-400 bg-rose-50 text-rose-800'
-                            : 'border-cyan-600 bg-cyan-600 text-white shadow-sm shadow-cyan-600/20'
-                          : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                            ? 'bg-rose-50 text-rose-800 border-rose-300'
+                            : 'bg-[#DCEDE6] text-[#125E45] border-[#125E45]'
+                          : 'bg-white border-[#DCE3E0] text-[#66726D] hover:bg-[#F0F4F2]'
                       }`}
                     >
                       {pm === 'Cash' && <Banknote className="w-4 h-4" />}
@@ -1043,177 +1379,111 @@ export default function WholesalePOSPage() {
 
             {/* CASH WORKFLOW & CASH DRAWER INTEGRATION */}
             {paymentMethod === 'Cash' && (
-              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="font-bold text-slate-800">CASH TENDERED:</span>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-slate-500">Rs.</span>
-                    <input
-                      type="number"
-                      value={cashReceived || ''}
-                      placeholder="0"
-                      onChange={e => setCashReceived(parseFloat(e.target.value) || 0)}
-                      className="w-36 h-9 px-3 text-right border border-slate-300 rounded-xl font-mono font-bold text-base text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                    />
-                  </div>
+              <div className="p-4 bg-[#F0F4F2] rounded-2xl border border-[#DCE3E0] space-y-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-[#17211D]">Cash Received</label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="Enter cash received"
+                    value={cashReceived || ''}
+                    onChange={e => setCashReceived(parseFloat(e.target.value) || 0)}
+                    className="w-full p-2.5 text-sm font-bold text-[#17211D] border border-[#DCE3E0] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#197A5A] placeholder:text-[#8A9590] bg-white"
+                  />
                 </div>
 
-                <div className="flex justify-between items-center pt-2 border-t border-slate-200">
-                  <span className="font-bold text-slate-700">CHANGE DUE (BAKAYA):</span>
-                  <span className="font-mono font-black text-base text-cyan-800">
-                    Rs. {calculatedChange.toLocaleString()}
-                  </span>
-                </div>
-
-                {isCashInsufficient && (
-                  <div className="p-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-bold flex items-center gap-1.5">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <span>Insufficient cash! Needs Rs. {(wholesaleGrandTotal - cashReceived).toLocaleString()} more.</span>
+                {/* Change Due Indicator */}
+                {cashReceived >= finalWholesaleGrandTotal && (
+                  <div className="p-3 bg-[#DCEDE6] rounded-xl text-xs flex justify-between font-bold text-[#125E45]">
+                    <span>Change Due Customer:</span>
+                    <span className="text-sm font-black">
+                      Rs. {calculatedChange.toLocaleString()}
+                    </span>
                   </div>
                 )}
-
-                {/* Cash Drawer Action */}
-                <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
-                  <div className="text-[11px] text-slate-500">
-                    Status: <span className="font-semibold text-slate-700">{isCashDrawerOpen ? 'Drawer Open' : 'Ready'}</span>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleCashDrawerWorkflow}
-                    disabled={isCashInsufficient}
-                    className="font-bold gap-1.5"
-                  >
-                    <Banknote className="w-4 h-4 text-amber-600" />
-                    <span>Open Cash Drawer</span>
-                  </Button>
-                </div>
               </div>
             )}
 
-            {/* BANK TRANSFER WORKFLOW WITH VERIFICATION */}
+            {/* BANK TRANSFER DETAILS */}
             {paymentMethod === 'Bank Transfer' && (
-              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Select Store Bank Account for Transfer
-                  </label>
-                  <select
-                    value={selectedBank?.id || ''}
-                    onChange={e => {
-                      const b = bankAccounts.find(x => x.id === e.target.value);
-                      setSelectedBank(b || null);
-                      setIsBankPaymentConfirmed(false);
-                    }}
-                    className="w-full text-xs font-semibold bg-white border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                  >
-                    {bankAccounts.map(b => (
-                      <option key={b.id} value={b.id}>
-                        {b.bankName} - {b.accountTitle} ({b.accountNumber})
-                      </option>
-                    ))}
-                  </select>
+              <div className="p-4 bg-[#F0F4F2] rounded-2xl border border-[#DCE3E0] space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-[#17211D]">Receiving Bank Account:</span>
+                  <span className="text-[10px] text-[#8A9590]">
+                    Select designated business bank
+                  </span>
                 </div>
 
-                {selectedBank && (
-                  <div className="p-3 bg-white rounded-xl border border-cyan-200 space-y-1 font-mono text-xs">
-                    <div className="flex justify-between text-slate-500 font-sans">
-                      <span>Bank Name:</span>
-                      <strong className="text-slate-900">{selectedBank.bankName}</strong>
-                    </div>
-                    <div className="flex justify-between text-slate-500 font-sans">
-                      <span>Account Title:</span>
-                      <strong className="text-slate-900">{selectedBank.accountTitle}</strong>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500 font-sans">Account Number:</span>
-                      <span className="font-bold text-slate-900">{selectedBank.accountNumber}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500 font-sans">IBAN:</span>
-                      <span className="font-bold text-slate-900">{selectedBank.iban}</span>
-                    </div>
+                {bankAccounts.length === 0 ? (
+                  <p className="text-xs text-[#C23D45]">
+                    No bank accounts configured in Store Settings.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {bankAccounts.map(b => (
+                      <div
+                        key={b.id}
+                        onClick={() => setSelectedBank(b)}
+                        className={`p-2.5 rounded-xl border text-xs cursor-pointer transition-colors ${
+                          selectedBank?.id === b.id
+                            ? 'border-[#125E45] bg-[#DCEDE6] text-[#125E45] font-bold'
+                            : 'border-[#DCE3E0] bg-white text-[#17211D] hover:bg-[#F0F4F2]'
+                        }`}
+                      >
+                        <div className="font-bold">{b.bankName}</div>
+                        <div className="text-[10px] text-[#66726D] font-mono">{b.accountNumber}</div>
+                        <div className="text-[10px] text-[#8A9590]">{b.accountTitle}</div>
+                      </div>
+                    ))}
                   </div>
                 )}
 
-                <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] space-y-2">
-                  <p>Customer must transfer from their mobile banking app and show payment proof / slip.</p>
-                  <div className="flex items-center justify-between pt-1 border-t border-amber-200/60">
-                    <span className="font-bold">Staff Verification:</span>
-                    <button
-                      type="button"
-                      onClick={() => setIsBankPaymentConfirmed(prev => !prev)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors ${
-                        isBankPaymentConfirmed
-                          ? 'bg-emerald-600 text-white shadow-xs'
-                          : 'bg-white border border-amber-300 text-amber-900 hover:bg-amber-100'
-                      }`}
-                    >
-                      {isBankPaymentConfirmed ? (
-                        <>
-                          <Check className="w-3.5 h-3.5" /> Payment Confirmed
-                        </>
-                      ) : (
-                        <span>Confirm Payment</span>
-                      )}
-                    </button>
-                  </div>
+                <div className="pt-2 border-t border-[#DCE3E0] flex items-center justify-between">
+                  <span className="text-xs text-[#66726D]">Transfer Slip Verified:</span>
+                  <button
+                    type="button"
+                    onClick={() => setIsBankPaymentConfirmed(!isBankPaymentConfirmed)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                      isBankPaymentConfirmed
+                        ? 'bg-[#125E45] text-white shadow-2xs'
+                        : 'bg-white border border-[#DCE3E0] text-[#17211D] hover:bg-[#F0F4F2]'
+                    }`}
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>{isBankPaymentConfirmed ? 'Payment Confirmed' : 'Confirm Slip Received'}</span>
+                  </button>
                 </div>
               </div>
             )}
 
             {/* CARD TERMINAL WORKFLOW */}
             {paymentMethod === 'Card' && (
-              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-800">Card Terminal Machine</span>
-                  <span
-                    className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
-                      !isWholesaleTerminalEnabled
-                        ? 'bg-rose-100 text-rose-800'
-                        : cardPaymentState === 'authorized'
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : cardPaymentState === 'failed'
-                        ? 'bg-rose-100 text-rose-800'
-                        : cardPaymentState === 'waiting_card' || cardPaymentState === 'processing'
-                        ? 'bg-cyan-100 text-cyan-800 animate-pulse'
-                        : 'bg-slate-200 text-slate-700'
-                    }`}
-                  >
-                    {!isWholesaleTerminalEnabled ? 'Disabled in Settings' : cardPaymentState}
+              <div className="p-4 bg-[#F0F4F2] rounded-2xl border border-[#DCE3E0] space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-[#17211D]">Point-of-Sale Card Terminal:</span>
+                  <span className="text-[10px] font-mono text-[#8A9590]">
+                    Status: {cardPaymentState}
                   </span>
                 </div>
 
-                {!isWholesaleTerminalEnabled && (
-                  <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs space-y-1">
-                    <p className="font-bold">Wholesale Card Terminal Disabled in Store Settings</p>
-                    <p className="text-[11px] text-rose-700 leading-relaxed">
-                      Terminal access is turned OFF. You cannot charge card payments or submit this wholesale invoice via card until enabled in Settings.
-                    </p>
-                  </div>
-                )}
-
-                {cardStatusMessage && isWholesaleTerminalEnabled && (
-                  <p className="text-xs text-slate-600 italic bg-white p-2.5 rounded-xl border border-slate-200">
+                {cardStatusMessage && (
+                  <p className="text-xs text-[#66726D] p-2.5 bg-white rounded-xl border border-[#DCE3E0]">
                     {cardStatusMessage}
                   </p>
                 )}
 
                 {cardPaymentState !== 'authorized' ? (
-                  <Button
+                  <button
                     type="button"
-                    variant="primary"
-                    size="md"
                     onClick={handleStartCardPayment}
                     disabled={!isWholesaleTerminalEnabled || cardPaymentState === 'processing' || cardPaymentState === 'waiting_card'}
-                    className="w-full font-bold gap-2"
+                    className="w-full bg-[#125E45] hover:bg-[#197A5A] disabled:bg-slate-300 text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-2 transition-colors shadow-2xs cursor-pointer disabled:cursor-not-allowed"
                   >
                     <CreditCard className="w-4 h-4" />
-                    {isWholesaleTerminalEnabled ? 'Start Card Terminal Payment' : 'Card Terminal Disabled in Settings'}
-                  </Button>
+                    <span>{isWholesaleTerminalEnabled ? 'Start Card Terminal Payment' : 'Card Terminal Disabled in Settings'}</span>
+                  </button>
                 ) : (
-                  <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 font-bold flex items-center justify-between">
+                  <div className="p-3 bg-[#DCEDE6] border border-[#125E45]/30 rounded-xl text-[#125E45] font-bold flex items-center justify-between">
                     <span>Authorized (Ref: {cardTransactionId})</span>
                     <CheckCircle2 className="w-4 h-4" />
                   </div>
@@ -1221,9 +1491,23 @@ export default function WholesalePOSPage() {
               </div>
             )}
 
+            {/* CREDIT / KHATA LEDGER WORKFLOW */}
+            {paymentMethod === 'Credit/Khata' && (
+              <div className="p-4 bg-[#F7EEDC] rounded-2xl border border-[#9A6A16]/30 space-y-2">
+                <div className="font-bold text-[#17211D] flex items-center gap-1.5">
+                  <BookOpen className="w-4 h-4 text-[#9A6A16]" />
+                  <span>Ledger Credit Charging</span>
+                </div>
+                <p className="text-[11px] text-[#66726D]">
+                  Net invoice amount Rs. {wholesaleGrandTotal.toLocaleString()} will be charged directly to the account of{' '}
+                  <strong>{selectedCustomer?.businessName || selectedCustomer?.name}</strong>.
+                </p>
+              </div>
+            )}
+
             {/* Notes / PO Reference */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+            <div className="space-y-1">
+              <label className="block text-xs font-semibold text-[#17211D]">
                 Client PO # / Vehicle Dispatch Builty Reference
               </label>
               <input
@@ -1231,29 +1515,23 @@ export default function WholesalePOSPage() {
                 placeholder="e.g. Dispatched via Bilal Cargo Builty # 4920"
                 value={notes}
                 onChange={e => setNotes(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                className="w-full px-3 py-2 border border-[#DCE3E0] rounded-xl text-xs bg-white focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
               />
             </div>
 
             {/* Actions */}
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#DCE3E0]">
               <Button variant="outline" size="md" onClick={() => setIsCheckoutOpen(false)}>
                 Cancel
               </Button>
-              <Button
-                variant="accent"
-                size="md"
+              <button
+                type="button"
                 onClick={handleCompleteWholesaleSale}
-                disabled={
-                  (paymentMethod === 'Cash' && isCashInsufficient) ||
-                  (paymentMethod === 'Bank Transfer' && !isBankPaymentConfirmed) ||
-                  (paymentMethod === 'Card' && cardPaymentState !== 'authorized')
-                }
-                className="gap-2 font-bold shadow-sm"
+                className="inline-flex items-center justify-center font-bold rounded-xl px-5 py-2.5 text-xs text-white bg-[#125E45] hover:bg-[#197A5A] active:scale-[0.98] transition-all shadow-2xs cursor-pointer gap-2"
               >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>DONE PAYMENT & Save Invoice</span>
-              </Button>
+                <CheckCircle2 className="w-4 h-4 text-white" />
+                <span>Complete Sale & Save Invoice</span>
+              </button>
             </div>
           </div>
         </Modal>
@@ -1272,6 +1550,12 @@ export default function WholesalePOSPage() {
             />
           )}
         </Modal>
+
+        {/* MODAL: Keyboard Shortcuts */}
+        <WholesaleKeyboardShortcutsModal
+          isOpen={isShortcutsModalOpen}
+          onClose={() => setIsShortcutsModalOpen(false)}
+        />
 
         {/* MODAL: Two Independent Bill Searches */}
         <WholesaleBillSearchModal

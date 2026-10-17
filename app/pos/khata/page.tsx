@@ -334,7 +334,7 @@ export default function KhataPOSPage() {
 
     setCardPaymentState('waiting_card');
     setCardStatusMessage('Waiting for customer card tap/insert on terminal...');
-    const result = await cardTerminalService.startCardPayment(khataGrandTotal, (state, msg) => {
+    const result = await cardTerminalService.startCardPayment(finalKhataGrandTotal, (state, msg) => {
       setCardPaymentState(state);
       setCardStatusMessage(msg);
     });
@@ -358,13 +358,37 @@ export default function KhataPOSPage() {
     }
   };
 
+  // Dynamic Tax Calculation: only shown when taxRate is set in stock/products or store settings
+  const { khataTaxAmount, khataTaxRate } = useMemo(() => {
+    const storeTaxRate = storageService.getSettings()?.defaultTaxRate || 0;
+    let taxSum = 0;
+    let taxableBase = 0;
+    khataCart.forEach(item => {
+      const rate =
+        item.product.taxRate !== undefined && item.product.taxRate !== null && item.product.taxRate > 0
+          ? item.product.taxRate
+          : storeTaxRate;
+      if (rate > 0) {
+        taxSum += (item.lineTotal * rate) / 100;
+        taxableBase += item.lineTotal;
+      }
+    });
+    const avgRate = taxableBase > 0 ? Math.round((taxSum / taxableBase) * 100) : storeTaxRate;
+    return {
+      khataTaxAmount: Math.round(taxSum),
+      khataTaxRate: avgRate,
+    };
+  }, [khataCart]);
+
+  const finalKhataGrandTotal = khataSubtotal - khataDiscountTotal + khataTaxAmount;
+
   // Complete Khata Credit Sale & Save Invoice
   const handleCompleteKhataSale = () => {
     if (!currentStaff || !selectedCustomer) return;
 
     // Validation per payment method
     if (paymentMethod === 'Cash') {
-      if (cashReceived < khataGrandTotal) {
+      if (cashReceived < finalKhataGrandTotal) {
         toast({
           title: 'Insufficient Cash Tendered',
           description: 'Cannot finalize invoice with insufficient cash received.',
@@ -404,9 +428,9 @@ export default function KhataPOSPage() {
       saleType: 'Khata',
       cartItems: khataCart,
       paymentMethod,
-      amountReceived: paymentMethod === 'Credit/Khata' ? 0 : paymentMethod === 'Cash' ? cashReceived : khataGrandTotal,
+      amountReceived: paymentMethod === 'Credit/Khata' ? 0 : paymentMethod === 'Cash' ? cashReceived : finalKhataGrandTotal,
       discountTotal: khataDiscountTotal,
-      taxTotal: 0,
+      taxTotal: khataTaxAmount,
       staffId: currentStaff.id,
       staffName: currentStaff.name,
       customer: selectedCustomer,
@@ -456,13 +480,13 @@ export default function KhataPOSPage() {
     });
   };
 
-  const calculatedChange = Math.max(0, cashReceived - khataGrandTotal);
-  const isCashInsufficient = paymentMethod === 'Cash' && cashReceived < khataGrandTotal;
+  const calculatedChange = Math.max(0, cashReceived - finalKhataGrandTotal);
+  const isCashInsufficient = paymentMethod === 'Cash' && cashReceived < finalKhataGrandTotal;
 
   // Credit Limit Calculations
   const currentBalance = selectedCustomer?.currentBalance ?? selectedCustomer?.balance ?? 0;
   const creditLimit = selectedCustomer?.creditLimit || 0;
-  const newProjectedBalance = currentBalance + khataGrandTotal;
+  const newProjectedBalance = currentBalance + finalKhataGrandTotal;
   const availableCredit = Math.max(0, creditLimit - currentBalance);
   const isLimitExceeded = creditLimit > 0 && newProjectedBalance > creditLimit;
   const excessAmount = isLimitExceeded ? newProjectedBalance - creditLimit : 0;
@@ -908,9 +932,16 @@ export default function KhataPOSPage() {
                   <span className="font-mono font-bold">− Rs. {khataDiscountTotal.toLocaleString()}</span>
                 </div>
               )}
+              {/* Dynamic Tax: Only shown when taxRate > 0 or khataTaxAmount > 0 */}
+              {khataTaxAmount > 0 && (
+                <div className="flex justify-between text-slate-600">
+                  <span>Tax ({khataTaxRate}%):</span>
+                  <span className="font-mono font-bold text-slate-900">+ Rs. {khataTaxAmount.toLocaleString()}</span>
+                </div>
+              )}
               <div className="flex justify-between text-sm font-black text-slate-900 pt-1.5 border-t border-slate-200">
                 <span>FINAL TOTAL:</span>
-                <span className="text-amber-800 font-mono text-base font-black">Rs. {khataGrandTotal.toLocaleString()}</span>
+                <span className="text-amber-800 font-mono text-base font-black">Rs. {finalKhataGrandTotal.toLocaleString()}</span>
               </div>
 
               {isLimitExceeded && (
@@ -953,13 +984,19 @@ export default function KhataPOSPage() {
                   <span className="font-mono font-bold">− Rs. {khataDiscountTotal.toLocaleString()}</span>
                 </div>
               )}
+              {khataTaxAmount > 0 && (
+                <div className="flex items-center justify-between text-xs text-slate-600 mb-1">
+                  <span>Tax ({khataTaxRate}%):</span>
+                  <span className="font-mono font-bold text-slate-900">+ Rs. {khataTaxAmount.toLocaleString()}</span>
+                </div>
+              )}
               <div className="flex items-center justify-between pt-2 border-t border-amber-200/80">
                 <div>
                   <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">
                     Total Debit Amount
                   </span>
                   <div className="text-2xl font-black text-amber-950 font-mono mt-0.5">
-                    Rs. {khataGrandTotal.toLocaleString()}
+                    Rs. {finalKhataGrandTotal.toLocaleString()}
                   </div>
                 </div>
                 {selectedCustomer && (
@@ -1020,7 +1057,7 @@ export default function KhataPOSPage() {
                         }
                         setPaymentMethod(pm);
                         if (pm === 'Cash') {
-                          setCashReceived(khataGrandTotal);
+                          setCashReceived(finalKhataGrandTotal);
                         }
                       }}
                       className={`flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl border font-bold text-xs transition-all relative ${

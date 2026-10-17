@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
 import { Button } from '@/components/ui/Button';
@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { customersService } from '@/services/customersService';
+import { salesService } from '@/services/salesService';
 import { useToast } from '@/context/ToastContext';
 import { Customer, CustomerType } from '@/types';
 
@@ -38,14 +39,50 @@ export default function CustomersCRMPage() {
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newAddress, setNewAddress] = useState('');
-  const [newCity, setNewCity] = useState('Lahore');
+  const [newCity, setNewCity] = useState('');
   const [newType, setNewType] = useState<CustomerType>('Retail');
   const [newBusiness, setNewBusiness] = useState('');
   const [newCreditLimit, setNewCreditLimit] = useState<number>(100000);
 
   useEffect(() => {
-    setCustomers(customersService.getAll());
+    const refresh = () => {
+      setCustomers(customersService.getAll());
+    };
+    refresh();
+    window.addEventListener('focus', refresh);
+    window.addEventListener('storage', refresh);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener('storage', refresh);
+    };
   }, []);
+
+  // Real-time aggregate of lifetime purchases & collections computed from bills and records
+  const customerStats = useMemo(() => {
+    const allBills = salesService.getAllBills();
+    const map = new Map<string, { purchased: number; collected: number }>();
+
+    customers.forEach(c => {
+      const custBills = allBills.filter(
+        b =>
+          b.customerId === c.id ||
+          (b.customerName && b.customerName.toLowerCase().trim() === c.name.toLowerCase().trim())
+      );
+
+      const billPurchased = custBills.reduce((acc, b) => acc + (b.grandTotal || 0), 0);
+      const billPaid = custBills.reduce(
+        (acc, b) => acc + (b.amountReceived !== undefined ? b.amountReceived : b.grandTotal || 0),
+        0
+      );
+
+      map.set(c.id, {
+        purchased: Math.max(c.totalPurchased || 0, billPurchased),
+        collected: Math.max(c.totalPaid || 0, billPaid),
+      });
+    });
+
+    return map;
+  }, [customers]);
 
   const handleAddCustomer = (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,12 +92,12 @@ export default function CustomersCRMPage() {
     }
 
     const created = customersService.add({
-      name: newName,
-      phone: newPhone || '+92 300 0000000',
-      address: newAddress || 'Local Area',
-      city: newCity || 'Lahore',
+      name: newName.trim(),
+      phone: newPhone.trim(),
+      address: newAddress.trim(),
+      city: newCity.trim(),
       type: newType,
-      businessName: newBusiness || undefined,
+      businessName: newBusiness.trim() || undefined,
       creditLimit: newType === 'Khata' ? newCreditLimit : 0,
     });
 
@@ -75,6 +112,7 @@ export default function CustomersCRMPage() {
     setNewName('');
     setNewPhone('');
     setNewAddress('');
+    setNewCity('');
     setNewBusiness('');
   };
 
@@ -212,73 +250,103 @@ export default function CustomersCRMPage() {
                         <th className="py-3 px-4">Account Type</th>
                         <th className="py-3 px-4 text-right">Credit Limit</th>
                         <th className="py-3 px-4 text-right">Total Lifetime Purchases</th>
+                        <th className="py-3 px-4 text-right">Lifetime Collection</th>
                         <th className="py-3 px-4 text-right">Current Balance Owed</th>
                         <th className="py-3 px-4 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {filteredCustomers.map(c => (
-                        <tr key={c.id} className="hover:bg-slate-50/60 transition-colors">
-                          <td className="py-3 px-4 max-w-xs">
-                            <div className="font-bold text-slate-900 leading-tight">{c.name}</div>
-                            {c.businessName && (
-                              <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1">
-                                <Building className="w-3 h-3 text-slate-400 shrink-0" />
-                                {c.businessName}
-                              </div>
-                            )}
-                          </td>
+                      {filteredCustomers.map(c => {
+                        const stats = customerStats.get(c.id) || {
+                          purchased: c.totalPurchased || 0,
+                          collected: c.totalPaid || 0,
+                        };
 
-                          <td className="py-3 px-4">
-                            <div className="font-mono text-slate-700">{c.phone}</div>
-                            <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1">
-                              <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
-                              {c.city}
-                            </div>
-                          </td>
+                        const hasEnteredLocation = Boolean(
+                          (c.city?.trim() || c.address?.trim()) &&
+                            c.city?.trim() !== 'Local' &&
+                            c.city?.trim() !== 'Local Area' &&
+                            c.address?.trim() !== 'Local Area' &&
+                            c.address?.trim() !== 'Counter Walk-in / Wholesale Collector' &&
+                            c.address?.trim() !== 'Main Cloth Market'
+                        );
 
-                          <td className="py-3 px-4">
-                            <Badge
-                              size="sm"
-                              variant={
-                                c.type === 'Khata' ? 'warning' : c.type === 'Wholesale' ? 'cyan' : 'secondary'
-                              }
-                            >
-                              {c.type}
-                            </Badge>
-                          </td>
+                        return (
+                          <tr key={c.id} className="hover:bg-slate-50/60 transition-colors">
+                            <td className="py-3 px-4 max-w-xs">
+                              <div className="font-bold text-slate-900 leading-tight">{c.name}</div>
+                              {c.businessName && (
+                                <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1">
+                                  <Building className="w-3 h-3 text-slate-400 shrink-0" />
+                                  {c.businessName}
+                                </div>
+                              )}
+                            </td>
 
-                          <td className="py-3 px-4 text-right font-mono text-slate-600">
-                            {c.creditLimit > 0 ? `Rs. ${c.creditLimit.toLocaleString()}` : '—'}
-                          </td>
+                            <td className="py-3 px-4">
+                              {c.phone?.trim() && c.phone !== '+92 300 0000000' ? (
+                                <div className="font-mono text-slate-700 flex items-center gap-1.5">
+                                  <Phone className="w-3 h-3 text-slate-400 shrink-0" />
+                                  <span>{c.phone}</span>
+                                </div>
+                              ) : (
+                                <span className="text-slate-400 text-[11px]">—</span>
+                              )}
+                              {hasEnteredLocation && (
+                                <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-1">
+                                  <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                                  <span>{[c.city?.trim(), c.address?.trim()].filter(Boolean).join(', ')}</span>
+                                </div>
+                              )}
+                            </td>
 
-                          <td className="py-3 px-4 text-right font-semibold text-slate-900">
-                            Rs. {c.totalPurchased.toLocaleString()}
-                          </td>
+                            <td className="py-3 px-4">
+                              <Badge
+                                size="sm"
+                                variant={
+                                  c.type === 'Khata' ? 'warning' : c.type === 'Wholesale' ? 'cyan' : 'secondary'
+                                }
+                              >
+                                {c.type}
+                              </Badge>
+                            </td>
 
-                          <td className="py-3 px-4 text-right font-black text-xs">
-                            {c.currentBalance > 0 ? (
-                              <span className="text-rose-600">
-                                Rs. {c.currentBalance.toLocaleString()}
-                              </span>
-                            ) : (
-                              <span className="text-emerald-600 font-semibold">Cleared</span>
-                            )}
-                          </td>
+                            <td className="py-3 px-4 text-right font-mono text-slate-600">
+                              {c.creditLimit > 0 ? `Rs. ${c.creditLimit.toLocaleString()}` : '—'}
+                            </td>
 
-                          <td className="py-3 px-4 text-right">
-                            {c.type === 'Khata' ? (
-                              <Link href={`/customers/khata?id=${c.id}`} prefetch={false}>
-                                <Button size="sm" variant="outline" className="gap-1 text-[11px] h-7">
-                                  <BookOpen className="w-3 h-3" /> Ledger
-                                </Button>
-                              </Link>
-                            ) : (
-                              <span className="text-slate-400 text-[11px]">—</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
+                            <td className="py-3 px-4 text-right font-semibold text-slate-900">
+                              Rs. {stats.purchased.toLocaleString()}
+                            </td>
+
+                            <td className="py-3 px-4 text-right font-semibold text-emerald-700">
+                              Rs. {stats.collected.toLocaleString()}
+                            </td>
+
+                            <td className="py-3 px-4 text-right font-black text-xs">
+                              {c.currentBalance > 0 ? (
+                                <span className="text-rose-600">
+                                  Rs. {c.currentBalance.toLocaleString()}
+                                </span>
+                              ) : (
+                                <span className="text-emerald-600 font-semibold">Cleared</span>
+                              )}
+                            </td>
+
+                            <td className="py-3 px-4 text-right">
+                              {c.type === 'Khata' ? (
+                                <Link href={`/customers/khata?id=${c.id}`} prefetch={false}>
+                                  <Button size="sm" variant="outline" className="gap-1 text-[11px] h-7">
+                                    <BookOpen className="w-3 h-3" /> Ledger
+                                  </Button>
+                                </Link>
+                              ) : (
+                                <span className="text-slate-400 text-[11px]">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -309,21 +377,19 @@ export default function CustomersCRMPage() {
 
               <div>
                 <Input
-                  label="Phone / Mobile Number *"
+                  label="Phone / Mobile Number (Optional)"
                   placeholder="e.g. +92 300 1234567"
                   value={newPhone}
                   onChange={e => setNewPhone(e.target.value)}
-                  required
                 />
               </div>
 
               <div>
                 <Input
-                  label="City *"
+                  label="City (Optional)"
                   placeholder="e.g. Lahore or Faisalabad"
                   value={newCity}
                   onChange={e => setNewCity(e.target.value)}
-                  required
                 />
               </div>
 
@@ -364,7 +430,7 @@ export default function CustomersCRMPage() {
 
               <div className="sm:col-span-2">
                 <Input
-                  label="Market Address"
+                  label="Market Address (Optional)"
                   placeholder="e.g. Shop # 45, Azam Cloth Market"
                   value={newAddress}
                   onChange={e => setNewAddress(e.target.value)}

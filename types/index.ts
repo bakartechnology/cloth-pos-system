@@ -31,6 +31,7 @@ export interface Product {
   wholesalePrice: number;
   khataPrice?: number;
   costPrice?: number;
+  taxRate?: number;
   retailDiscount?: number;
   wholesaleDiscount?: number;
   khataDiscount?: number;

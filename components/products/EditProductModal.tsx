@@ -41,6 +41,7 @@ export function EditProductModal({
   const [retailDiscount, setRetailDiscount] = useState<number>(0);
   const [wholesaleDiscount, setWholesaleDiscount] = useState<number>(0);
   const [khataDiscount, setKhataDiscount] = useState<number>(0);
+  const [taxRate, setTaxRate] = useState<number>(0);
   const [stock, setStock] = useState<number>(0);
   const [minStockAlert, setMinStockAlert] = useState<number>(5);
   const [supplier, setSupplier] = useState('');
@@ -64,6 +65,7 @@ export function EditProductModal({
       setRetailDiscount(product.retailDiscount || 0);
       setWholesaleDiscount(product.wholesaleDiscount || 0);
       setKhataDiscount(product.khataDiscount || 0);
+      setTaxRate(product.taxRate || 0);
       setStock(product.stock || 0);
       setMinStockAlert(product.minStockAlert || 5);
       setSupplier(product.supplier || '');
@@ -128,6 +130,7 @@ export function EditProductModal({
       retailDiscount: Math.max(0, retailDiscount),
       wholesaleDiscount: Math.max(0, wholesaleDiscount),
       khataDiscount: Math.max(0, khataDiscount),
+      taxRate: Math.max(0, taxRate),
       stock: newStock,
       minStockAlert: Math.max(1, minStockAlert),
       supplier: supplier.trim(),
@@ -421,8 +424,8 @@ export function EditProductModal({
           </div>
         </div>
 
-        {/* Supplier & Subcategory */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Supplier, Subcategory & Tax */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <Input
               label="Supplier / Mill"
@@ -439,7 +442,18 @@ export function EditProductModal({
               placeholder="e.g. Luxury Digital Print"
             />
           </div>
-          <div className="sm:col-span-2">
+          <div>
+            <Input
+              label="Tax Rate (%)"
+              type="number"
+              min="0"
+              max="100"
+              value={taxRate}
+              onChange={e => setTaxRate(parseFloat(e.target.value) || 0)}
+              placeholder="0 (Tax free if 0)"
+            />
+          </div>
+          <div className="sm:col-span-3">
             <Input
               label="Fabric Description"
               value={description}

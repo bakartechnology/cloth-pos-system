@@ -71,15 +71,15 @@ class WholesaleSessionService {
       const parsed = JSON.parse(raw) as WholesaleSessionDraft;
       if (!parsed) return null;
 
-      // Validate that it has real content
+      // Validate that it has real cart items to resume
       const hasItems = Array.isArray(parsed.cartItems) && parsed.cartItems.length > 0;
-      const hasCustomer = Boolean(parsed.customerName?.trim());
-      const hasClient = Boolean(parsed.selectedClient);
 
-      if (hasItems || hasCustomer || hasClient) {
+      if (hasItems) {
         return parsed;
       }
 
+      // If no items in cart, do not prompt resume - clear ghost draft
+      this.clearDraft(staffId);
       return null;
     } catch (err) {
       console.warn('Failed to parse Wholesale POS draft, clearing corrupt entry:', err);

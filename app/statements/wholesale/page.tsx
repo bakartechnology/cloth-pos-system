@@ -24,6 +24,7 @@ import {
 import { salesService } from '@/services/salesService';
 import { retentionService } from '@/services/retentionService';
 import { Bill } from '@/types';
+import { WholesaleStatementPrint } from '@/components/print/WholesaleStatementPrint';
 
 export default function WholesaleStatementPage() {
   const [bills, setBills] = useState<Bill[]>([]);
@@ -32,6 +33,7 @@ export default function WholesaleStatementPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedYear, setSelectedYear] = useState<string>('All');
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
   const retentionYears = useMemo(() => retentionService.getActiveRetentionYears(), []);
 
@@ -110,9 +112,7 @@ export default function WholesaleStatementPage() {
               <Button
                 variant="outline"
                 size="md"
-                onClick={() => {
-                  if (typeof window !== 'undefined') window.print();
-                }}
+                onClick={() => setIsPrintModalOpen(true)}
                 className="gap-2 font-semibold"
               >
                 <Printer className="w-4 h-4 text-cyan-600" /> Print Statement
@@ -459,6 +459,30 @@ export default function WholesaleStatementPage() {
               </div>
             )}
           </Modal>
+
+          {/* Modal: Wholesale Statement Print Preview & Direct Print */}
+          <Modal
+            isOpen={isPrintModalOpen}
+            onClose={() => setIsPrintModalOpen(false)}
+            title="Print Wholesale Statement"
+            maxWidth="4xl"
+          >
+            <WholesaleStatementPrint
+              bills={filteredBills}
+              activeTab={activeTab}
+              dateRangeLabel={selectedYear === 'All' ? '5-Year Rolling History' : `Year: ${selectedYear}`}
+              onClose={() => setIsPrintModalOpen(false)}
+            />
+          </Modal>
+
+          {/* Dedicated print container: ensures statement is NEVER blank in print preview */}
+          <div className="hidden print:block">
+            <WholesaleStatementPrint
+              bills={filteredBills}
+              activeTab={activeTab}
+              dateRangeLabel={selectedYear === 'All' ? '5-Year Rolling History' : `Year: ${selectedYear}`}
+            />
+          </div>
         </div>
       </AppShell>
     </ProtectedRoute>

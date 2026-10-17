@@ -210,8 +210,11 @@ export const salesService = {
         });
       } else {
         const currentPurchased = params.customer.totalPurchased || 0;
+        const currentPaid = params.customer.totalPaid || 0;
+        const paidOnThisBill = params.amountReceived !== undefined ? params.amountReceived : grandTotal;
         customersService.update(params.customer.id, {
           totalPurchased: currentPurchased + grandTotal,
+          totalPaid: currentPaid + paidOnThisBill,
           lastTransactionDate: new Date().toISOString().split('T')[0],
         });
       }

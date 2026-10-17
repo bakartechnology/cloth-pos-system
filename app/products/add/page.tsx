@@ -38,6 +38,7 @@ export default function AddProductPage() {
   const [retailDiscount, setRetailDiscount] = useState<number>(0);
   const [wholesaleDiscount, setWholesaleDiscount] = useState<number>(0);
   const [khataDiscount, setKhataDiscount] = useState<number>(0);
+  const [taxRate, setTaxRate] = useState<number>(0);
   const [initialStock, setInitialStock] = useState<number>(30);
   const [minStockAlert, setMinStockAlert] = useState<number>(8);
   const [supplier, setSupplier] = useState('Gul Ahmed Textiles');
@@ -157,6 +158,7 @@ export default function AddProductPage() {
       retailDiscount: Math.max(0, retailDiscount),
       wholesaleDiscount: Math.max(0, wholesaleDiscount),
       khataDiscount: Math.max(0, khataDiscount),
+      taxRate: Math.max(0, taxRate),
       stock: initialStock,
       minStockAlert,
       supplier: supplier || 'Local Mill',
@@ -411,6 +413,21 @@ export default function AddProductPage() {
                         Rs. {Math.max(0, khataPrice - khataDiscount).toLocaleString()}
                       </span>
                     </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                    <Input
+                      label="Tax / GST Rate (%)"
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={taxRate}
+                      onChange={e => setTaxRate(parseFloat(e.target.value) || 0)}
+                      placeholder="0 (Tax-free if 0%)"
+                    />
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      If 0%, no tax is shown or charged at POS. When set (e.g. 5% or 18%), POS calculates tax automatically.
+                    </p>
                   </div>
                 </CardContent>
               </Card>

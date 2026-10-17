@@ -24,12 +24,14 @@ import {
 import { salesService } from '@/services/salesService';
 import { retentionService } from '@/services/retentionService';
 import { Bill } from '@/types';
+import { RetailStatementPrint } from '@/components/print/RetailStatementPrint';
 
 export default function RetailStatementPage() {
   const [bills, setBills] = useState<Bill[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedYear, setSelectedYear] = useState<string>('All');
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
   const retentionYears = useMemo(() => retentionService.getActiveRetentionYears(), []);
 
@@ -93,9 +95,7 @@ export default function RetailStatementPage() {
               <Button
                 variant="outline"
                 size="md"
-                onClick={() => {
-                  if (typeof window !== 'undefined') window.print();
-                }}
+                onClick={() => setIsPrintModalOpen(true)}
                 className="gap-2 font-semibold"
               >
                 <Printer className="w-4 h-4 text-blue-600" /> Print Statement Report
@@ -393,6 +393,28 @@ export default function RetailStatementPage() {
               </div>
             )}
           </Modal>
+
+          {/* Modal: Retail Statement Print Preview & Direct Print */}
+          <Modal
+            isOpen={isPrintModalOpen}
+            onClose={() => setIsPrintModalOpen(false)}
+            title="Print Retail Statement Report"
+            maxWidth="4xl"
+          >
+            <RetailStatementPrint
+              bills={filteredBills}
+              dateRangeLabel={selectedYear === 'All' ? '5-Year Rolling History' : `Year: ${selectedYear}`}
+              onClose={() => setIsPrintModalOpen(false)}
+            />
+          </Modal>
+
+          {/* Dedicated print container: ensures statement is NEVER blank in print preview */}
+          <div className="hidden print:block">
+            <RetailStatementPrint
+              bills={filteredBills}
+              dateRangeLabel={selectedYear === 'All' ? '5-Year Rolling History' : `Year: ${selectedYear}`}
+            />
+          </div>
         </div>
       </AppShell>
     </ProtectedRoute>

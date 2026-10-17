@@ -163,6 +163,7 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
       subItems: [
         { label: 'Retail Statement', href: '/statements/retail', icon: FileText, permission: 'retail_statement_view' },
         { label: 'Wholesale Statement', href: '/statements/wholesale', icon: Receipt, permission: 'wholesale_statement_view' },
+        { label: 'Khata Ledgers (5-Yr)', href: '/customers/khata', icon: BookOpen, permission: 'customers_view' },
       ],
     },
     {

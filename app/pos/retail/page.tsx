@@ -259,6 +259,30 @@ export default function RetailPOSPage() {
     }
   };
 
+  // Dynamic Tax Calculation: only shown when taxRate is set in stock/products or store settings
+  const { retailTaxAmount, retailTaxRate } = useMemo(() => {
+    const storeTaxRate = storageService.getSettings()?.defaultTaxRate || 0;
+    let taxSum = 0;
+    let taxableBase = 0;
+    retailCart.forEach(item => {
+      const rate =
+        item.product.taxRate !== undefined && item.product.taxRate !== null && item.product.taxRate > 0
+          ? item.product.taxRate
+          : storeTaxRate;
+      if (rate > 0) {
+        taxSum += (item.lineTotal * rate) / 100;
+        taxableBase += item.lineTotal;
+      }
+    });
+    const avgRate = taxableBase > 0 ? Math.round((taxSum / taxableBase) * 100) : storeTaxRate;
+    return {
+      retailTaxAmount: Math.round(taxSum),
+      retailTaxRate: avgRate,
+    };
+  }, [retailCart]);
+
+  const finalRetailGrandTotal = retailSubtotal - retailDiscountTotal + retailTaxAmount;
+
   // Open Tender Modal
   const handleOpenCheckout = () => {
     if (retailCart.length === 0) {
@@ -276,10 +300,10 @@ export default function RetailPOSPage() {
 
   // Step: Click "Confirm Cash & Open Drawer"
   const handleConfirmCashAndOpenDrawer = () => {
-    if (parsedCashReceived < retailGrandTotal) {
+    if (parsedCashReceived < finalRetailGrandTotal) {
       toast({
         title: 'Insufficient Cash',
-        description: `Total due is Rs. ${retailGrandTotal.toLocaleString()}. Received Rs. ${parsedCashReceived.toLocaleString()}.`,
+        description: `Total due is Rs. ${finalRetailGrandTotal.toLocaleString()}. Received Rs. ${parsedCashReceived.toLocaleString()}.`,
         type: 'error',
       });
       return;
@@ -308,7 +332,7 @@ export default function RetailPOSPage() {
     }
 
     const finalAmountReceived =
-      paymentMethod === 'Cash' ? parsedCashReceived || retailGrandTotal : retailGrandTotal;
+      paymentMethod === 'Cash' ? parsedCashReceived || finalRetailGrandTotal : finalRetailGrandTotal;
 
     // Use salesService to complete sale so it logs to Retail Statements and Bill history
     const bill = salesService.completeSale({
@@ -317,7 +341,7 @@ export default function RetailPOSPage() {
       paymentMethod,
       amountReceived: finalAmountReceived,
       discountTotal: retailDiscountTotal,
-      taxTotal: 0,
+      taxTotal: retailTaxAmount,
       staffId: currentStaff.id,
       staffName: currentStaff.name,
       customerName: customerName.trim() === 'Walk-in customer' ? undefined : customerName.trim(),
@@ -861,10 +885,20 @@ export default function RetailPOSPage() {
                     </div>
                   )}
 
+                  {/* Dynamic Tax: Only shown when taxRate > 0 or retailTaxAmount > 0 */}
+                  {retailTaxAmount > 0 && (
+                    <div className="flex items-center justify-between text-[#66726D]">
+                      <span>Tax ({retailTaxRate}%)</span>
+                      <span className="font-semibold text-[#17211D]">
+                        Rs {retailTaxAmount.toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+
                   <div className="border-t border-[#DCE3E0] pt-1.5 mt-1 flex items-center justify-between">
                     <span className="font-semibold text-sm text-[#17211D]">Total</span>
                     <span className="font-black text-xl text-[#17211D]">
-                      Rs {retailGrandTotal.toLocaleString()}
+                      Rs {finalRetailGrandTotal.toLocaleString()}
                     </span>
                   </div>
                 </div>
@@ -904,7 +938,7 @@ export default function RetailPOSPage() {
                 <div>
                   <span className="text-xs text-[#66726D]">Net Amount Due:</span>
                   <div className="text-2xl font-black text-[#17211D]">
-                    Rs. {retailGrandTotal.toLocaleString()}
+                    Rs. {finalRetailGrandTotal.toLocaleString()}
                   </div>
                 </div>
                 <span className="bg-[#DCEDE6] text-[#125E45] text-xs font-semibold px-2.5 py-1 rounded-full">

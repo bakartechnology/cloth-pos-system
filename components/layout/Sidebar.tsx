@@ -301,60 +301,92 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
     return (
       <div className="flex flex-col h-full bg-white text-[#17211D] border-r border-[#DCE3E0] select-none overscroll-contain">
         {/* Brand Header */}
-        <div className="flex items-center justify-between px-4 h-16 border-b border-[#DCE3E0] shrink-0">
-          <Link
-            href="/dashboard"
-            prefetch={false}
-            onClick={() => {
-              if (isMobileDrawer) onMobileClose();
-            }}
-            className="flex items-center gap-3 overflow-hidden group"
-          >
-            <div className="w-8 h-8 rounded-lg bg-[#197A5A] flex items-center justify-center text-white shadow-2xs shrink-0 group-hover:bg-[#125E45] transition-colors">
-              <svg
-                className="w-4 h-4 fill-current"
-                viewBox="0 0 24 24"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <rect x="3" y="3" width="8" height="8" rx="2" />
-                <rect x="13" y="3" width="8" height="8" rx="2" />
-                <rect x="3" y="13" width="8" height="8" rx="2" />
-                <rect x="13" y="13" width="8" height="8" rx="2" />
-              </svg>
-            </div>
-            {!collapsed && (
-              <div className="leading-tight truncate">
-                <div className="font-bold text-sm tracking-tight text-[#17211D]">
-                  AL-NOOR FABRICS
-                </div>
-                <div className="text-[11px] text-[#66726D]">Cloth POS & Retail</div>
-              </div>
-            )}
-          </Link>
-
-          {/* Collapse button on desktop */}
-          {!isMobileDrawer && (
+        <div
+          className={`flex items-center h-16 border-b border-[#DCE3E0] shrink-0 ${
+            collapsed ? 'justify-center px-2' : 'justify-between px-4'
+          }`}
+        >
+          {collapsed ? (
+            /* Collapsed state: Centered interactive logo button to expand sidebar */
             <button
               type="button"
               onClick={toggleCollapse}
-              className="flex items-center justify-center w-8 h-8 rounded-lg text-[#66726D] hover:text-[#17211D] hover:bg-[#F0F4F2] transition-colors cursor-pointer"
-              title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              className="group relative flex items-center justify-center w-10 h-10 rounded-xl hover:bg-[#F0F4F2] transition-colors cursor-pointer"
+              title="Expand sidebar"
+              aria-label="Expand sidebar"
             >
-              {collapsed ? <PanelLeft className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+              <div className="w-8 h-8 rounded-lg bg-[#197A5A] flex items-center justify-center text-white shadow-2xs group-hover:bg-[#125E45] transition-all">
+                {/* Brand icon in normal state */}
+                <svg
+                  className="w-4 h-4 fill-current transition-all group-hover:hidden"
+                  viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <rect x="3" y="3" width="8" height="8" rx="2" />
+                  <rect x="13" y="3" width="8" height="8" rx="2" />
+                  <rect x="3" y="13" width="8" height="8" rx="2" />
+                  <rect x="13" y="13" width="8" height="8" rx="2" />
+                </svg>
+                {/* PanelLeft expand icon on hover */}
+                <PanelLeft className="w-4 h-4 hidden group-hover:block transition-all" />
+              </div>
             </button>
-          )}
+          ) : (
+            /* Expanded state: Brand link and collapse button */
+            <>
+              <Link
+                href="/dashboard"
+                prefetch={false}
+                onClick={() => {
+                  if (isMobileDrawer) onMobileClose();
+                }}
+                className="flex items-center gap-3 overflow-hidden group min-w-0"
+              >
+                <div className="w-8 h-8 rounded-lg bg-[#197A5A] flex items-center justify-center text-white shadow-2xs shrink-0 group-hover:bg-[#125E45] transition-colors">
+                  <svg
+                    className="w-4 h-4 fill-current"
+                    viewBox="0 0 24 24"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <rect x="3" y="3" width="8" height="8" rx="2" />
+                    <rect x="13" y="3" width="8" height="8" rx="2" />
+                    <rect x="3" y="13" width="8" height="8" rx="2" />
+                    <rect x="13" y="13" width="8" height="8" rx="2" />
+                  </svg>
+                </div>
+                <div className="leading-tight truncate">
+                  <div className="font-bold text-sm tracking-tight text-[#17211D]">
+                    AL-NOOR FABRICS
+                  </div>
+                  <div className="text-[11px] text-[#66726D]">Cloth POS & Retail</div>
+                </div>
+              </Link>
 
-          {/* Close button on mobile drawer */}
-          {isMobileDrawer && (
-            <button
-              type="button"
-              onClick={onMobileClose}
-              className="flex items-center justify-center w-8 h-8 rounded-lg text-[#66726D] hover:text-[#17211D] hover:bg-[#F0F4F2] transition-colors cursor-pointer"
-              aria-label="Close navigation menu"
-            >
-              <X className="w-5 h-5" />
-            </button>
+              {/* Collapse button on desktop */}
+              {!isMobileDrawer && (
+                <button
+                  type="button"
+                  onClick={toggleCollapse}
+                  className="flex items-center justify-center w-8 h-8 rounded-lg text-[#66726D] hover:text-[#17211D] hover:bg-[#F0F4F2] transition-colors cursor-pointer shrink-0"
+                  title="Collapse sidebar"
+                  aria-label="Collapse sidebar"
+                >
+                  <PanelLeftClose className="w-4 h-4" />
+                </button>
+              )}
+
+              {/* Close button on mobile drawer */}
+              {isMobileDrawer && (
+                <button
+                  type="button"
+                  onClick={onMobileClose}
+                  className="flex items-center justify-center w-8 h-8 rounded-lg text-[#66726D] hover:text-[#17211D] hover:bg-[#F0F4F2] transition-colors cursor-pointer shrink-0"
+                  aria-label="Close navigation menu"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
+            </>
           )}
         </div>
 

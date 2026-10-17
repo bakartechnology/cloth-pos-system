@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
 import { Card, CardContent } from '@/components/ui/Card';
@@ -18,9 +18,11 @@ import {
 } from 'lucide-react';
 import { salesService } from '@/services/salesService';
 import { useToast } from '@/context/ToastContext';
+import { useAuth } from '@/context/AuthContext';
 import { Bill, SaleType } from '@/types';
 
 export default function BillHistoryPage() {
+  const { currentStaff, hasPermission } = useAuth();
   const { toast } = useToast();
   const [bills, setBills] = useState<Bill[]>(() => {
     if (typeof window !== 'undefined') {
@@ -29,8 +31,55 @@ export default function BillHistoryPage() {
     return [];
   });
   const [searchQuery, setSearchQuery] = useState('');
-  const [typeFilter, setTypeFilter] = useState<'All' | SaleType>('All');
+
+  const isAdmin = currentStaff?.role === 'Admin';
+
+  // Determine allowed channels for active staff
+  const allowedChannels: SaleType[] = useMemo(() => {
+    if (isAdmin) {
+      return ['Retail', 'Wholesale', 'Khata'];
+    }
+    const list: SaleType[] = [];
+    if (hasPermission('pos_retail') || currentStaff?.role === 'Retail Cashier') {
+      list.push('Retail');
+    }
+    if (hasPermission('pos_wholesale') || currentStaff?.role === 'Wholesale Cashier') {
+      list.push('Wholesale');
+    }
+    if (hasPermission('pos_khata') || currentStaff?.role === 'Khata Staff') {
+      list.push('Khata');
+    }
+    if (list.length === 0) {
+      list.push('Retail');
+    }
+    return list;
+  }, [isAdmin, currentStaff, hasPermission]);
+
+  // Channel tabs: Admin sees All, Retail, Wholesale, Khata. Non-admin only sees their allowed channel(s)
+  const channelOptions = useMemo(() => {
+    if (isAdmin) {
+      return ['All', 'Retail', 'Wholesale', 'Khata'] as const;
+    }
+    return allowedChannels;
+  }, [isAdmin, allowedChannels]);
+
+  const [typeFilter, setTypeFilter] = useState<'All' | SaleType>(() => {
+    if (isAdmin) return 'All';
+    if (allowedChannels.length === 1) return allowedChannels[0];
+    return 'All';
+  });
+
   const [periodFilter, setPeriodFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
+
+  // Sync typeFilter if staff role/permissions change
+  useEffect(() => {
+    if (isAdmin) return;
+    if (allowedChannels.length === 1) {
+      setTypeFilter(allowedChannels[0]);
+    } else if (!allowedChannels.includes(typeFilter as SaleType)) {
+      setTypeFilter(allowedChannels[0] || 'Retail');
+    }
+  }, [isAdmin, allowedChannels, typeFilter]);
 
   // Selected Bill for View / Print Modal
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
@@ -60,7 +109,14 @@ export default function BillHistoryPage() {
   };
 
   const filteredBills = bills.filter(b => {
-    const matchesType = typeFilter === 'All' || b.saleType === typeFilter;
+    // Non-admin can only access bills in their permitted channel
+    if (!isAdmin && !allowedChannels.includes(b.saleType)) {
+      return false;
+    }
+
+    const matchesType = typeFilter === 'All' ? true : b.saleType === typeFilter;
+    if (!matchesType) return false;
+
     const q = searchQuery.toLowerCase().trim();
     const matchesQuery =
       !q ||
@@ -68,6 +124,7 @@ export default function BillHistoryPage() {
       (b.customerName && b.customerName.toLowerCase().includes(q)) ||
       b.staffName.toLowerCase().includes(q) ||
       b.items.some(i => i.productName.toLowerCase().includes(q) || i.sku.toLowerCase().includes(q));
+    if (!matchesQuery) return false;
 
     let matchesPeriod = true;
     const billDate = new Date(b.date);
@@ -83,7 +140,7 @@ export default function BillHistoryPage() {
         billDate.getMonth() === today.getMonth() && billDate.getFullYear() === today.getFullYear();
     }
 
-    return matchesType && matchesQuery && matchesPeriod;
+    return matchesPeriod;
   });
 
   return (
@@ -98,7 +155,7 @@ export default function BillHistoryPage() {
                   Billing Archive
                 </span>
                 <span className="text-xs text-slate-500 font-medium">
-                  {bills.length} historical invoices archived
+                  {filteredBills.length} historical invoices {isAdmin ? 'archived' : `(${typeFilter} only)`}
                 </span>
               </div>
               <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
@@ -124,12 +181,12 @@ export default function BillHistoryPage() {
 
               {/* Type Filter */}
               <div className="flex items-center p-0.5 bg-slate-100 rounded-lg text-xs font-semibold">
-                {(['All', 'Retail', 'Wholesale', 'Khata'] as const).map(t => (
+                {channelOptions.map(t => (
                   <button
                     key={t}
                     onClick={() => setTypeFilter(t)}
-                    className={`flex-1 py-1.5 rounded-md transition-colors ${
-                      typeFilter === t ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-600'
+                    className={`flex-1 py-1.5 px-3 rounded-md transition-colors cursor-pointer ${
+                      typeFilter === t ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
                     {t}
@@ -143,8 +200,8 @@ export default function BillHistoryPage() {
                   <button
                     key={p}
                     onClick={() => setPeriodFilter(p)}
-                    className={`flex-1 py-1.5 rounded-md capitalize transition-colors ${
-                      periodFilter === p ? 'bg-blue-600 text-white shadow-2xs font-bold' : 'text-slate-600'
+                    className={`flex-1 py-1.5 rounded-md capitalize transition-colors cursor-pointer ${
+                      periodFilter === p ? 'bg-blue-600 text-white shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
                     {p}

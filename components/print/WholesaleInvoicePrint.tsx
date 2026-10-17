@@ -80,7 +80,9 @@ export function WholesaleInvoicePrint({ bill, onClose }: WholesaleInvoicePrintPr
             </span>
             <div className="text-base font-black font-mono text-slate-900">#{bill.invoiceNumber}</div>
             <div className="text-xs text-slate-500 mt-0.5">Date: {formattedDate} ({formattedTime})</div>
-            <div className="text-xs text-slate-600 font-medium">Billing Officer: {bill.staffName}</div>
+            <div className="text-xs text-slate-600 font-medium">
+              Billing Officer: {bill.staffName}{bill.counter ? ` • Counter: ${bill.counter}` : ''}
+            </div>
           </div>
         </div>
 

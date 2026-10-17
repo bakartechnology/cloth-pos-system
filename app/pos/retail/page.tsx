@@ -41,7 +41,8 @@ import { receiptPrinterService } from '@/services/hardware/receiptPrinterService
 import { CardPaymentResponse } from '@/services/hardware/cardTerminalService';
 
 export default function RetailPOSPage() {
-  const { currentStaff } = useAuth();
+  const { currentStaff, updateCounter } = useAuth();
+  const [isCounterMenuOpen, setIsCounterMenuOpen] = useState(false);
   const { toast } = useToast();
   const {
     retailCart,
@@ -344,6 +345,7 @@ export default function RetailPOSPage() {
       taxTotal: retailTaxAmount,
       staffId: currentStaff.id,
       staffName: currentStaff.name,
+      counter: currentStaff.counter,
       customerName: customerName.trim() === 'Walk-in customer' ? undefined : customerName.trim(),
       customerPhone: customerPhone.trim() || undefined,
       cardTransactionId: params?.cardAuth?.transactionId,
@@ -408,17 +410,49 @@ export default function RetailPOSPage() {
                     CASHIER
                   </span>
                   <span className="text-xs font-bold text-[#17211D]">
-                    {currentStaff?.name || 'Ayesha Khan'}
+                    {currentStaff?.name || 'Haji Abdul Rehman'}
                   </span>
                 </div>
 
-                <div>
+                <div className="relative">
                   <span className="text-[9px] font-bold text-[#8A9590] uppercase tracking-wider block">
                     COUNTER
                   </span>
-                  <span className="text-xs font-bold text-[#17211D]">
-                    Counter 03
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsCounterMenuOpen(!isCounterMenuOpen)}
+                    className="flex items-center gap-1 text-xs font-bold text-[#17211D] hover:text-[#197A5A] transition-colors cursor-pointer group"
+                    title="Click to select / change active counter"
+                  >
+                    <span>{currentStaff?.counter || 'Counter 03'}</span>
+                    <ChevronDown className="w-3 h-3 text-[#8A9590] group-hover:text-[#197A5A] transition-transform" />
+                  </button>
+
+                  {isCounterMenuOpen && (
+                    <div className="absolute left-0 mt-1.5 w-44 bg-white rounded-xl shadow-xl border border-[#DCE3E0] p-1.5 z-40 animate-in fade-in zoom-in-95 duration-150">
+                      <div className="px-2 py-1 text-[9px] font-bold text-[#8A9590] uppercase tracking-wider">
+                        Select Counter
+                      </div>
+                      {['Counter 01', 'Counter 02', 'Counter 03', 'Counter 04', 'Accounts Desk', 'Main Office'].map(c => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => {
+                            updateCounter(c);
+                            setIsCounterMenuOpen(false);
+                            toast({ title: 'Counter Changed', description: `Terminal set to ${c}`, type: 'success' });
+                          }}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                            (currentStaff?.counter || '').startsWith(c)
+                              ? 'bg-[#DCEDE6] text-[#125E45] font-bold'
+                              : 'text-[#17211D] hover:bg-[#F0F4F2]'
+                          }`}
+                        >
+                          {c}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
@@ -34,7 +34,7 @@ import { pandisService } from '@/services/pandisService';
 import { storageService } from '@/services/storageService';
 import { WholesaleInvoicePrint } from '@/components/print/WholesaleInvoicePrint';
 
-export default function PandiStatementPage() {
+function PandiStatementContent() {
   const searchParams = useSearchParams();
   const printContainerRef = useRef<HTMLDivElement>(null);
 
@@ -792,5 +792,19 @@ export default function PandiStatementPage() {
         </div>
       </AppShell>
     </ProtectedRoute>
+  );
+}
+
+export default function PandiStatementPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#F8FAF9] flex items-center justify-center text-xs font-semibold text-[#8A9590]">
+          Loading Pandi Statement...
+        </div>
+      }
+    >
+      <PandiStatementContent />
+    </Suspense>
   );
 }

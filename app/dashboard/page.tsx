@@ -213,7 +213,7 @@ const timeframeConfigs: Record<'today' | 'week' | 'month' | 'year', TimeframeCon
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-[#17211D]">
-                Good morning, {currentStaff?.name || 'Abdul Rehman'}
+                Good morning, {currentStaff?.name || 'Haji Abdul Rehman'}
               </h1>
               <p className="text-sm text-[#66726D] mt-0.5">
                 Here is your business summary for today.

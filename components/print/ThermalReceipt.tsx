@@ -118,6 +118,12 @@ export function ThermalReceipt({ bill, onClose }: ThermalReceiptProps) {
             <span className="text-slate-600">Cashier:</span>
             <span>{bill.staffName}</span>
           </div>
+          {bill.counter && (
+            <div className="flex justify-between">
+              <span className="text-slate-600">Counter:</span>
+              <span>{bill.counter}</span>
+            </div>
+          )}
           {bill.customerName && (
             <div className="flex justify-between">
               <span className="text-slate-600">Customer:</span>

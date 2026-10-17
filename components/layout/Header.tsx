@@ -27,7 +27,22 @@ interface HeaderProps {
 }
 
 export function Header({ onOpenMobileMenu, onOpenSearch }: HeaderProps) {
-  const { currentStaff, switchRole, hasPermission } = useAuth();
+  const { currentStaff, switchRole, hasPermission, updateCounter } = useAuth();
+
+  const getStaffInitials = (name?: string) => {
+    if (!name) return 'AR';
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return 'AR';
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    const meaningful = parts.filter(p => !['haji', 'mr', 'mrs', 'ms', 'dr', 'shaikh', 'sheikh'].includes(p.toLowerCase()));
+    if (meaningful.length >= 2) {
+      return (meaningful[0][0] + meaningful[meaningful.length - 1][0]).toUpperCase();
+    }
+    if (meaningful.length === 1) {
+      return meaningful[0].slice(0, 2).toUpperCase();
+    }
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  };
   const { toast } = useToast();
   const [selectedBranch, setSelectedBranch] = useState('Main Branch');
   const [isBranchMenuOpen, setIsBranchMenuOpen] = useState(false);
@@ -230,32 +245,65 @@ export function Header({ onOpenMobileMenu, onOpenSearch }: HeaderProps) {
             className="flex items-center gap-2.5 pl-1.5 pr-2 py-1 rounded-xl hover:bg-[#F0F4F2] transition-colors text-left cursor-pointer"
           >
             <div className="w-8 h-8 rounded-full bg-[#DCEDE6] text-[#125E45] font-bold text-xs flex items-center justify-center shrink-0">
-              AR
+              {getStaffInitials(currentStaff?.name)}
             </div>
             <div className="hidden sm:block leading-tight">
               <div className="text-xs font-bold text-[#17211D] truncate max-w-[130px]">
-                {currentStaff?.name || 'Abdul Rehman'}
+                {currentStaff?.name || 'Haji Abdul Rehman'}
               </div>
               <div className="text-[10px] text-[#66726D] truncate">
-                {currentStaff?.role === 'Admin' ? 'Owner' : currentStaff?.role || 'Owner'}
+                {currentStaff?.role === 'Admin' ? 'Owner' : currentStaff?.role || 'Staff'}
               </div>
             </div>
           </button>
 
           {isRoleMenuOpen && (
-            <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-[#DCE3E0] p-2 z-40 animate-in fade-in zoom-in-95 duration-150">
+            <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-xl border border-[#DCE3E0] p-2 z-40 animate-in fade-in zoom-in-95 duration-150">
               <div className="px-3 py-2 border-b border-[#DCE3E0]">
-                <div className="text-[11px] font-bold text-[#8A9590] uppercase tracking-wider">
-                  Active User
+                <div className="text-[10px] font-bold text-[#8A9590] uppercase tracking-wider">
+                  Active Logged In Staff
                 </div>
-                <div className="text-xs font-bold text-[#17211D] mt-0.5">
-                  {currentStaff?.name || 'Abdul Rehman'}
+                <div className="text-sm font-bold text-[#17211D] mt-0.5">
+                  {currentStaff?.name || 'Haji Abdul Rehman'}
                 </div>
-                <div className="text-[11px] text-[#66726D]">
-                  Role: {currentStaff?.role || 'Admin'}
+                <div className="text-[11px] text-[#66726D] flex items-center gap-2 mt-0.5">
+                  <span>Role: <strong>{currentStaff?.role === 'Admin' ? 'Owner / Admin' : currentStaff?.role || 'Staff'}</strong></span>
+                </div>
+                <div className="text-[11px] text-[#197A5A] font-semibold mt-0.5 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#197A5A]" />
+                  <span>Terminal: {currentStaff?.counter || 'Counter 03'}</span>
                 </div>
               </div>
 
+              {/* Counter Switcher */}
+              <div className="py-2 border-b border-[#DCE3E0]">
+                <div className="px-3 py-1 text-[10px] font-bold text-[#8A9590] uppercase tracking-wider">
+                  Select Active Counter
+                </div>
+                <div className="grid grid-cols-2 gap-1 px-2 mt-1">
+                  {['Counter 01', 'Counter 02', 'Counter 03', 'Counter 04', 'Accounts Desk', 'Main Office'].map(c => {
+                    const isActive = (currentStaff?.counter || '').toLowerCase().startsWith(c.toLowerCase());
+                    return (
+                      <button
+                        key={c}
+                        onClick={() => {
+                          updateCounter(c);
+                          toast({ title: 'Counter Updated', description: `Active counter set to ${c}`, type: 'success' });
+                        }}
+                        className={`px-2 py-1.5 rounded-lg text-[11px] font-medium transition-colors text-center cursor-pointer ${
+                          isActive
+                            ? 'bg-[#DCEDE6] text-[#125E45] font-bold shadow-2xs'
+                            : 'bg-[#F0F4F2] text-[#17211D] hover:bg-[#E2EAE6]'
+                        }`}
+                      >
+                        {c}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Role Switcher */}
               <div className="py-1 space-y-0.5">
                 <div className="px-3 py-1 text-[10px] font-bold text-[#8A9590] uppercase tracking-wider">
                   Switch Role
@@ -266,7 +314,7 @@ export function Header({ onOpenMobileMenu, onOpenSearch }: HeaderProps) {
                     <button
                       key={role}
                       onClick={() => handleRoleChange(role)}
-                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-colors text-left ${
+                      className={`w-full flex items-center justify-between px-3 py-1.5 rounded-xl text-xs font-medium transition-colors text-left cursor-pointer ${
                         isSelected
                           ? 'bg-[#DCEDE6] text-[#125E45] font-semibold'
                           : 'text-[#17211D] hover:bg-[#F0F4F2]'
@@ -292,10 +340,11 @@ export function Header({ onOpenMobileMenu, onOpenSearch }: HeaderProps) {
                 <Link
                   href="/login"
                   prefetch={false}
+                  onClick={() => setIsRoleMenuOpen(false)}
                   className="flex items-center gap-2 px-3 py-2 text-xs text-[#66726D] hover:text-[#17211D] rounded-xl hover:bg-[#F0F4F2] transition-colors"
                 >
                   <LogOut className="w-3.5 h-3.5" />
-                  <span>Go to Login Screen</span>
+                  <span>Switch Account / Sign In Screen</span>
                 </Link>
               </div>
             </div>

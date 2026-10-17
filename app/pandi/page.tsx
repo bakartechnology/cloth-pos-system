@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
@@ -30,7 +30,7 @@ import { Pandi } from '@/types';
 import { pandisService } from '@/services/pandisService';
 import { useToast } from '@/context/ToastContext';
 
-export default function PandiManagementPage() {
+function PandiManagementContent() {
   const { toast } = useToast();
   const searchParams = useSearchParams();
 
@@ -613,5 +613,19 @@ export default function PandiManagementPage() {
         </div>
       </AppShell>
     </ProtectedRoute>
+  );
+}
+
+export default function PandiManagementPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#F8FAF9] flex items-center justify-center text-xs font-semibold text-[#8A9590]">
+          Loading Pandi Management...
+        </div>
+      }
+    >
+      <PandiManagementContent />
+    </Suspense>
   );
 }

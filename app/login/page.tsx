@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Eye, EyeOff, Lock, User, ArrowRight } from 'lucide-react';
+import { Eye, EyeOff, Lock, User, ArrowRight, Monitor } from 'lucide-react';
 import { authService } from '@/services/authService';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/Button';
@@ -12,6 +12,7 @@ export default function LoginPage() {
   const { refreshStaff } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [selectedCounter, setSelectedCounter] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
@@ -28,7 +29,7 @@ export default function LoginPage() {
     setError('');
 
     setTimeout(() => {
-      const result = authService.login(username, password);
+      const result = authService.login(username, password, selectedCounter || undefined);
       if (result.success && result.staff) {
         refreshStaff();
         if (authService.hasPermission('dashboard_view', result.staff)) {
@@ -127,6 +128,28 @@ export default function LoginPage() {
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                Register Terminal / Counter <span className="text-slate-500 font-normal">(Optional)</span>
+              </label>
+              <div className="relative">
+                <Monitor className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <select
+                  value={selectedCounter}
+                  onChange={e => setSelectedCounter(e.target.value)}
+                  className="w-full pl-10 pr-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all cursor-pointer"
+                >
+                  <option value="">Auto (Use Staff Default Counter)</option>
+                  <option value="Counter 01">Counter 01 (Retail)</option>
+                  <option value="Counter 02">Counter 02 (Wholesale)</option>
+                  <option value="Counter 03">Counter 03</option>
+                  <option value="Counter 04">Counter 04</option>
+                  <option value="Accounts Desk">Accounts Desk</option>
+                  <option value="Main Office">Main Office</option>
+                </select>
               </div>
             </div>
 

@@ -199,6 +199,7 @@ export interface Bill {
   cardTransactionId?: string;
   staffId: string;
   staffName: string;
+  counter?: string;
   customerId?: string;
   customerName?: string;
   customerPhone?: string;

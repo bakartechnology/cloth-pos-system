@@ -152,7 +152,7 @@ export const INITIAL_STAFF: Staff[] = [
     password: 'admin123',
     role: 'Admin',
     status: 'Active',
-    counter: 'Main Office',
+    counter: 'Counter 03',
     joinedDate: '2021-01-10',
     permissions: ALL_PERMISSIONS.map(p => p.key),
   },

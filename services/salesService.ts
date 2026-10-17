@@ -102,6 +102,7 @@ export const salesService = {
     taxTotal: number;
     staffId: string;
     staffName: string;
+    counter?: string;
     customer?: Customer;
     customerName?: string;
     customerPhone?: string;
@@ -171,6 +172,7 @@ export const salesService = {
       bankDetails: params.bankDetails,
       staffId: params.staffId,
       staffName: params.staffName,
+      counter: params.counter,
       customerId: billCustomer?.id,
       customerName: finalCustomerName,
       customerPhone: finalCustomerPhone,

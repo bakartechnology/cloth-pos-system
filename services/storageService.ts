@@ -61,6 +61,15 @@ class StorageService {
     }
   }
 
+  removeItem(key: string): void {
+    if (!this.isBrowser()) return;
+    try {
+      localStorage.removeItem(key);
+    } catch (e) {
+      console.error(`StorageService error removing key ${key}:`, e);
+    }
+  }
+
   // Domain accessors with default seeding
   getProducts(): Product[] {
     const products = this.getItem<Product[]>(KEYS.PRODUCTS, INITIAL_PRODUCTS);

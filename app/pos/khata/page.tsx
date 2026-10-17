@@ -54,7 +54,9 @@ import {
   ReturnTransaction,
   ExchangeTransaction,
   KhataSessionDraft,
+  Pandi,
 } from '@/types';
+import { PandiSelectInput } from '@/components/pandi/PandiSelectInput';
 
 export default function KhataPOSPage() {
   const { currentStaff } = useAuth();
@@ -100,6 +102,8 @@ export default function KhataPOSPage() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Credit/Khata');
   const [cashReceived, setCashReceived] = useState<number>(0);
   const [notes, setNotes] = useState('');
+  const [pandiName, setPandiName] = useState('');
+  const [selectedPandi, setSelectedPandi] = useState<Pandi | null>(null);
 
   // Bank Transfer Payment States
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>(() => {
@@ -424,6 +428,10 @@ export default function KhataPOSPage() {
       }
     }
 
+    if (selectedCustomer && selectedCustomer.type !== 'Khata') {
+      customersService.update(selectedCustomer.id, { type: 'Khata' });
+    }
+
     const bill = salesService.completeSale({
       saleType: 'Khata',
       cartItems: khataCart,
@@ -439,6 +447,8 @@ export default function KhataPOSPage() {
       clientId: selectedCustomer.id,
       clientName: selectedCustomer.businessName || selectedCustomer.name,
       cardTransactionId: paymentMethod === 'Card' ? cardTransactionId : undefined,
+      pandiId: selectedPandi?.id,
+      pandiName: pandiName.trim() || undefined,
       bankDetails:
         paymentMethod === 'Bank Transfer' && selectedBank
           ? {
@@ -468,6 +478,8 @@ export default function KhataPOSPage() {
     clearKhataCart();
     setCashReceived(0);
     setNotes('');
+    setPandiName('');
+    setSelectedPandi(null);
     setIsCheckoutOpen(false);
     setIsInvoiceModalOpen(true);
     setProducts(productsService.getAll());
@@ -1247,6 +1259,17 @@ export default function KhataPOSPage() {
                 )}
               </div>
             )}
+
+            {/* Pandi Name / Carrier Loader Autocomplete */}
+            <PandiSelectInput
+              value={pandiName}
+              onChange={(name, obj) => {
+                setPandiName(name);
+                setSelectedPandi(obj || null);
+              }}
+              label="Pandi Name"
+              placeholder="Type or select Pandi name..."
+            />
 
             {/* Notes / Ledger Reference */}
             <div>

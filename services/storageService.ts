@@ -1,4 +1,4 @@
-import { Product } from '@/types';
+import { Product, Pandi } from '@/types';
 import {
   INITIAL_PRODUCTS,
   INITIAL_CUSTOMERS,
@@ -9,6 +9,7 @@ import {
   INITIAL_ATTENDANCE,
   INITIAL_STOCK_MOVEMENTS,
   INITIAL_SETTINGS,
+  INITIAL_PANDIS,
 } from '@/data/mockData';
 
 const KEYS = {
@@ -21,6 +22,7 @@ const KEYS = {
   ATTENDANCE: 'anf_pos_attendance_v1',
   MOVEMENTS: 'anf_pos_stock_mov_v1',
   SETTINGS: 'anf_pos_settings_v1',
+  PANDIS: 'anf_pos_pandis_v1',
   ACTIVE_STAFF_ID: 'anf_pos_active_staff_id_v1',
   RETAIL_INVOICE_SEQ: 'anf_pos_retail_invoice_seq_v1',
   WHOLESALE_INVOICE_SEQ: 'anf_pos_wholesale_invoice_seq_v1',
@@ -138,6 +140,14 @@ class StorageService {
 
   setSettings(data: typeof INITIAL_SETTINGS) {
     this.setItem(KEYS.SETTINGS, data);
+  }
+
+  getPandis(): Pandi[] {
+    return this.getItem(KEYS.PANDIS, INITIAL_PANDIS);
+  }
+
+  setPandis(data: Pandi[]) {
+    this.setItem(KEYS.PANDIS, data);
   }
 
   getActiveStaffId(): string {

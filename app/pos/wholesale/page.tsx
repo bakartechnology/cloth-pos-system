@@ -60,7 +60,9 @@ import {
   ReturnTransaction,
   ExchangeTransaction,
   WholesaleSessionDraft,
+  Pandi,
 } from '@/types';
+import { PandiSelectInput } from '@/components/pandi/PandiSelectInput';
 
 export default function WholesalePOSPage() {
   const { currentStaff } = useAuth();
@@ -100,6 +102,8 @@ export default function WholesalePOSPage() {
   const [cashReceived, setCashReceived] = useState<number>(0);
   const [amountPaidNow, setAmountPaidNow] = useState<number>(0);
   const [notes, setNotes] = useState('');
+  const [pandiName, setPandiName] = useState('');
+  const [selectedPandi, setSelectedPandi] = useState<Pandi | null>(null);
 
   // Bank Transfer Payment States
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
@@ -558,16 +562,10 @@ export default function WholesalePOSPage() {
 
     let billCustomer = selectedCustomer;
     if (!billCustomer && customerName.trim()) {
-      billCustomer = customersService.getAll().find(
-        c => c.name.toLowerCase() === customerName.trim().toLowerCase()
-      ) || customersService.add({
-        name: customerName.trim(),
-        phone: '',
-        address: '',
-        city: 'Local',
-        type: 'Wholesale',
-        creditLimit: 0,
-      });
+      billCustomer = customersService.findOrCreateCustomerByName(customerName.trim(), effectivePhone, 'Wholesale');
+    }
+    if (billCustomer && billCustomer.type !== 'Wholesale') {
+      billCustomer = customersService.update(billCustomer.id, { type: 'Wholesale' }) || billCustomer;
     }
 
     const bill = salesService.completeSale({
@@ -585,6 +583,8 @@ export default function WholesalePOSPage() {
       clientId: selectedCustomer?.id,
       clientName: selectedCustomer ? (selectedCustomer.businessName || selectedCustomer.name) : undefined,
       cardTransactionId: paymentMethod === 'Card' ? cardTransactionId : undefined,
+      pandiId: selectedPandi?.id,
+      pandiName: pandiName.trim() || undefined,
       bankDetails:
         paymentMethod === 'Bank Transfer' && selectedBank
           ? {
@@ -609,6 +609,8 @@ export default function WholesalePOSPage() {
     setSelectedCustomer(null);
     setCashReceived(0);
     setNotes('');
+    setPandiName('');
+    setSelectedPandi(null);
     setIsCashDrawerOpen(false);
     setIsCheckoutOpen(false);
     setIsInvoiceModalOpen(true);
@@ -1504,6 +1506,17 @@ export default function WholesalePOSPage() {
                 </p>
               </div>
             )}
+
+            {/* Pandi Name / Carrier Loader Autocomplete */}
+            <PandiSelectInput
+              value={pandiName}
+              onChange={(name, obj) => {
+                setPandiName(name);
+                setSelectedPandi(obj || null);
+              }}
+              label="Pandi Name"
+              placeholder="Type or select Pandi name..."
+            />
 
             {/* Notes / PO Reference */}
             <div className="space-y-1">

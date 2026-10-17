@@ -113,6 +113,11 @@ export function WholesaleInvoicePrint({ bill, onClose }: WholesaleInvoicePrintPr
             <div className="text-xs text-slate-600 mt-0.5">
               Invoice Status: <span className="font-semibold">{bill.status}</span>
             </div>
+            {bill.pandiName && (
+              <div className="text-xs font-bold text-emerald-800 mt-1.5 inline-block bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded">
+                🚚 Pandi / Carrier: <span className="underline">{bill.pandiName}</span>
+              </div>
+            )}
             {bill.notes && (
               <div className="text-xs text-slate-600 italic mt-1 max-w-xs ml-auto">
                 Ref: {bill.notes}

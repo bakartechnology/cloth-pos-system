@@ -216,10 +216,27 @@ export interface Bill {
     confirmedAt: string;
   };
   notes?: string;
+  pandiId?: string;
+  pandiName?: string;
+  pandiPhone?: string;
   status: 'Completed' | 'Returned' | 'Draft' | 'Partially Returned' | 'Exchanged';
   returns?: ReturnTransaction[];
   exchanges?: ExchangeTransaction[];
   createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface Pandi {
+  id: string;
+  name: string;
+  phone: string;
+  cnic?: string;
+  transportMode: 'Rehri / Handcart' | 'Loader Rickshaw' | 'Motorcycle' | 'On Foot' | 'Cargo / Builty' | 'Other';
+  marketZone?: string;
+  status: 'Active' | 'Inactive';
+  notes?: string;
+  totalTrips?: number;
+  createdAt: string;
   updatedAt?: string;
 }
 
@@ -294,6 +311,8 @@ export type PermissionKey =
   | 'payment_collection'
   | 'wholesale_recovery'
   | 'staff_khata'
+  | 'pandi_view'
+  | 'pandi_manage'
   | 'reports_view'
   | 'staff_view'
   | 'staff_create'

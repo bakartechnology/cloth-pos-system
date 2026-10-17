@@ -5,6 +5,7 @@ import {
   SaleType,
   PaymentMethod,
   Customer,
+  CustomerType,
   ReturnTransaction,
   ExchangeTransaction,
   ReturnItemDetail,
@@ -109,6 +110,9 @@ export const salesService = {
     cardTransactionId?: string;
     bankDetails?: Bill['bankDetails'];
     notes?: string;
+    pandiId?: string;
+    pandiName?: string;
+    pandiPhone?: string;
   }): Bill {
     // Original subtotal (sum of original unit price * quantity)
     const subtotal = params.cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -141,6 +145,15 @@ export const salesService = {
     const finalClientId = params.clientId || params.customer?.id;
     const finalClientName = params.clientName || params.customer?.businessName || params.customer?.name;
 
+    const targetAccountType: CustomerType =
+      params.saleType === 'Wholesale' ? 'Wholesale' :
+      params.saleType === 'Khata' ? 'Khata' : 'Retail';
+
+    let billCustomer = params.customer;
+    if (!billCustomer && finalCustomerName && finalCustomerName !== 'Walk-in customer' && finalCustomerName !== 'Walk-in Wholesale Customer') {
+      billCustomer = customersService.findOrCreateCustomerByName(finalCustomerName, finalCustomerPhone, targetAccountType);
+    }
+
     const bill: Bill = {
       id: `bil-${Date.now().toString().slice(-6)}`,
       invoiceNumber,
@@ -158,13 +171,16 @@ export const salesService = {
       bankDetails: params.bankDetails,
       staffId: params.staffId,
       staffName: params.staffName,
-      customerId: params.customer?.id,
+      customerId: billCustomer?.id,
       customerName: finalCustomerName,
       customerPhone: finalCustomerPhone,
-      customerBusiness: params.customer?.businessName,
+      customerBusiness: billCustomer?.businessName,
       clientId: finalClientId,
       clientName: finalClientName,
       notes: params.notes,
+      pandiId: params.pandiId,
+      pandiName: params.pandiName?.trim() || undefined,
+      pandiPhone: params.pandiPhone?.trim() || undefined,
       status: 'Completed',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -196,12 +212,13 @@ export const salesService = {
       });
     });
 
-    // 3. Update customer transaction ledger if Khata or registered Customer
-    if (params.customer) {
+    // 3. Update customer transaction ledger & account type strictly according to POS origin
+    if (billCustomer) {
       if (params.paymentMethod === 'Credit/Khata' || params.saleType === 'Khata') {
+        customersService.update(billCustomer.id, { type: 'Khata' });
         customersService.recordKhataDebit({
-          customerId: params.customer.id,
-          customerName: params.customer.name,
+          customerId: billCustomer.id,
+          customerName: billCustomer.name,
           amount: grandTotal,
           invoiceId: invoiceNumber,
           description: `Sale invoice #${invoiceNumber} (${params.saleType})`,
@@ -209,14 +226,27 @@ export const salesService = {
           staffName: params.staffName,
         });
       } else {
-        const currentPurchased = params.customer.totalPurchased || 0;
-        const currentPaid = params.customer.totalPaid || 0;
+        const currentPurchased = billCustomer.totalPurchased || 0;
+        const currentPaid = billCustomer.totalPaid || 0;
         const paidOnThisBill = params.amountReceived !== undefined ? params.amountReceived : grandTotal;
-        customersService.update(params.customer.id, {
+        customersService.update(billCustomer.id, {
+          type: targetAccountType,
           totalPurchased: currentPurchased + grandTotal,
           totalPaid: currentPaid + paidOnThisBill,
           lastTransactionDate: new Date().toISOString().split('T')[0],
         });
+      }
+    }
+
+    // 4. Update Pandi total trips if assigned
+    if (params.pandiName && params.pandiName.trim()) {
+      const cleanPandi = params.pandiName.trim();
+      const pandis = storageService.getPandis();
+      const matched = pandis.find(p => p.id === params.pandiId || p.name.toLowerCase() === cleanPandi.toLowerCase());
+      if (matched) {
+        storageService.setPandis(
+          pandis.map(p => (p.id === matched.id ? { ...p, totalTrips: (p.totalTrips || 0) + 1 } : p))
+        );
       }
     }
 

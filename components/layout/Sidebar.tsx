@@ -27,6 +27,8 @@ import {
   ShieldCheck,
   Clock,
   Receipt,
+  Truck,
+  Plus,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { PermissionKey } from '@/types';
@@ -128,7 +130,6 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
       permission: 'customers_view',
       subItems: [
         { label: 'Customers CRM', href: '/customers', icon: Users, permission: 'customers_view' },
-        { label: 'Khata Ledgers (5-Yr)', href: '/customers/khata', icon: BookOpen, permission: 'customers_view' },
       ],
     },
     {
@@ -164,6 +165,18 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
         { label: 'Retail Statement', href: '/statements/retail', icon: FileText, permission: 'retail_statement_view' },
         { label: 'Wholesale Statement', href: '/statements/wholesale', icon: Receipt, permission: 'wholesale_statement_view' },
         { label: 'Khata Ledgers (5-Yr)', href: '/customers/khata', icon: BookOpen, permission: 'customers_view' },
+      ],
+    },
+    {
+      id: 'pandi',
+      label: 'Pandi Management',
+      href: '/pandi',
+      icon: Truck,
+      permission: 'wholesale_statement_view',
+      subItems: [
+        { label: 'All Pandis', href: '/pandi', icon: Users, permission: 'wholesale_statement_view' },
+        { label: 'Add New Pandi', href: '/pandi?action=add', icon: Plus, permission: 'wholesale_statement_view' },
+        { label: 'Pandi Statement', href: '/statements/pandi', icon: FileText, permission: 'wholesale_statement_view' },
       ],
     },
     {

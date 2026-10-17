@@ -130,6 +130,12 @@ export function ThermalReceipt({ bill, onClose }: ThermalReceiptProps) {
               <span>{bill.customerPhone}</span>
             </div>
           )}
+          {bill.pandiName && (
+            <div className="flex justify-between font-bold">
+              <span className="text-slate-600">Pandi / Carrier:</span>
+              <span>{bill.pandiName}</span>
+            </div>
+          )}
         </div>
 
         {/* Item Table */}

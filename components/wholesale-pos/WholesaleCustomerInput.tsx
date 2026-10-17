@@ -56,10 +56,14 @@ export function WholesaleCustomerInput({
   };
 
   const selectExistingCustomer = (cust: Customer) => {
-    setInputValue(cust.name);
-    onChange(cust.name, cust);
+    let activeCustomer = cust;
+    if (activeCustomer.type === 'Retail') {
+      activeCustomer = customersService.update(activeCustomer.id, { type: 'Wholesale' }) || activeCustomer;
+    }
+    setInputValue(activeCustomer.name);
+    onChange(activeCustomer.name, activeCustomer);
     if (onSelectCustomer) {
-      onSelectCustomer(cust);
+      onSelectCustomer(activeCustomer);
     }
     setIsOpen(false);
   };
@@ -69,7 +73,7 @@ export function WholesaleCustomerInput({
     if (!clean) return;
 
     try {
-      const cust = customersService.findOrCreateCustomerByName(clean);
+      const cust = customersService.findOrCreateCustomerByName(clean, undefined, 'Wholesale');
       setInputValue(cust.name);
       onChange(cust.name, cust);
       if (onSelectCustomer) {

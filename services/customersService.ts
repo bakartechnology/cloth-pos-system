@@ -1,4 +1,4 @@
-import { Customer, KhataTransaction, PaymentMethod } from '@/types';
+import { Customer, CustomerType, KhataTransaction, PaymentMethod } from '@/types';
 import { storageService } from './storageService';
 
 export const customersService = {
@@ -40,7 +40,7 @@ export const customersService = {
     );
   },
 
-  findOrCreateCustomerByName(name: string, phone?: string): Customer {
+  findOrCreateCustomerByName(name: string, phone?: string, type: CustomerType = 'Retail'): Customer {
     const cleanName = (name || '').trim();
     if (!cleanName) {
       throw new Error('Customer name cannot be empty');
@@ -49,21 +49,28 @@ export const customersService = {
     const customers = storageService.getCustomers();
     const existing = customers.find(c => c.name.toLowerCase().trim() === cleanName.toLowerCase());
     if (existing) {
-      // If phone provided and wasn't set, update phone
+      const updates: Partial<Customer> = {};
       if (phone && !existing.phone) {
-        return this.update(existing.id, { phone }) || existing;
+        updates.phone = phone;
+      }
+      // Update account type based on the POS transaction origin (Wholesale, Khata, Retail)
+      if (type && existing.type !== type) {
+        updates.type = type;
+      }
+      if (Object.keys(updates).length > 0) {
+        return this.update(existing.id, updates) || existing;
       }
       return existing;
     }
 
-    // Create new customer record persistently without duplicates
+    // Create new customer record persistently with the designated type
     const newCustomer: Customer = {
       id: `cst-${Date.now().toString().slice(-6)}`,
       name: cleanName,
       phone: phone || '',
       address: '',
       city: '',
-      type: 'Retail',
+      type: type,
       creditLimit: 0,
       currentBalance: 0,
       totalPurchased: 0,
@@ -90,9 +97,9 @@ export const customersService = {
     );
 
     if (existing) {
-      if (existing.type !== 'Khata' && existing.type !== 'Wholesale') {
+      if (existing.type !== 'Khata') {
         // Upgrade to Khata type
-        const updated = this.update(existing.id, { type: 'Khata' }) || existing;
+        const updated = this.update(existing.id, { type: 'Khata', phone: phone || existing.phone }) || existing;
         return updated;
       }
       return existing;

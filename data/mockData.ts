@@ -8,7 +8,8 @@ import {
   PaymentCollectionRecord,
   StockMovement,
   StoreSettings,
-  PermissionKey
+  PermissionKey,
+  Pandi,
 } from '@/types';
 
 export const ALL_PERMISSIONS: { key: PermissionKey; label: string; group: string }[] = [
@@ -33,6 +34,10 @@ export const ALL_PERMISSIONS: { key: PermissionKey; label: string; group: string
   { key: 'retail_statement_view', label: 'View Retail Customer Statements', group: 'Statements & Ledgers' },
   { key: 'wholesale_statement_view', label: 'View Wholesale Statements (Customer & Client)', group: 'Statements & Ledgers' },
   { key: 'khata_ledger_view', label: 'View Khata Ledgers & Customer Balances', group: 'Statements & Ledgers' },
+
+  // Pandi & Logistics
+  { key: 'pandi_view', label: 'View Pandi Statements & Deliveries', group: 'Pandi & Logistics' },
+  { key: 'pandi_manage', label: 'Register & Manage Pandis (Loaders)', group: 'Pandi & Logistics' },
 
   // Sales & CRM
   { key: 'customers_view', label: 'View Customers CRM Directory', group: 'Sales & CRM' },
@@ -2109,3 +2114,66 @@ export const HISTORICAL_SALES_SUMMARY = {
     },
   ],
 };
+
+export const INITIAL_PANDIS: Pandi[] = [
+  {
+    id: 'pnd-001',
+    name: 'Muhammad Akram Loader',
+    phone: '0300-4821901',
+    cnic: '35201-8491029-3',
+    transportMode: 'Rehri / Handcart',
+    marketZone: 'Liberty Cloth Market & Main Gulberg',
+    status: 'Active',
+    notes: 'Expert in bulk bales & thaan rolls transportation',
+    totalTrips: 142,
+    createdAt: '2023-01-10',
+  },
+  {
+    id: 'pnd-002',
+    name: 'Rashid Ali (Loader Rickshaw)',
+    phone: '0321-9921443',
+    cnic: '35202-1928374-1',
+    transportMode: 'Loader Rickshaw',
+    marketZone: 'Azam Cloth Market & Anarkali Cargo',
+    status: 'Active',
+    notes: 'Handles outstation cargo delivery to Bilal & Faisal Movers Cargo',
+    totalTrips: 268,
+    createdAt: '2022-11-15',
+  },
+  {
+    id: 'pnd-003',
+    name: 'Bilal Khan Carrier',
+    phone: '0312-5541829',
+    cnic: '35200-5541290-7',
+    transportMode: 'Motorcycle',
+    marketZone: 'Ichhra & Model Town Retail Delivery',
+    status: 'Active',
+    notes: 'Fast delivery for medium cut-piece and sample bundles',
+    totalTrips: 89,
+    createdAt: '2023-06-20',
+  },
+  {
+    id: 'pnd-004',
+    name: 'Tariq Mehmood Porter',
+    phone: '0345-7712390',
+    cnic: '35201-7712390-5',
+    transportMode: 'Rehri / Handcart',
+    marketZone: 'Shah Alam Market & Badami Bagh Terminal',
+    status: 'Active',
+    notes: 'Available daily 9 AM - 8 PM for market delivery',
+    totalTrips: 115,
+    createdAt: '2023-04-05',
+  },
+  {
+    id: 'pnd-005',
+    name: 'Ghulam Abbas (On Foot / Thela)',
+    phone: '0304-6192834',
+    cnic: '35202-6192834-9',
+    transportMode: 'On Foot',
+    marketZone: 'Liberty Complex internal shops',
+    status: 'Active',
+    notes: 'Specializes in urgent shop-to-shop fabric transfers',
+    totalTrips: 64,
+    createdAt: '2024-02-12',
+  },
+];

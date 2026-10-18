@@ -67,7 +67,25 @@ export interface Customer {
 
 export type SaleType = 'Retail' | 'Wholesale' | 'Khata';
 
-export type PaymentMethod = 'Cash' | 'Card' | 'Bank Transfer' | 'Credit/Khata' | 'Cheque' | 'Other';
+export type PaymentMethod = 'Cash' | 'Card' | 'Bank Transfer' | 'Credit/Khata' | 'Cheque' | 'Split' | 'Other';
+
+export interface SplitPaymentDetail {
+  cashAmount: number;
+  secondaryMethod: 'Card' | 'Bank Transfer';
+  secondaryAmount: number;
+  cardTransactionId?: string;
+  bankDetails?: {
+    bankId: string;
+    bankName: string;
+    accountTitle: string;
+    accountNumber: string;
+    iban: string;
+    confirmedByStaffId: string;
+    confirmedByStaffName: string;
+    confirmedAt: string;
+  };
+  slipReference?: string;
+}
 
 export interface ChequeItem {
   id: string;
@@ -216,6 +234,7 @@ export interface Bill {
     confirmedByStaffName: string;
     confirmedAt: string;
   };
+  splitPayment?: SplitPaymentDetail;
   notes?: string;
   pandiId?: string;
   pandiName?: string;

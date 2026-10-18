@@ -110,6 +110,7 @@ export const salesService = {
     clientName?: string;
     cardTransactionId?: string;
     bankDetails?: Bill['bankDetails'];
+    splitPayment?: Bill['splitPayment'];
     notes?: string;
     pandiId?: string;
     pandiName?: string;
@@ -126,7 +127,9 @@ export const salesService = {
       : calculatedDiscount;
     // Grand total: lineTotalsSum + taxTotal (eliminates double discount deduction)
     const grandTotal = Math.max(0, lineTotalsSum + params.taxTotal);
-    const changeDue = params.paymentMethod === 'Cash' ? Math.max(0, params.amountReceived - grandTotal) : 0;
+    const changeDue = (params.paymentMethod === 'Cash' || params.paymentMethod === 'Split')
+      ? Math.max(0, params.amountReceived - grandTotal)
+      : 0;
     const invoiceNumber = this.generateInvoiceNumber(params.saleType);
 
     const billItems: BillItem[] = params.cartItems.map(item => ({
@@ -138,6 +141,7 @@ export const salesService = {
       price: item.price,
       discountPerUnit: item.discountPerUnit || 0,
       discountPercent: item.discountPercent,
+      extraDiscountRupees: item.extraDiscountRupees || 0,
       subtotal: item.lineTotal,
     }));
 
@@ -170,6 +174,7 @@ export const salesService = {
       changeDue,
       cardTransactionId: params.cardTransactionId,
       bankDetails: params.bankDetails,
+      splitPayment: params.splitPayment,
       staffId: params.staffId,
       staffName: params.staffName,
       counter: params.counter,

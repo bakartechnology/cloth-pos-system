@@ -14,7 +14,7 @@ interface AppShellProps {
 
 export function AppShell({ children }: AppShellProps) {
   const router = useRouter();
-  const { hasPermission } = useAuth();
+  const { currentStaff, hasPermission } = useAuth();
   const { toast } = useToast();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -22,8 +22,9 @@ export function AppShell({ children }: AppShellProps) {
   // Global Keyboard Shortcuts (F4: Retail POS, F5: Wholesale POS, F6: Khata POS, Ctrl+K: Search)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl + K or Cmd + K => Global Search
+      // Ctrl + K or Cmd + K => Global Search (Admin only)
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        if (currentStaff?.role !== 'Admin') return;
         e.preventDefault();
         setIsSearchOpen(prev => !prev);
         return;

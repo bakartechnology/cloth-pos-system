@@ -73,7 +73,9 @@ export default function WholesalePOSPage() {
     removeFromWholesaleCart,
     updateWholesaleQuantity,
     updateWholesaleDiscount,
+    updateWholesaleExtraDiscount,
     clearWholesaleCart,
+    restoreWholesaleCart,
     wholesaleSubtotal,
     wholesaleDiscountTotal,
     wholesaleGrandTotal,
@@ -265,13 +267,7 @@ export default function WholesalePOSPage() {
     }
 
     if (availableDraft.cartItems && availableDraft.cartItems.length > 0) {
-      clearWholesaleCart();
-      availableDraft.cartItems.forEach(item => {
-        addToWholesaleCart(item.product, item.quantity);
-        if (item.discountPercent > 0) {
-          updateWholesaleDiscount(item.product.id, item.discountPercent);
-        }
-      });
+      restoreWholesaleCart(availableDraft.cartItems);
     }
 
     if (availableDraft.paymentMethod) {
@@ -420,11 +416,6 @@ export default function WholesalePOSPage() {
       } else {
         addToWholesaleCart(matched);
         barcodeScannerService.playSuccessBeep();
-        toast({
-          title: `Added: ${matched.name}`,
-          description: `Price: PKR ${matched.wholesalePrice.toLocaleString()}`,
-          type: 'success',
-        });
       }
     } else {
       barcodeScannerService.playErrorBeep();
@@ -841,33 +832,36 @@ export default function WholesalePOSPage() {
             <div className="lg:col-span-8 space-y-4">
               {/* CUSTOMER & WHOLESALE ACCOUNT BOX */}
               <div className="bg-white rounded-2xl border border-[#DCE3E0] p-4 shadow-2xs space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <h3 className="text-sm font-bold text-[#17211D]">
                     Customer & wholesale account
                   </h3>
-                  {(customerName.trim() || selectedCustomer) && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCustomerName('');
-                        setSelectedCustomer(null);
-                      }}
-                      className="text-xs font-semibold text-[#125E45] hover:text-[#197A5A] hover:underline cursor-pointer"
-                    >
-                      Change account
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    <span className="bg-[#DCEDE6] text-[#125E45] text-xs font-semibold px-3 py-0.5 rounded-full">
+                      Active wholesale account
+                    </span>
+                    {(customerName.trim() || selectedCustomer) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCustomerName('');
+                          setSelectedCustomer(null);
+                        }}
+                        className="text-xs font-semibold text-[#C23D45] hover:underline cursor-pointer ml-1"
+                        title="Clear and switch wholesale account"
+                      >
+                        Switch Account
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Two dropdown fields: Customer Name & Wholesale Client */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <WholesaleCustomerInput
                     value={customerName}
-                    onChange={(name, cust) => {
+                    onChange={name => {
                       setCustomerName(name);
-                      if (cust && (cust.type === 'Wholesale' || cust.type === 'Khata') && !selectedCustomer) {
-                        setSelectedCustomer(cust);
-                      }
                     }}
                   />
 
@@ -875,9 +869,6 @@ export default function WholesalePOSPage() {
                     selectedClient={selectedCustomer}
                     onSelectClient={client => {
                       setSelectedCustomer(client);
-                      if (client && !customerName) {
-                        setCustomerName(client.name);
-                      }
                     }}
                   />
                 </div>
@@ -1187,44 +1178,63 @@ export default function WholesalePOSPage() {
                           </span>
                         </div>
 
-                        {/* Line 3: Quantity Controls + Line Total */}
-                        <div className="flex items-center justify-between pt-1">
-                          <div className="border border-[#DCE3E0] rounded-lg flex items-center gap-2 px-2 py-0.5 text-xs text-[#17211D] bg-white">
-                            <button
-                              type="button"
-                              onClick={() => updateWholesaleQuantity(item.product.id, Math.max(1, item.quantity - 1))}
-                              disabled={item.quantity <= 1}
-                              className="text-[#66726D] hover:text-[#17211D] font-bold text-sm cursor-pointer disabled:opacity-30"
-                            >
-                              −
-                            </button>
-                            <input
-                              type="number"
-                              min="1"
-                              max={item.product.stock}
-                              value={item.quantity}
-                              onChange={e => {
-                                const raw = e.target.value;
-                                if (raw === '') return;
-                                const num = parseInt(raw, 10);
-                                if (!isNaN(num)) {
-                                  const clamped = Math.max(1, Math.min(item.product.stock, num));
-                                  updateWholesaleQuantity(item.product.id, clamped);
-                                }
-                              }}
-                              className="font-bold min-w-[20px] max-w-[42px] text-center text-xs text-[#17211D] bg-transparent focus:outline-none"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => updateWholesaleQuantity(item.product.id, Math.min(item.product.stock, item.quantity + 1))}
-                              disabled={item.quantity >= item.product.stock}
-                              className="text-[#66726D] hover:text-[#17211D] font-bold text-sm cursor-pointer disabled:opacity-30"
-                            >
-                              +
-                            </button>
+                        {/* Line 3: Quantity Controls + Rs Discount Input + Line Total */}
+                        <div className="flex items-center justify-between pt-1 gap-2">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <div className="border border-[#DCE3E0] rounded-lg flex items-center gap-1.5 px-2 h-7 text-xs text-[#17211D] bg-white shadow-2xs">
+                              <button
+                                type="button"
+                                onClick={() => updateWholesaleQuantity(item.product.id, Math.max(1, item.quantity - 1))}
+                                disabled={item.quantity <= 1}
+                                className="text-[#66726D] hover:text-[#17211D] font-bold text-sm cursor-pointer disabled:opacity-30 px-0.5"
+                              >
+                                −
+                              </button>
+                              <input
+                                type="number"
+                                min="1"
+                                max={item.product.stock}
+                                value={item.quantity}
+                                onChange={e => {
+                                  const raw = e.target.value;
+                                  if (raw === '') return;
+                                  const num = parseInt(raw, 10);
+                                  if (!isNaN(num)) {
+                                    const clamped = Math.max(1, Math.min(item.product.stock, num));
+                                    updateWholesaleQuantity(item.product.id, clamped);
+                                  }
+                                }}
+                                className="font-bold min-w-[20px] max-w-[34px] text-center text-xs text-[#17211D] bg-transparent focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => updateWholesaleQuantity(item.product.id, Math.min(item.product.stock, item.quantity + 1))}
+                                disabled={item.quantity >= item.product.stock}
+                                className="text-[#66726D] hover:text-[#17211D] font-bold text-sm cursor-pointer disabled:opacity-30 px-0.5"
+                              >
+                                +
+                              </button>
+                            </div>
+
+                            <div className="border border-[#DCE3E0] rounded-lg flex items-center overflow-hidden bg-white h-7 focus-within:border-[#197A5A] focus-within:ring-1 focus-within:ring-[#197A5A]/30 transition-all shadow-2xs" title="Discount in Rupees per unit">
+                              <span className="bg-[#F0F4F2] text-[#66726D] text-[10px] font-bold px-2 h-full flex items-center border-r border-[#DCE3E0] select-none tracking-tight">
+                                Disc Rs
+                              </span>
+                              <input
+                                type="number"
+                                min="0"
+                                placeholder="0"
+                                value={item.extraDiscountRupees || ''}
+                                onChange={e => {
+                                  const val = parseFloat(e.target.value) || 0;
+                                  updateWholesaleExtraDiscount(item.product.id, val);
+                                }}
+                                className="w-14 px-2 text-xs font-bold font-mono text-center text-[#16835B] bg-transparent focus:outline-none placeholder:text-[#8A9590] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                              />
+                            </div>
                           </div>
 
-                          <div className="font-bold text-sm text-[#17211D]">
+                          <div className="font-bold text-sm text-[#17211D] shrink-0">
                             Rs {item.lineTotal.toLocaleString()}
                           </div>
                         </div>

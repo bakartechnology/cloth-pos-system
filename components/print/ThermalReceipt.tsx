@@ -195,17 +195,56 @@ export function ThermalReceipt({ bill, onClose }: ThermalReceiptProps) {
             <span>GRAND TOTAL:</span>
             <span>Rs. {bill.grandTotal.toLocaleString()}</span>
           </div>
-          <div className="flex justify-between border-t border-dashed border-slate-300 pt-1">
-            <span className="text-slate-600">Payment ({bill.paymentMethod}):</span>
+          <div className="flex justify-between border-t border-dashed border-slate-300 pt-1 font-bold">
+            <span className="text-slate-600">
+              Payment ({bill.paymentMethod === 'Split' ? 'Split Tender' : bill.paymentMethod}):
+            </span>
             <span>Rs. {bill.amountReceived.toLocaleString()}</span>
           </div>
+
+          {/* Detailed Split Breakdown */}
+          {bill.splitPayment && (
+            <div className="bg-slate-50 p-1.5 rounded border border-slate-200 text-[9px] text-slate-700 my-1 space-y-0.5">
+              <div className="flex justify-between font-medium">
+                <span>• Cash Paid:</span>
+                <span className="font-bold">Rs. {bill.splitPayment.cashAmount.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between font-medium">
+                <span>• {bill.splitPayment.secondaryMethod === 'Card' ? 'Card Swipe / POS' : 'Bank / Online Transfer'}:</span>
+                <span className="font-bold">Rs. {bill.splitPayment.secondaryAmount.toLocaleString()}</span>
+              </div>
+              {bill.splitPayment.cardTransactionId && (
+                <div className="text-[8px] text-slate-500 font-mono">
+                  Card Auth: {bill.splitPayment.cardTransactionId}
+                </div>
+              )}
+              {bill.splitPayment.bankDetails && (
+                <div className="text-[8px] text-slate-600">
+                  Bank: {bill.splitPayment.bankDetails.bankName} (A/C: {bill.splitPayment.bankDetails.accountNumber})
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Bank Transfer Details */}
+          {bill.paymentMethod === 'Bank Transfer' && bill.bankDetails && (
+            <div className="bg-slate-50 p-1.5 rounded border border-slate-200 text-[9px] text-slate-700 my-1 space-y-0.5">
+              <div className="font-bold">{bill.bankDetails.bankName}</div>
+              <div className="font-mono">A/C: {bill.bankDetails.accountNumber}</div>
+              <div>Title: {bill.bankDetails.accountTitle}</div>
+              {bill.bankDetails.confirmedByStaffName && (
+                <div className="text-emerald-700 font-semibold">✓ Transfer Slip Confirmed</div>
+              )}
+            </div>
+          )}
+
           {bill.changeDue > 0 && (
             <div className="flex justify-between font-bold">
               <span>Change Due:</span>
               <span>Rs. {bill.changeDue.toLocaleString()}</span>
             </div>
           )}
-          {bill.cardTransactionId && (
+          {bill.cardTransactionId && !bill.splitPayment && (
             <div className="flex justify-between text-[9px] text-slate-600">
               <span>Card Auth / Ref:</span>
               <span className="font-mono">{bill.cardTransactionId}</span>

@@ -89,19 +89,59 @@ export function WholesaleInvoicePrint({ bill, onClose }: WholesaleInvoicePrintPr
         {/* Customer & Client Information Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-slate-50 rounded-xl border border-slate-200/80 mb-6 text-xs">
           <div>
-            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-              {bill.saleType === 'Khata' ? 'Billed To (Khata Account Holder):' : 'Billed To (Wholesale Client):'}
-            </div>
-            <div className="text-sm font-black text-slate-900">
-              {bill.clientName || bill.customerBusiness || bill.customerName || 'Walking Wholesale Buyer'}
-            </div>
-            {bill.customerName && bill.customerName !== bill.clientName && (
-              <div className="text-xs text-slate-700 font-medium mt-0.5">
-                Shopper / Order Collector: <strong>{bill.customerName}</strong>
-              </div>
+            {bill.saleType === 'Khata' ? (
+              bill.customerName && bill.customerName.trim() && bill.customerName.trim() !== bill.clientName ? (
+                <>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
+                    Customer / Recipient:
+                  </div>
+                  <div className="text-base font-black text-slate-900 leading-tight">
+                    {bill.customerName}
+                  </div>
+                  <div className="text-xs text-slate-700 font-medium mt-1.5 pt-1.5 border-t border-slate-200">
+                    <span className="text-slate-500 font-normal">Khata Ledger Account: </span>
+                    <strong className="text-slate-900">{bill.clientName || bill.customerBusiness || 'Registered Account'}</strong>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
+                    Billed To (Khata Account Holder):
+                  </div>
+                  <div className="text-sm font-black text-slate-900">
+                    {bill.clientName || bill.customerBusiness || bill.customerName || 'Khata Customer'}
+                  </div>
+                </>
+              )
+            ) : (
+              bill.customerName && bill.customerName.trim() && bill.customerName.trim() !== bill.clientName ? (
+                <>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
+                    Customer / Buyer:
+                  </div>
+                  <div className="text-base font-black text-slate-900 leading-tight">
+                    {bill.customerName}
+                  </div>
+                  {bill.clientName && (
+                    <div className="text-xs text-slate-700 font-medium mt-1.5 pt-1.5 border-t border-slate-200">
+                      <span className="text-slate-500 font-normal">Wholesale Account: </span>
+                      <strong className="text-slate-900">{bill.clientName}</strong>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
+                    Billed To (Wholesale Client):
+                  </div>
+                  <div className="text-sm font-black text-slate-900">
+                    {bill.clientName || bill.customerBusiness || bill.customerName || 'Walking Wholesale Buyer'}
+                  </div>
+                </>
+              )
             )}
             {bill.customerPhone && (
-              <div className="text-xs text-slate-500">Contact: {bill.customerPhone}</div>
+              <div className="text-xs text-slate-500 mt-1">Contact: {bill.customerPhone}</div>
             )}
           </div>
 

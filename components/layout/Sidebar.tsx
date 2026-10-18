@@ -29,6 +29,7 @@ import {
   Receipt,
   Truck,
   Plus,
+  LogOut,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { PermissionKey } from '@/types';
@@ -58,7 +59,7 @@ let cachedSidebarScroll = 0;
 
 export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
-  const { hasPermission } = useAuth();
+  const { currentStaff, hasPermission, logout, isAdminSession, switchRole } = useAuth();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const [isCollapsed, setIsCollapsed] = useState(() => {
@@ -502,22 +503,66 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
           })}
         </div>
 
-        {/* Bottom Store Status Card */}
-        <div className="p-3 border-t border-[#DCE3E0] shrink-0">
+        {/* Bottom User Profile & Logout */}
+        <div className="p-2.5 border-t border-[#DCE3E0] shrink-0 space-y-2">
           {!collapsed ? (
-            <div className="p-3 rounded-xl bg-[#F0F4F2] border border-[#DCE3E0]">
-              <div className="font-bold text-xs text-[#17211D] truncate">
-                AL-NOOR FABRICS
+            <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-white border border-[#DCE3E0] shadow-2xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-7 h-7 rounded-lg bg-[#DCEDE6] text-[#125E45] font-black text-xs flex items-center justify-center shrink-0">
+                  {currentStaff?.name ? currentStaff.name.slice(0, 2).toUpperCase() : 'ST'}
+                </div>
+                <div className="min-w-0">
+                  <div className="font-bold text-xs text-[#17211D] truncate">
+                    {currentStaff?.name || 'Staff Member'}
+                  </div>
+                  <div className="text-[10px] text-[#66726D] truncate">
+                    {currentStaff?.role || 'User'}
+                  </div>
+                </div>
               </div>
-              <div className="text-[10px] text-[#66726D] mt-0.5 flex items-center gap-1.5 truncate">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#197A5A] animate-pulse shrink-0" />
-                <span>All systems working · Last sync just now</span>
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  logout();
+                  if (typeof window !== 'undefined') {
+                    window.location.href = '/login';
+                  }
+                }}
+                className="p-1.5 text-[#C23D45] hover:bg-rose-50 rounded-lg transition-colors cursor-pointer shrink-0"
+                title="Log out of session"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
             </div>
           ) : (
-            <div className="flex justify-center py-1" title="AL-NOOR FABRICS - All systems working">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#197A5A] animate-pulse" />
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                logout();
+                if (typeof window !== 'undefined') {
+                  window.location.href = '/login';
+                }
+              }}
+              className="w-full flex justify-center py-2 text-[#C23D45] hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+              title={`Log out (${currentStaff?.name || 'Staff'})`}
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          )}
+
+          {isAdminSession && currentStaff?.role !== 'Admin' && (
+            <button
+              type="button"
+              onClick={() => {
+                switchRole('Admin');
+                if (typeof window !== 'undefined') {
+                  window.location.reload();
+                }
+              }}
+              className="w-full py-1 text-[11px] font-bold text-[#125E45] bg-[#DCEDE6] hover:bg-[#c9e6db] rounded-lg transition-colors cursor-pointer text-center block"
+            >
+              {!collapsed ? 'Switch back to Admin' : 'Admin'}
+            </button>
           )}
         </div>
       </div>

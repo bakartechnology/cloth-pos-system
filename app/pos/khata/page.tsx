@@ -3,15 +3,12 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
-import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
+import { Button } from '@/components/ui/Button';
 import { WholesaleInvoicePrint } from '@/components/print/WholesaleInvoicePrint';
 import { PrintableWholesaleReturn } from '@/components/print/PrintableWholesaleReturn';
 import { PrintableWholesaleExchange } from '@/components/print/PrintableWholesaleExchange';
 import { KhataStatementPrint } from '@/components/print/KhataStatementPrint';
-import { WholesaleCustomerInput } from '@/components/wholesale-pos/WholesaleCustomerInput';
-import { WholesaleClientSearch } from '@/components/wholesale-pos/WholesaleClientSearch';
-import { WholesaleHardwareStatus } from '@/components/wholesale-pos/WholesaleHardwareStatus';
 import { WholesaleBillSearchModal } from '@/components/wholesale-pos/WholesaleBillSearchModal';
 import { WholesaleReturnModal } from '@/components/wholesale-pos/WholesaleReturnModal';
 import { WholesaleExchangeModal } from '@/components/wholesale-pos/WholesaleExchangeModal';
@@ -21,27 +18,31 @@ import {
   Plus,
   Minus,
   Trash2,
-  CheckCircle2,
-  Building,
-  CreditCard,
-  Banknote,
   ArrowRight,
   Printer,
-  Barcode as BarcodeIcon,
-  AlertCircle,
   Clock,
   Sparkles,
   Check,
   History,
   AlertTriangle,
-  Wallet,
   ChevronDown,
+  User,
+  SlidersHorizontal,
+  X,
+  CreditCard,
+  Banknote,
+  Building,
+  CheckCircle2,
+  Scan,
+  Barcode as BarcodeIcon,
+  ShoppingBag,
 } from 'lucide-react';
 import { productsService } from '@/services/productsService';
 import { customersService } from '@/services/customersService';
 import { salesService } from '@/services/salesService';
 import { storageService } from '@/services/storageService';
 import { khataSessionService } from '@/services/khataSessionService';
+import { barcodeScannerService } from '@/services/hardware/barcodeScannerService';
 import { cardTerminalService, CardPaymentState } from '@/services/hardware/cardTerminalService';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
@@ -70,6 +71,7 @@ export default function KhataPOSPage() {
     updateKhataDiscount,
     updateKhataExtraDiscount,
     clearKhataCart,
+    restoreKhataCart,
     khataSubtotal,
     khataDiscountTotal,
     khataGrandTotal,
@@ -83,10 +85,25 @@ export default function KhataPOSPage() {
     }
     return [];
   });
-  // PART 1 - Req 2: Customer Name must NOT be selected by default
+
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [customerName, setCustomerName] = useState<string>('');
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('');
+  const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
+  const [isAccountDropdownOpen, setIsAccountDropdownOpen] = useState(false);
+  const [accountSearchQuery, setAccountSearchQuery] = useState('');
+
   const [searchQuery, setSearchQuery] = useState('');
+  const [barcodeInput, setBarcodeInput] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('All fabrics');
+  const [sortOption, setSortOption] = useState<'inStock' | 'recent' | 'priceAsc' | 'priceDesc'>('inStock');
+  const [visibleCount, setVisibleCount] = useState(9);
+
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const [currentTime, setCurrentTime] = useState<string>('');
+
   const [nextInvoiceNumber, setNextInvoiceNumber] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       return salesService.peekNextInvoiceNumber('Khata');
@@ -94,7 +111,7 @@ export default function KhataPOSPage() {
     return 'KHT-2026-000001';
   });
 
-  // Work Session Resume State (Across reboots/shutdowns)
+  // Work Session Resume State
   const [availableDraft, setAvailableDraft] = useState<KhataSessionDraft | null>(null);
   const [hasCheckedDraft, setHasCheckedDraft] = useState(false);
 
@@ -150,7 +167,45 @@ export default function KhataPOSPage() {
   const [completedExchange, setCompletedExchange] = useState<ExchangeTransaction | null>(null);
   const [isExchangePrintOpen, setIsExchangePrintOpen] = useState(false);
 
-  const barcodeInputRef = useRef<HTMLInputElement>(null);
+  const customerDropdownRef = useRef<HTMLDivElement>(null);
+  const accountDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Live Clock
+  useEffect(() => {
+    const updateClock = () => {
+      const now = new Date();
+      setCurrentTime(
+        now.toLocaleDateString('en-PK', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        }) +
+          ' • ' +
+          now.toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+          })
+      );
+    };
+    updateClock();
+    const interval = setInterval(updateClock, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Close dropdowns on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (customerDropdownRef.current && !customerDropdownRef.current.contains(e.target as Node)) {
+        setIsCustomerDropdownOpen(false);
+      }
+      if (accountDropdownRef.current && !accountDropdownRef.current.contains(e.target as Node)) {
+        setIsAccountDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Focus and storage sync
   useEffect(() => {
@@ -187,8 +242,7 @@ export default function KhataPOSPage() {
     return () => clearTimeout(timer);
   }, [currentStaff?.id, hasCheckedDraft]);
 
-  // Auto-save active khata draft to persistent storage whenever state changes
-  // Bug fix: ONLY save draft if cart has items!
+  // Auto-save active khata draft to persistent storage
   useEffect(() => {
     if (!currentStaff?.id || !hasCheckedDraft) return;
 
@@ -233,15 +287,7 @@ export default function KhataPOSPage() {
     }
 
     if (availableDraft.cartItems && availableDraft.cartItems.length > 0) {
-      clearKhataCart();
-      availableDraft.cartItems.forEach(item => {
-        addToKhataCart(item.product, item.quantity);
-        if (item.extraDiscountRupees && item.extraDiscountRupees > 0) {
-          updateKhataExtraDiscount(item.product.id, item.extraDiscountRupees);
-        } else if (item.discountPercent > 0) {
-          updateKhataDiscount(item.product.id, item.discountPercent);
-        }
-      });
+      restoreKhataCart(availableDraft.cartItems);
     }
 
     if (availableDraft.paymentMethod) {
@@ -266,7 +312,7 @@ export default function KhataPOSPage() {
     });
   };
 
-  // Discard Draft Handler (Permanent discard fix)
+  // Discard Draft Handler
   const handleDiscardDraft = () => {
     if (currentStaff?.id) {
       khataSessionService.discardDraft(currentStaff.id);
@@ -284,27 +330,206 @@ export default function KhataPOSPage() {
     });
   };
 
-  // Product Filter (Memoized for smooth 60fps typing & cart updates)
+  // Keyboard Shortcuts (F1: Barcode, F2: Search, F8: Charge)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F1') {
+        e.preventDefault();
+        barcodeInputRef.current?.focus();
+        barcodeInputRef.current?.select();
+      } else if (e.key === 'F2') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      } else if (e.key === 'F8') {
+        e.preventDefault();
+        if (khataCart.length > 0 && selectedCustomer) {
+          handleDirectChargeKhata();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [khataCart.length, selectedCustomer]);
+
+  // Categories list
+  const categoryTabs = useMemo(() => {
+    const base = [
+      'All fabrics',
+      'Lawn',
+      'Cotton',
+      'Khaddar',
+      'Wash & Wear',
+      'Silk & Chiffon',
+      'Unstitched',
+      'Thaan',
+      'Cut Piece',
+    ];
+    const fromProds = Array.from(new Set(products.map(p => p.category).filter(Boolean)));
+    return Array.from(new Set([...base, ...fromProds]));
+  }, [products]);
+
+  // Filtered Products (matching Wholesale POS sorting & search)
   const filteredProducts = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
-    return products.filter(p => {
-      return (
+    let list = products.filter(p => {
+      const matchesSearch =
         !q ||
         p.name.toLowerCase().includes(q) ||
         p.sku.toLowerCase().includes(q) ||
         p.barcode?.includes(q) ||
         p.wholesaleBarcode?.includes(q) ||
-        p.category.toLowerCase().includes(q)
+        p.category.toLowerCase().includes(q) ||
+        (p.subcategory && p.subcategory.toLowerCase().includes(q)) ||
+        (p.description && p.description.toLowerCase().includes(q));
+
+      const matchesCat =
+        selectedCategory === 'All fabrics' ||
+        selectedCategory === 'All' ||
+        p.category.toLowerCase() === selectedCategory.toLowerCase() ||
+        (selectedCategory === 'Silk & Chiffon' &&
+          (p.category.toLowerCase().includes('silk') || p.category.toLowerCase().includes('chiffon')));
+
+      return matchesSearch && matchesCat;
+    });
+
+    if (sortOption === 'priceAsc') {
+      list.sort((a, b) => (a.khataPrice || a.wholesalePrice) - (b.khataPrice || b.wholesalePrice));
+    } else if (sortOption === 'priceDesc') {
+      list.sort((a, b) => (b.khataPrice || b.wholesalePrice) - (a.khataPrice || a.wholesalePrice));
+    } else if (sortOption === 'recent') {
+      list.sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateB - dateA;
+      });
+    } else {
+      // In stock first
+      list.sort((a, b) => (b.stock > 0 ? 1 : 0) - (a.stock > 0 ? 1 : 0));
+    }
+
+    return list;
+  }, [products, searchQuery, selectedCategory, sortOption]);
+
+  // Paginated displayed products
+  const displayedProducts = useMemo(() => {
+    return filteredProducts.slice(0, visibleCount);
+  }, [filteredProducts, visibleCount]);
+
+  // Barcode Scanner Handler
+  const handleBarcodeSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const code = barcodeInput.trim();
+    if (!code) return;
+
+    const matched =
+      productsService.getByBarcodeOrSku(code) ||
+      products.find(
+        p =>
+          p.wholesaleBarcode === code ||
+          p.barcode === code ||
+          p.sku.toLowerCase() === code.toLowerCase()
+      );
+
+    if (matched) {
+      if (matched.stock <= 0) {
+        barcodeScannerService.playErrorBeep();
+        toast({
+          title: 'Out of Stock',
+          description: `${matched.name} is currently out of stock.`,
+          type: 'error',
+        });
+      } else {
+        addToKhataCart(matched);
+        barcodeScannerService.playSuccessBeep();
+        toast({
+          title: `Added: ${matched.name}`,
+          description: `Khata Rate: PKR ${(matched.khataPrice || Math.round(matched.wholesalePrice * 1.05)).toLocaleString()}`,
+          type: 'success',
+        });
+      }
+    } else {
+      barcodeScannerService.playErrorBeep();
+      toast({
+        title: 'Product not found',
+        description: `No fabric product matches barcode/SKU "${code}".`,
+        type: 'warning',
+      });
+    }
+
+    setBarcodeInput('');
+    barcodeInputRef.current?.focus();
+  };
+
+  // Filtered Khata Customers for dropdowns
+  const allCustomers = useMemo(() => customersService.getAll(), []);
+
+  const khataAccountsList = useMemo(() => {
+    const q = accountSearchQuery.toLowerCase().trim();
+    return allCustomers.filter(c => {
+      const isKhata = c.type === 'Khata' || (c.creditLimit && c.creditLimit > 0);
+      if (!isKhata) return false;
+      if (!q) return true;
+      return (
+        c.name.toLowerCase().includes(q) ||
+        (c.businessName && c.businessName.toLowerCase().includes(q)) ||
+        c.phone.includes(q) ||
+        c.id.toLowerCase().includes(q)
       );
     });
-  }, [products, searchQuery]);
+  }, [allCustomers, accountSearchQuery]);
+
+  const shopperSuggestions = useMemo(() => {
+    const q = customerSearchQuery.toLowerCase().trim();
+    if (!q) return allCustomers.slice(0, 8);
+    return allCustomers
+      .filter(c => c.name.toLowerCase().includes(q) || c.phone.includes(q) || (c.businessName && c.businessName.toLowerCase().includes(q)))
+      .slice(0, 8);
+  }, [allCustomers, customerSearchQuery]);
+
+  // Dynamic Tax Calculation
+  const { khataTaxAmount, khataTaxRate } = useMemo(() => {
+    const storeTaxRate = storageService.getSettings()?.defaultTaxRate || 0;
+    let taxSum = 0;
+    let taxableBase = 0;
+    khataCart.forEach(item => {
+      const rate =
+        item.product.taxRate !== undefined && item.product.taxRate !== null && item.product.taxRate > 0
+          ? item.product.taxRate
+          : storeTaxRate;
+      if (rate > 0) {
+        taxSum += (item.lineTotal * rate) / 100;
+        taxableBase += item.lineTotal;
+      }
+    });
+    const avgRate = taxableBase > 0 ? Math.round((taxSum / taxableBase) * 100) : storeTaxRate;
+    return {
+      khataTaxAmount: Math.round(taxSum),
+      khataTaxRate: avgRate,
+    };
+  }, [khataCart]);
+
+  const finalKhataGrandTotal = khataSubtotal - khataDiscountTotal + khataTaxAmount;
+
+  // Credit Limit Calculations
+  const currentBalance = selectedCustomer?.currentBalance ?? selectedCustomer?.balance ?? 0;
+  const creditLimit = selectedCustomer?.creditLimit || 0;
+  const newProjectedBalance = currentBalance + finalKhataGrandTotal;
+  const availableCredit = Math.max(0, creditLimit - currentBalance);
+  const availableCreditAfterCharge = Math.max(0, creditLimit - newProjectedBalance);
+  const isLimitExceeded = creditLimit > 0 && newProjectedBalance > creditLimit;
+  const excessAmount = isLimitExceeded ? newProjectedBalance - creditLimit : 0;
+
+  const totalMetres = useMemo(() => {
+    return khataCart.reduce((sum, item) => sum + item.quantity, 0);
+  }, [khataCart]);
 
   // Open Checkout Modal
   const handleOpenCheckout = () => {
     if (khataCart.length === 0) {
       toast({
         title: 'Cart is empty',
-        description: 'Please add products with Khata Sale Prices before proceeding.',
+        description: 'Please add fabrics to the bill before charging to Khata.',
         type: 'warning',
       });
       return;
@@ -312,7 +537,7 @@ export default function KhataPOSPage() {
     if (!selectedCustomer) {
       toast({
         title: 'Khata Account Required',
-        description: 'Please select a registered Khata customer / credit account.',
+        description: 'Please select a registered Khata customer / credit account first.',
         type: 'error',
       });
       return;
@@ -326,12 +551,35 @@ export default function KhataPOSPage() {
     setIsCheckoutOpen(true);
   };
 
+  // Direct Charge to Khata Account (Instant 1-Click action as in design)
+  const handleDirectChargeKhata = () => {
+    if (khataCart.length === 0) {
+      toast({
+        title: 'Cart is empty',
+        description: 'Please add products with Khata Sale Prices before proceeding.',
+        type: 'warning',
+      });
+      return;
+    }
+    if (!selectedCustomer) {
+      toast({
+        title: 'Khata Account Required',
+        description: 'Please select a customer / Khata account to charge.',
+        type: 'error',
+      });
+      return;
+    }
+
+    setPaymentMethod('Credit/Khata');
+    handleFinalizeSale('Credit/Khata');
+  };
+
   // Trigger Card Payment
   const handleStartCardPayment = async () => {
     if (!isKhataTerminalEnabled) {
       toast({
         title: 'Card Terminal Disabled',
-        description: 'Khata Card Terminal is disabled in Store Settings. Please enable it in Settings first.',
+        description: 'Khata Card Terminal is disabled in Store Settings.',
         type: 'error',
       });
       return;
@@ -363,36 +611,20 @@ export default function KhataPOSPage() {
     }
   };
 
-  // Dynamic Tax Calculation: only shown when taxRate is set in stock/products or store settings
-  const { khataTaxAmount, khataTaxRate } = useMemo(() => {
-    const storeTaxRate = storageService.getSettings()?.defaultTaxRate || 0;
-    let taxSum = 0;
-    let taxableBase = 0;
-    khataCart.forEach(item => {
-      const rate =
-        item.product.taxRate !== undefined && item.product.taxRate !== null && item.product.taxRate > 0
-          ? item.product.taxRate
-          : storeTaxRate;
-      if (rate > 0) {
-        taxSum += (item.lineTotal * rate) / 100;
-        taxableBase += item.lineTotal;
-      }
-    });
-    const avgRate = taxableBase > 0 ? Math.round((taxSum / taxableBase) * 100) : storeTaxRate;
-    return {
-      khataTaxAmount: Math.round(taxSum),
-      khataTaxRate: avgRate,
-    };
-  }, [khataCart]);
-
-  const finalKhataGrandTotal = khataSubtotal - khataDiscountTotal + khataTaxAmount;
-
   // Complete Khata Credit Sale & Save Invoice
-  const handleCompleteKhataSale = () => {
-    if (!currentStaff || !selectedCustomer) return;
+  const handleFinalizeSale = (method: PaymentMethod = paymentMethod) => {
+    if (!currentStaff) return;
+    if (!selectedCustomer) {
+      toast({
+        title: 'Khata Account Required',
+        description: 'Please select a customer / Khata account to finalize.',
+        type: 'warning',
+      });
+      return;
+    }
 
     // Validation per payment method
-    if (paymentMethod === 'Cash') {
+    if (method === 'Cash') {
       if (cashReceived < finalKhataGrandTotal) {
         toast({
           title: 'Insufficient Cash Tendered',
@@ -401,11 +633,11 @@ export default function KhataPOSPage() {
         });
         return;
       }
-    } else if (paymentMethod === 'Card') {
+    } else if (method === 'Card') {
       if (!isKhataTerminalEnabled) {
         toast({
           title: 'Card Terminal Disabled',
-          description: 'Khata Card Terminal is disabled in Store Settings. Cannot finalize or submit bill.',
+          description: 'Khata Card Terminal is disabled in Store Settings.',
           type: 'error',
         });
         return;
@@ -418,7 +650,7 @@ export default function KhataPOSPage() {
         });
         return;
       }
-    } else if (paymentMethod === 'Bank Transfer') {
+    } else if (method === 'Bank Transfer') {
       if (!isBankPaymentConfirmed || !selectedBank) {
         toast({
           title: 'Payment Verification Required',
@@ -436,23 +668,23 @@ export default function KhataPOSPage() {
     const bill = salesService.completeSale({
       saleType: 'Khata',
       cartItems: khataCart,
-      paymentMethod,
-      amountReceived: paymentMethod === 'Credit/Khata' ? 0 : paymentMethod === 'Cash' ? cashReceived : finalKhataGrandTotal,
+      paymentMethod: method,
+      amountReceived: method === 'Credit/Khata' ? 0 : method === 'Cash' ? cashReceived : finalKhataGrandTotal,
       discountTotal: khataDiscountTotal,
       taxTotal: khataTaxAmount,
       staffId: currentStaff.id,
       staffName: currentStaff.name,
       counter: currentStaff.counter,
       customer: selectedCustomer,
-      customerName: customerName.trim() || selectedCustomer.name,
+      customerName: customerName.trim() || undefined,
       customerPhone: selectedCustomer.phone,
       clientId: selectedCustomer.id,
       clientName: selectedCustomer.businessName || selectedCustomer.name,
-      cardTransactionId: paymentMethod === 'Card' ? cardTransactionId : undefined,
+      cardTransactionId: method === 'Card' ? cardTransactionId : undefined,
       pandiId: selectedPandi?.id,
       pandiName: pandiName.trim() || undefined,
       bankDetails:
-        paymentMethod === 'Bank Transfer' && selectedBank
+        method === 'Bank Transfer' && selectedBank
           ? {
               bankId: selectedBank.id,
               bankName: selectedBank.bankName,
@@ -467,10 +699,8 @@ export default function KhataPOSPage() {
       notes,
     });
 
-    // Clear saved work session draft upon successful completion
     khataSessionService.clearDraft(currentStaff.id);
 
-    // Refresh customer to get updated balance
     const updatedCustomer = customersService.getById(selectedCustomer.id);
     if (updatedCustomer) {
       setSelectedCustomer(updatedCustomer);
@@ -489,7 +719,7 @@ export default function KhataPOSPage() {
 
     toast({
       title: 'Khata Credit Sale Recorded',
-      description: `Invoice #${bill.invoiceNumber} saved and debited to ${selectedCustomer.name}'s Khata ledger.`,
+      description: `Invoice #${bill.invoiceNumber} recorded and debited to ${selectedCustomer.name}'s Khata ledger.`,
       type: 'success',
     });
   };
@@ -497,965 +727,1079 @@ export default function KhataPOSPage() {
   const calculatedChange = Math.max(0, cashReceived - finalKhataGrandTotal);
   const isCashInsufficient = paymentMethod === 'Cash' && cashReceived < finalKhataGrandTotal;
 
-  // Credit Limit Calculations
-  const currentBalance = selectedCustomer?.currentBalance ?? selectedCustomer?.balance ?? 0;
-  const creditLimit = selectedCustomer?.creditLimit || 0;
-  const newProjectedBalance = currentBalance + finalKhataGrandTotal;
-  const availableCredit = Math.max(0, creditLimit - currentBalance);
-  const isLimitExceeded = creditLimit > 0 && newProjectedBalance > creditLimit;
-  const excessAmount = isLimitExceeded ? newProjectedBalance - creditLimit : 0;
-
   return (
     <ProtectedRoute permission="pos_khata">
       <AppShell>
-        <div className="flex flex-col lg:flex-row gap-5 h-[calc(100vh-7rem)] overflow-hidden">
-          {/* LEFT: Product Catalog & Khata Work Area */}
-          <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-white rounded-2xl border border-slate-200/80 shadow-2xs">
-            {/* Top Bar: Title, Hardware Status, Statement & Bill Searches */}
-            <div className="p-3.5 border-b border-slate-200/80 space-y-3 shrink-0 bg-slate-50/50">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 flex-wrap xl:flex-nowrap">
-                <div className="flex items-center gap-6 flex-wrap sm:flex-nowrap">
-                  <div className="flex items-center gap-2.5 shrink-0">
-                    <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
-                      <BookOpen className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h2 className="text-sm font-bold text-[#17211D] leading-none">
-                        Khata Credit POS
-                      </h2>
-                      <p className="text-[11px] text-[#66726D] mt-0.5">
-                        Customer Ledger & Credit Sales
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Metadata Columns on Same Line */}
-                  <div className="flex items-center gap-6 text-left pl-4 sm:border-l sm:border-[#DCE3E0]">
-                    <div>
-                      <span className="text-[9px] font-bold text-[#8A9590] uppercase tracking-wider block">
-                        INVOICE
-                      </span>
-                      <span className="text-xs font-bold text-[#17211D] font-mono">
-                        {nextInvoiceNumber}
-                      </span>
-                    </div>
-
-                    <div>
-                      <span className="text-[9px] font-bold text-[#8A9590] uppercase tracking-wider block">
-                        CASHIER
-                      </span>
-                      <span className="text-xs font-bold text-[#17211D]">
-                        {currentStaff?.name || 'Haji Abdul Rehman'}
-                      </span>
-                    </div>
-
-                    <div>
-                      <span className="text-[9px] font-bold text-[#8A9590] uppercase tracking-wider block">
-                        COUNTER
-                      </span>
-                      <span className="text-xs font-bold text-[#17211D]">
-                        {currentStaff?.counter || 'Accounts Desk'}
-                      </span>
-                    </div>
-                  </div>
+        <div className="space-y-4 max-w-[1750px] mx-auto select-none pb-12 font-sans text-[#17211D]">
+          {/* ============================================================== */}
+          {/* 1. TOP HEADER / NAVBAR (Exact sequence matching Image 1) */}
+          {/* ============================================================== */}
+          <div className="bg-white rounded-2xl border border-[#DCE3E0] px-4 py-2.5 shadow-2xs flex items-center justify-between gap-4 flex-wrap xl:flex-nowrap">
+            {/* Left: Logo & Title + Metadata */}
+            <div className="flex items-center gap-6 flex-wrap sm:flex-nowrap">
+              <div className="flex items-center gap-2.5 shrink-0">
+                <div className="w-8 h-8 rounded-lg bg-[#197A5A] flex items-center justify-center text-white shrink-0 shadow-2xs">
+                  <Scan className="w-4 h-4" />
                 </div>
-
-                {/* Right Utilities: Search Past Bills */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setIsBillSearchOpen(true)}
-                    className="gap-1.5 font-bold text-xs bg-white shadow-2xs border-slate-300 hover:border-amber-500 hover:text-amber-800"
-                  >
-                    <History className="w-3.5 h-3.5 text-amber-600" />
-                    <span>Search Khata Bills / Returns</span>
-                  </Button>
+                <div>
+                  <h1 className="text-sm font-bold text-[#17211D] leading-none">
+                    Khata Credit POS
+                  </h1>
+                  <p className="text-[11px] text-[#66726D] mt-0.5">
+                    Main Store • {currentStaff?.counter || 'Counter 03'}
+                  </p>
                 </div>
               </div>
 
-              {/* PERSISTENT WORK SESSION: Resume Previous Work Banner */}
-              {availableDraft && (
-                <div className="p-3 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs animate-in fade-in duration-200">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-lg bg-amber-500 text-white flex items-center justify-center font-bold shrink-0">
-                      <Clock className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="font-bold text-amber-950 flex items-center gap-2">
-                        <span>Unfinished Khata Session Detected</span>
-                        <span className="text-[10px] bg-amber-200 text-amber-900 px-1.5 py-0.2 rounded font-mono">
-                          {new Date(availableDraft.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-amber-800">
-                        {availableDraft.cartItems?.length || 0} item(s) • Total: Rs.{' '}
-                        {availableDraft.grandTotal?.toLocaleString() || 0}
-                        {availableDraft.customerName ? ` • Shopper: ${availableDraft.customerName}` : ''}
-                        {availableDraft.selectedClient ? ` • Account: ${availableDraft.selectedClient.businessName || availableDraft.selectedClient.name}` : ''}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      type="button"
-                      onClick={handleDiscardDraft}
-                      className="px-2.5 py-1 text-amber-800 hover:text-rose-700 font-semibold hover:bg-amber-100/60 rounded-lg transition-colors"
-                    >
-                      Discard Draft
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleResumeDraft}
-                      className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg shadow-xs transition-colors flex items-center gap-1.5"
-                    >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>Resume Work</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* DUAL CUSTOMER SELECTION: 1. Collector/Shopper -> 2. Registered Khata Account */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                {/* 1. CUSTOMER NAME (Shopper / Collector) */}
-                <WholesaleCustomerInput
-                  value={customerName}
-                  onChange={(name, cust) => {
-                    setCustomerName(name);
-                    if (cust && (cust.type === 'Khata' || cust.creditLimit > 0) && !selectedCustomer) {
-                      setSelectedCustomer(cust);
-                    }
-                  }}
-                />
-
-                {/* 2. KHATA ACCOUNT (Ledger Account) */}
-                <WholesaleClientSearch
-                  selectedClient={selectedCustomer}
-                  filterKhataOnly={true}
-                  themeColor="amber"
-                  titleLabel="KHATA ACCOUNT"
-                  subtitleLabel="(Customer Credit Ledger)"
-                  placeholder="Search Khata account by name, business, or phone..."
-                  onSelectClient={client => {
-                    setSelectedCustomer(client);
-                    if (client && !customerName) {
-                      setCustomerName(client.name);
-                    }
-                  }}
-                />
-              </div>
-
-              {/* KHATA CUSTOMER CREDIT & LEDGER SUMMARY STRIP */}
-              {selectedCustomer && (
-                <div className="p-2.5 rounded-xl bg-amber-50/60 border border-amber-200/80 flex flex-wrap items-center justify-between gap-3 text-xs">
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-lg bg-amber-600 text-white flex items-center justify-center font-bold text-xs shrink-0">
-                      <Wallet className="w-3.5 h-3.5" />
-                    </div>
-                    <div>
-                      <span className="font-bold text-amber-950">
-                        {selectedCustomer.businessName ? `${selectedCustomer.businessName} (${selectedCustomer.name})` : selectedCustomer.name}
-                      </span>
-                      <span className="text-[11px] text-amber-700 ml-2 font-mono">
-                        {selectedCustomer.phone} • {selectedCustomer.city}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-4 text-[11px]">
-                    <div>
-                      <span className="text-slate-500">Credit Limit:</span>{' '}
-                      <span className="font-bold font-mono text-slate-800">
-                        {creditLimit > 0 ? `Rs. ${creditLimit.toLocaleString()}` : 'No Limit'}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500">Current Debt:</span>{' '}
-                      <span className="font-bold font-mono text-rose-700">
-                        Rs. {currentBalance.toLocaleString()}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500">Available Credit:</span>{' '}
-                      <span className={`font-bold font-mono ${availableCredit > 0 ? 'text-emerald-700' : 'text-slate-700'}`}>
-                        {creditLimit > 0 ? `Rs. ${availableCredit.toLocaleString()}` : 'Unlimited'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* CREDIT LIMIT WARNING BANNER */}
-              {isLimitExceeded && (
-                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2 text-xs text-rose-800 font-semibold animate-pulse">
-                  <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
-                  <span>
-                    Warning: This purchase will exceed {selectedCustomer?.name}&apos;s credit limit (Rs. {creditLimit.toLocaleString()}) by Rs. {excessAmount.toLocaleString()}!
+              {/* Metadata Columns */}
+              <div className="flex items-center gap-6 text-left pl-4 sm:border-l sm:border-[#DCE3E0]">
+                <div>
+                  <span className="text-[9px] font-bold text-[#8A9590] uppercase tracking-wider block">
+                    INVOICE
+                  </span>
+                  <span className="text-xs font-bold text-[#17211D] font-mono">
+                    #{nextInvoiceNumber}
                   </span>
                 </div>
-              )}
 
-              {/* Search Filters Strip - Hardware Barcode removed for Khata Credit POS */}
-              <div className="pt-1">
-                <div className="relative">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    placeholder="Search fabric name, category, or SKU for Khata pricing..."
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  />
+                <div>
+                  <span className="text-[9px] font-bold text-[#8A9590] uppercase tracking-wider block">
+                    CASHIER
+                  </span>
+                  <span className="text-xs font-bold text-[#17211D]">
+                    {currentStaff?.name || 'Ayesha Khan'}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="text-[9px] font-bold text-[#8A9590] uppercase tracking-wider block">
+                    COUNTER
+                  </span>
+                  <span className="text-xs font-bold text-[#17211D]">
+                    {currentStaff?.counter || 'Counter 03'}
+                  </span>
                 </div>
               </div>
             </div>
 
-            {/* Khata Product Catalog Grid */}
-            <div className="flex-1 overflow-y-auto p-4">
-              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
-                {filteredProducts.map(prod => {
-                  const inCart = khataCart.find(i => i.product.id === prod.id);
-                  const isOutOfStock = prod.stock <= 0;
-                  const season = prod.seasonCategory || (['Khaddar', 'Wash & Wear'].includes(prod.category) ? 'Winter' : 'Summer');
-                  const hasKhataPrice = prod.khataPrice !== undefined && prod.khataPrice !== null && prod.khataPrice > 0;
-                  const hasDiscount = (prod.khataDiscount || 0) > 0;
-                  const finalKhata = hasKhataPrice ? Math.max(0, (prod.khataPrice || 0) - (prod.khataDiscount || 0)) : 0;
+            {/* Right: Search Bills/Returns + Time */}
+            <div className="flex items-center gap-3 shrink-0 ml-auto">
+              <button
+                type="button"
+                onClick={() => setIsBillSearchOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#DCE3E0] bg-white hover:bg-[#F0F4F2] text-xs font-semibold text-[#17211D] transition-colors shadow-2xs cursor-pointer"
+                title="Search past bills or process returns"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-[#197A5A]" />
+                <span>Search Bills/Returns</span>
+              </button>
 
-                  const handleProductClick = () => {
-                    if (isOutOfStock) return;
-                    if (!hasKhataPrice) {
-                      toast({
-                        title: 'Khata Sale Price Missing',
-                        description: `Cannot add "${prod.name}". Please configure a Khata Sale Price in Product Catalog before selling on Khata.`,
-                        type: 'error',
-                      });
-                      return;
-                    }
-                    addToKhataCart(prod);
-                  };
+              <div className="text-right pl-3 border-l border-[#DCE3E0]">
+                <div className="font-bold text-xs text-[#17211D] font-mono leading-tight">
+                  {currentTime || '17 Oct 2026 • 10:42 AM'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ============================================================== */}
+          {/* PERSISTENT WORK SESSION RESUME BANNER */}
+          {/* ============================================================== */}
+          {availableDraft && (
+            <div className="p-3 rounded-2xl bg-[#DCEDE6] border border-[#197A5A]/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs animate-in fade-in duration-200">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-xl bg-[#125E45] text-white flex items-center justify-center font-bold shrink-0">
+                  <Clock className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-bold text-[#125E45] flex items-center gap-2">
+                    <span>Unfinished Khata Session Detected</span>
+                    <span className="text-[10px] bg-white text-[#125E45] px-1.5 py-0.2 rounded font-mono font-semibold">
+                      {new Date(availableDraft.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-[#66726D]">
+                    {availableDraft.cartItems?.length || 0} fabric(s) • Total: PKR{' '}
+                    {availableDraft.grandTotal?.toLocaleString() || 0}
+                    {availableDraft.selectedClient ? ` • Account: ${availableDraft.selectedClient.businessName || availableDraft.selectedClient.name}` : ''}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleDiscardDraft}
+                  className="px-2.5 py-1 text-[#C23D45] hover:bg-[#C23D45]/10 font-semibold rounded-lg transition-colors cursor-pointer"
+                >
+                  Discard Draft
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResumeDraft}
+                  className="px-3 py-1 bg-[#125E45] hover:bg-[#197A5A] text-white font-bold rounded-lg shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Resume Work</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ============================================================== */}
+          {/* 2. MAIN WORKSPACE GRID: CATALOG (LEFT) vs CURRENT BILL (RIGHT) */}
+          {/* ============================================================== */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+            {/* LEFT COLUMN: Customer Card + Search + Catalog (8 of 12) */}
+            <div className="lg:col-span-8 space-y-4">
+              {/* Card 1: Customer & Khata Account */}
+              <div className="bg-white rounded-2xl border border-[#DCE3E0] p-4 sm:p-5 shadow-2xs space-y-4">
+                {/* Header Row */}
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <h2 className="text-sm sm:text-base font-bold text-[#17211D]">
+                    Customer & Khata account
+                  </h2>
+                  <div className="flex items-center gap-2">
+                    <span className="bg-[#DCEDE6] text-[#125E45] text-xs font-semibold px-3 py-0.5 rounded-full">
+                      Active credit account
+                    </span>
+                    {(customerName.trim() || selectedCustomer) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCustomerName('');
+                          setSelectedCustomer(null);
+                        }}
+                        className="text-xs font-semibold text-[#C23D45] hover:underline cursor-pointer ml-1"
+                      >
+                        Switch Account
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Dual Input Fields (Side by Side) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  {/* Field 1: Customer Name (Person visiting / taking fabric) */}
+                  <div>
+                    <label className="block text-xs font-semibold text-[#17211D] mb-1.5">
+                      Customer Name
+                    </label>
+                    <div className="relative">
+                      <User className="w-4 h-4 text-[#8A9590] absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        placeholder="Enter person / visitor name..."
+                        value={customerName}
+                        onChange={e => setCustomerName(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2.5 bg-white border border-[#DCE3E0] hover:border-[#197A5A] focus:border-[#197A5A] rounded-xl text-xs font-semibold text-[#17211D] placeholder:text-[#8A9590] placeholder:font-normal focus:outline-none transition-colors"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Field 2: Khata Account */}
+                  <div className="relative" ref={accountDropdownRef}>
+                    <label className="block text-xs font-semibold text-[#17211D] mb-1.5">
+                      Khata Account
+                    </label>
+                    {selectedCustomer ? (
+                      <div className="w-full flex items-center justify-between px-3.5 py-2 bg-[#DCEDE6] border border-[#197A5A]/50 rounded-xl text-xs font-semibold text-[#125E45]">
+                        <div className="flex items-center gap-2 truncate">
+                          <Building className="w-4 h-4 text-[#125E45] shrink-0" />
+                          <span className="truncate">
+                            {selectedCustomer.businessName || selectedCustomer.name} · {selectedCustomer.id}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedCustomer(null);
+                            setAccountSearchQuery('');
+                          }}
+                          className="text-xs font-bold text-[#C23D45] hover:underline cursor-pointer ml-2 shrink-0"
+                        >
+                          Change
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <Search className="w-4 h-4 text-[#8A9590] absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          placeholder="Type or search Khata account (e.g. Raza Fabrics)..."
+                          value={accountSearchQuery}
+                          onChange={e => {
+                            setAccountSearchQuery(e.target.value);
+                            setIsAccountDropdownOpen(true);
+                          }}
+                          onFocus={() => setIsAccountDropdownOpen(true)}
+                          className="w-full pl-9 pr-3 py-2.5 bg-white border border-[#DCE3E0] hover:border-[#197A5A] focus:border-[#197A5A] rounded-xl text-xs text-[#17211D] placeholder:text-[#8A9590] focus:outline-none transition-colors"
+                        />
+                        {isAccountDropdownOpen && (
+                          <div className="absolute left-0 right-0 top-full mt-1.5 bg-white rounded-2xl border border-[#DCE3E0] shadow-xl p-2 z-40 max-h-56 overflow-y-auto">
+                            {khataAccountsList.length === 0 ? (
+                              <div className="p-3 text-xs text-center text-[#8A9590]">
+                                No matching Khata account found
+                              </div>
+                            ) : (
+                              khataAccountsList.map(acc => (
+                                <button
+                                  key={acc.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedCustomer(acc);
+                                    setIsAccountDropdownOpen(false);
+                                    setAccountSearchQuery('');
+                                  }}
+                                  className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-left hover:bg-[#E9F3EF] text-xs transition-colors cursor-pointer"
+                                >
+                                  <div>
+                                    <div className="font-bold text-[#17211D]">
+                                      {acc.businessName ? `${acc.businessName} (${acc.name})` : acc.name}
+                                    </div>
+                                    <div className="text-[11px] text-[#66726D] font-mono">
+                                      ID: {acc.id} • {acc.phone}
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="text-[10px] text-[#66726D]">Balance:</div>
+                                    <div className="font-bold font-mono text-[#125E45] text-xs">
+                                      PKR {(acc.currentBalance ?? acc.balance ?? 0).toLocaleString()}
+                                    </div>
+                                  </div>
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Account Balance & Credit Stats Banner */}
+                <div className="bg-[#F0F4F2] border border-[#DCE3E0] rounded-xl p-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <span className="text-[11px] font-semibold text-[#66726D] block">
+                      Current balance owed
+                    </span>
+                    <span className="text-sm font-bold text-[#17211D] font-mono mt-0.5 block">
+                      PKR {currentBalance.toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-[11px] font-semibold text-[#66726D] block">
+                      Available credit
+                    </span>
+                    <span className="text-sm font-bold text-[#197A5A] font-mono mt-0.5 block">
+                      PKR {availableCredit.toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-[11px] font-semibold text-[#66726D] block">
+                      Credit limit
+                    </span>
+                    <span className="text-sm font-bold text-[#17211D] font-mono mt-0.5 block">
+                      PKR {creditLimit.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Credit Limit Alert Banner */}
+                {isLimitExceeded && (
+                  <div className="p-2.5 rounded-xl bg-[#FDE8E9] border border-[#C23D45] flex items-center gap-2 text-xs text-[#C23D45] font-semibold">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-[#C23D45]" />
+                    <span>
+                      Alert: This sale will exceed {selectedCustomer?.name}&apos;s credit limit (PKR {creditLimit.toLocaleString()}) by PKR {excessAmount.toLocaleString()}!
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* SEARCH FABRIC NAME, SKU OR TYPE (Matching Wholesale POS) */}
+              <div className="flex items-center justify-between border border-[#DCE3E0] rounded-xl bg-white px-3.5 py-2.5 shadow-2xs">
+                <div className="flex items-center gap-2.5 flex-1 mr-2">
+                  <Search className="w-4 h-4 text-[#8A9590] shrink-0" />
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    placeholder="Search fabric name, SKU or type"
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    className="w-full text-xs font-medium text-[#17211D] placeholder:text-[#8A9590] bg-transparent focus:outline-none"
+                  />
+                </div>
+                {searchQuery ? (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="text-[#8A9590] hover:text-[#17211D] mr-2"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                ) : null}
+                <span className="px-1.5 py-0.5 rounded bg-[#F0F4F2] text-[10px] text-[#8A9590] font-mono border border-[#DCE3E0]">
+                  F2
+                </span>
+              </div>
+
+              {/* CATEGORY FILTER PILLS (Matching Wholesale POS rounded-full) */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none text-xs">
+                {categoryTabs.map(cat => {
+                  const isActive = selectedCategory === cat;
+                  return (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setSelectedCategory(cat)}
+                      className={`whitespace-nowrap px-3.5 py-1.5 rounded-full font-semibold transition-all cursor-pointer ${
+                        isActive
+                          ? 'bg-[#125E45] text-white shadow-2xs'
+                          : 'bg-white border border-[#DCE3E0] text-[#17211D] hover:bg-[#F0F4F2]'
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* PRODUCT CATALOG HEADER (Count + Sorting Dropdown matching Wholesale POS) */}
+              <div className="flex items-center justify-between pt-1">
+                <div>
+                  <h2 className="text-base font-bold text-[#17211D]">Product catalog</h2>
+                  <p className="text-xs text-[#66726D]">
+                    {filteredProducts.length} products · {displayedProducts.length} shown · Sold by metre
+                  </p>
+                </div>
+
+                <div className="relative">
+                  <select
+                    value={sortOption}
+                    onChange={e => setSortOption(e.target.value as any)}
+                    className="appearance-none border border-[#DCE3E0] rounded-xl bg-white pl-3 pr-7 py-1 text-xs text-[#17211D] font-medium shadow-2xs focus:outline-none cursor-pointer"
+                  >
+                    <option value="inStock">In stock first</option>
+                    <option value="recent">Recent added first</option>
+                    <option value="priceAsc">Price: Low to High</option>
+                    <option value="priceDesc">Price: High to Low</option>
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-[#8A9590] absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* PRODUCT CARDS GRID (Exact Wholesale POS Card UI/UX) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
+                {displayedProducts.map(prod => {
+                  const isOutOfStock = prod.stock <= 0;
+                  const seasonTag = prod.seasonCategory
+                    ? `${prod.seasonCategory} '26`
+                    : prod.subcategory || 'Summer \'26';
+
+                  const inCart = khataCart.find(i => i.product.id === prod.id);
+                  const khataPrice = prod.khataPrice || Math.round(prod.wholesalePrice * 1.05);
 
                   return (
                     <div
                       key={prod.id}
-                      onClick={handleProductClick}
-                      className={`relative p-3 rounded-xl border flex flex-col justify-between transition-all duration-150 cursor-pointer select-none group ${
-                        isOutOfStock
-                          ? 'opacity-50 bg-slate-50 border-slate-200 pointer-events-none'
-                          : !hasKhataPrice
-                          ? 'border-rose-200 bg-rose-50/20 hover:border-rose-400'
-                          : inCart
-                          ? 'border-amber-500 bg-amber-50/20 shadow-xs'
-                          : 'border-slate-200/80 bg-white hover:border-amber-300 hover:shadow-md'
+                      className={`bg-white rounded-2xl border border-[#DCE3E0] p-4 flex flex-col justify-between hover:border-[#197A5A]/60 transition-all shadow-2xs group ${
+                        isOutOfStock ? 'opacity-60 bg-[#F6F8F7]' : ''
                       }`}
                     >
                       <div>
-                        <div className="flex items-center justify-between text-[10px] text-slate-500 mb-1">
-                          <span className="font-mono">{prod.sku}</span>
-                          <span className="font-semibold text-slate-600">
-                            {prod.stock} {prod.unit}
-                          </span>
-                        </div>
-
-                        <h3 className="text-xs font-bold text-slate-900 line-clamp-2 leading-snug group-hover:text-amber-700 transition-colors">
-                          {prod.name}
-                        </h3>
-                        <div className="flex items-center gap-1 mt-1">
+                        {/* Top: SKU & Available Stock */}
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="font-mono text-[#8A9590]">{prod.sku}</span>
                           <span
-                            className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${
-                              season === 'Winter'
-                                ? 'bg-blue-50 text-blue-700 border-blue-200'
-                                : 'bg-amber-50 text-amber-700 border-amber-200'
+                            className={`font-medium flex items-center gap-1 ${
+                              isOutOfStock ? 'text-rose-600' : 'text-[#16835B]'
                             }`}
                           >
-                            {season === 'Winter' ? '❄️ Winter' : '☀️ Summer'}
-                          </span>
-                          <span className="text-[10px] text-slate-400">{prod.unit}</span>
-                          {!hasKhataPrice && (
-                            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-100 text-rose-700 border border-rose-200">
-                              No Khata Price
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between">
-                        <div className="space-y-0.5">
-                          {hasKhataPrice ? (
-                            <>
-                              <div className="text-xs font-bold text-slate-900 font-mono">
-                                Khata Price: Rs. {(prod.khataPrice || 0).toLocaleString()}
-                              </div>
-                              {hasDiscount ? (
-                                <>
-                                  <div className="text-[11px] font-semibold text-emerald-600 font-mono">
-                                    Discount: − Rs. {(prod.khataDiscount || 0).toLocaleString()}
-                                  </div>
-                                  <div className="text-xs font-black text-amber-800 font-mono">
-                                    Net: Rs. {finalKhata.toLocaleString()}
-                                  </div>
-                                </>
-                              ) : null}
-                            </>
-                          ) : (
-                            <div className="text-[11px] font-bold text-rose-600 italic">
-                              Price Not Set
-                            </div>
-                          )}
-                        </div>
-                        <div
-                          className={`w-6 h-6 rounded-md flex items-center justify-center text-xs transition-colors ${
-                            inCart
-                              ? 'bg-amber-600 text-white font-bold'
-                              : !hasKhataPrice
-                              ? 'bg-rose-100 text-rose-400 cursor-not-allowed'
-                              : 'bg-slate-100 text-slate-600 group-hover:bg-amber-600 group-hover:text-white'
-                          }`}
-                        >
-                          {inCart ? inCart.quantity : <Plus className="w-3.5 h-3.5" />}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          {/* RIGHT: Khata Bill & Cart Panel */}
-          <div className="w-full lg:w-96 shrink-0 flex flex-col h-full bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
-            {/* Header */}
-            <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
-              <div className="flex items-center gap-2">
-                <BookOpen className="w-4 h-4 text-amber-600" />
-                <h3 className="font-bold text-sm text-slate-900">Khata Credit Bill</h3>
-                <span className="text-[11px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold">
-                  {khataCart.length} lines
-                </span>
-              </div>
-              {khataCart.length > 0 && (
-                <button
-                  onClick={clearKhataCart}
-                  className="text-slate-400 hover:text-rose-600 text-xs flex items-center gap-1 transition-colors font-medium"
-                >
-                  <Trash2 className="w-3.5 h-3.5" /> Clear Cart
-                </button>
-              )}
-            </div>
-
-            {/* Cart Items List */}
-            <div className="flex-1 overflow-y-auto p-3 divide-y divide-slate-100">
-              {khataCart.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-400">
-                  <BookOpen className="w-12 h-12 mb-2 stroke-1 text-slate-300" />
-                  <p className="text-xs font-semibold text-slate-700">Khata invoice is empty</p>
-                  <p className="text-[11px] text-slate-400 mt-1 max-w-[220px]">
-                    Scan fabric barcodes or click products from catalog to add at Khata credit rates.
-                  </p>
-                </div>
-              ) : (
-                khataCart.map(item => {
-                  const itemSeason = item.product.seasonCategory || (['Khaddar', 'Wash & Wear'].includes(item.product.category) ? 'Winter' : 'Summer');
-                  const unitDiscount = item.discountPerUnit ?? item.product.khataDiscount ?? 0;
-                  const netUnit = Math.max(0, item.price - unitDiscount);
-
-                  return (
-                    <div key={item.product.id} className="p-3 bg-slate-50/70 border border-slate-200/80 rounded-xl space-y-2 mb-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-xs font-bold text-slate-900 leading-tight truncate">
-                              {item.product.name}
-                            </span>
                             <span
-                              className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${
-                                itemSeason === 'Winter'
-                                  ? 'bg-blue-50 text-blue-700 border-blue-200'
-                                  : 'bg-amber-50 text-amber-700 border-amber-200'
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                isOutOfStock ? 'bg-rose-500' : 'bg-[#16835B]'
                               }`}
-                            >
-                              {itemSeason === 'Winter' ? '❄️ Winter' : '☀️ Summer'}
-                            </span>
-                          </div>
+                            />
+                            {prod.stock > 0 ? `${prod.stock} available` : 'Out of stock'}
+                          </span>
+                        </div>
 
-                          {/* Khata Price & Discount Breakdown */}
-                          <div className="mt-1 space-y-0.5 text-[11px] font-mono">
-                            <div className="text-slate-600">
-                              {item.quantity > 1 ? 'Unit Khata Price:' : 'Khata Price:'}{' '}
-                              <span className="font-semibold text-slate-900">Rs. {item.price.toLocaleString()}</span>
-                              <span className="text-[10px] text-slate-400 font-sans ml-1">/{item.product.unit}</span>
-                            </div>
-                            {unitDiscount > 0 ? (
-                              <div className="text-emerald-600 font-semibold">
-                                {item.quantity > 1 ? 'Khata Discount/unit:' : 'Khata Discount:'} − Rs. {unitDiscount.toLocaleString()}
-                              </div>
-                            ) : null}
-                            {(item.extraDiscountRupees || 0) > 0 ? (
-                              <div className="text-amber-700 font-semibold">
-                                Extra Discount (Rs.): − Rs. {(item.extraDiscountRupees || 0).toLocaleString()}
-                              </div>
-                            ) : null}
-                            <div className="text-amber-900 font-bold text-[10px]">
-                              Final Unit Price: Rs. {Math.max(0, item.price - unitDiscount - (item.extraDiscountRupees || 0)).toLocaleString()}
-                            </div>
+                        {/* Product Title */}
+                        <h3 className="font-bold text-sm text-[#17211D] mt-2 line-clamp-1 leading-snug">
+                          {prod.name}
+                        </h3>
+
+                        {/* Category & Width Specs */}
+                        <p className="text-xs text-[#66726D] mt-0.5">
+                          {prod.category} · {prod.subcategory || prod.description || '58-inch width'}
+                        </p>
+
+                        {/* Collection Tag */}
+                        <div className="mt-2.5">
+                          <span className="bg-[#E9F3EF] text-[#125E45] text-[10px] font-semibold px-2 py-0.5 rounded-md inline-block">
+                            {seasonTag}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Bottom Pricing & Add Button */}
+                      <div className="flex items-center justify-between mt-4 pt-3 border-t border-[#DCE3E0]/60">
+                        <div>
+                          <div className="text-base font-bold text-[#17211D]">
+                            PKR {khataPrice.toLocaleString()}
                           </div>
+                          {inCart && (
+                            <div className="text-[10px] text-[#197A5A] font-semibold mt-0.5">
+                              {inCart.quantity} {prod.unit || 'm'} added
+                            </div>
+                          )}
                         </div>
 
                         <button
-                          onClick={() => removeFromKhataCart(item.product.id)}
-                          className="text-slate-400 hover:text-rose-500 p-1 rounded"
-                          title="Remove Line"
+                          type="button"
+                          onClick={() => !isOutOfStock && addToKhataCart(prod)}
+                          disabled={isOutOfStock}
+                          className="w-8 h-8 rounded-lg bg-[#125E45] hover:bg-[#197A5A] disabled:bg-slate-300 text-white flex items-center justify-center font-bold text-lg transition-colors shadow-2xs cursor-pointer active:scale-95 disabled:cursor-not-allowed"
+                          title={`Add ${prod.name} to Khata invoice`}
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Plus className="w-4 h-4" />
                         </button>
                       </div>
-
-                      {/* Quantity & Extra Rs. & Line Total */}
-                      <div className="flex items-center justify-between pt-1.5 border-t border-slate-200/60 text-xs">
-                        <div className="flex items-center gap-1 border border-slate-200 rounded-lg p-0.5 bg-white">
-                          <button
-                            onClick={() => updateKhataQuantity(item.product.id, item.quantity - 1)}
-                            className="w-5 h-5 flex items-center justify-center rounded text-slate-600 hover:bg-slate-100"
-                          >
-                            <Minus className="w-3 h-3" />
-                          </button>
-                          <span className="font-bold text-slate-900 text-xs px-2 min-w-[24px] text-center font-mono">
-                            {item.quantity}
-                          </span>
-                          <button
-                            onClick={() => updateKhataQuantity(item.product.id, item.quantity + 1)}
-                            className="w-5 h-5 flex items-center justify-center rounded text-slate-600 hover:bg-slate-100"
-                          >
-                            <Plus className="w-3 h-3" />
-                          </button>
-                        </div>
-
-                        <div className="flex items-center gap-1">
-                          <span className="text-[10px] text-slate-500 font-semibold">Extra (Rs.):</span>
-                          <div className="relative flex items-center">
-                            <span className="text-[10px] text-slate-400 absolute left-1.5 font-mono">Rs.</span>
-                            <input
-                              type="number"
-                              min="0"
-                              value={item.extraDiscountRupees || ''}
-                              placeholder="0"
-                              onChange={e =>
-                                updateKhataExtraDiscount(item.product.id, Math.max(0, parseFloat(e.target.value) || 0))
-                              }
-                              className="w-20 h-6 pl-6 pr-1 text-right text-xs border border-slate-200 rounded bg-white focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono font-bold text-amber-800"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="text-right">
-                          <div className="text-[10px] text-slate-400 font-medium">
-                            {item.quantity > 1 ? 'Line Total:' : 'Total:'}
-                          </div>
-                          <div className="text-xs font-black text-slate-900 font-mono">
-                            Rs. {item.lineTotal.toLocaleString()}
-                          </div>
-                        </div>
-                      </div>
                     </div>
-                  );
-                })
-              )}
-            </div>
-
-            {/* Calculations & Submit Button */}
-            <div className="p-4 border-t border-slate-200 bg-slate-50 space-y-2.5 text-xs">
-              <div className="flex justify-between text-slate-600">
-                <span>Subtotal:</span>
-                <span className="font-mono font-bold">Rs. {khataSubtotal.toLocaleString()}</span>
-              </div>
-              {khataDiscountTotal > 0 && (
-                <div className="flex justify-between text-emerald-700 font-semibold">
-                  <span>Total Khata Discounts:</span>
-                  <span className="font-mono font-bold">− Rs. {khataDiscountTotal.toLocaleString()}</span>
-                </div>
-              )}
-              {/* Dynamic Tax: Only shown when taxRate > 0 or khataTaxAmount > 0 */}
-              {khataTaxAmount > 0 && (
-                <div className="flex justify-between text-slate-600">
-                  <span>Tax ({khataTaxRate}%):</span>
-                  <span className="font-mono font-bold text-slate-900">+ Rs. {khataTaxAmount.toLocaleString()}</span>
-                </div>
-              )}
-              <div className="flex justify-between text-sm font-black text-slate-900 pt-1.5 border-t border-slate-200">
-                <span>FINAL TOTAL:</span>
-                <span className="text-amber-800 font-mono text-base font-black">Rs. {finalKhataGrandTotal.toLocaleString()}</span>
-              </div>
-
-              {isLimitExceeded && (
-                <div className="p-2 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-bold">
-                  Exceeds Credit Limit by Rs. {excessAmount.toLocaleString()}
-                </div>
-              )}
-
-              <Button
-                variant="accent"
-                size="lg"
-                onClick={handleOpenCheckout}
-                disabled={khataCart.length === 0 || !selectedCustomer}
-                className="w-full mt-2 font-bold gap-2 text-sm shadow-md bg-amber-600 hover:bg-amber-700 text-white"
-              >
-                Charge to Khata Account <ArrowRight className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        {/* MODAL: Khata Settlement & Ledger Confirmation */}
-        <Modal
-          isOpen={isCheckoutOpen}
-          onClose={() => setIsCheckoutOpen(false)}
-          title="Finalize Khata Credit Sale"
-          description="Debit invoice amount to customer credit ledger and record transaction."
-          maxWidth="2xl"
-        >
-          <div className="space-y-4 text-xs">
-            {/* Customer & Amount Summary with Detailed Breakdown */}
-            <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 space-y-2">
-              <div className="flex items-center justify-between text-xs text-slate-600">
-                <span>Khata Subtotal:</span>
-                <span className="font-mono font-bold text-slate-900">Rs. {khataSubtotal.toLocaleString()}</span>
-              </div>
-              {khataDiscountTotal > 0 && (
-                <div className="flex items-center justify-between text-xs text-emerald-700">
-                  <span>Total Khata Discounts:</span>
-                  <span className="font-mono font-bold">− Rs. {khataDiscountTotal.toLocaleString()}</span>
-                </div>
-              )}
-              {khataTaxAmount > 0 && (
-                <div className="flex items-center justify-between text-xs text-slate-600 mb-1">
-                  <span>Tax ({khataTaxRate}%):</span>
-                  <span className="font-mono font-bold text-slate-900">+ Rs. {khataTaxAmount.toLocaleString()}</span>
-                </div>
-              )}
-              <div className="flex items-center justify-between pt-2 border-t border-amber-200/80">
-                <div>
-                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">
-                    Total Debit Amount
-                  </span>
-                  <div className="text-2xl font-black text-amber-950 font-mono mt-0.5">
-                    Rs. {finalKhataGrandTotal.toLocaleString()}
-                  </div>
-                </div>
-                {selectedCustomer && (
-                  <div className="text-right">
-                    <span className="text-slate-500 font-medium">Billed To (Khata Account):</span>
-                    <div className="font-bold text-slate-900 text-sm">
-                      {selectedCustomer.businessName || selectedCustomer.name}
-                    </div>
-                    <div className="text-[11px] text-slate-600">
-                      Shopper: <strong>{customerName || selectedCustomer.name}</strong> • Phone: {selectedCustomer.phone}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Ledger Impact Preview */}
-              {selectedCustomer && (
-                <div className="pt-2 border-t border-amber-200/60 grid grid-cols-3 gap-2 text-center text-[11px]">
-                  <div className="p-2 rounded-lg bg-white/80 border border-amber-100">
-                    <span className="text-slate-500 block">Current Balance</span>
-                    <span className="font-bold font-mono text-slate-900">Rs. {currentBalance.toLocaleString()}</span>
-                  </div>
-                  <div className="p-2 rounded-lg bg-white/80 border border-amber-100">
-                    <span className="text-slate-500 block">After This Sale</span>
-                    <span className="font-bold font-mono text-amber-900">
-                      Rs. {(paymentMethod === 'Credit/Khata' ? newProjectedBalance : currentBalance).toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="p-2 rounded-lg bg-white/80 border border-amber-100">
-                    <span className="text-slate-500 block">Credit Limit</span>
-                    <span className="font-bold font-mono text-slate-900">
-                      {creditLimit > 0 ? `Rs. ${creditLimit.toLocaleString()}` : 'Unlimited'}
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Payment Method Selector */}
-            <div>
-              <label className="block text-xs font-bold text-slate-800 mb-1.5">
-                Settlement / Ledger Method
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {(['Credit/Khata', 'Cash', 'Bank Transfer', 'Card'] as PaymentMethod[]).map(pm => {
-                  const isCardDisabled = pm === 'Card' && !isKhataTerminalEnabled;
-                  return (
-                    <button
-                      key={pm}
-                      type="button"
-                      onClick={() => {
-                        if (isCardDisabled) {
-                          toast({
-                            title: 'Card Terminal Disabled',
-                            description: 'Khata Card Terminal is disabled in Store Settings. Please enable it in Settings first.',
-                            type: 'error',
-                          });
-                        }
-                        setPaymentMethod(pm);
-                        if (pm === 'Cash') {
-                          setCashReceived(finalKhataGrandTotal);
-                        }
-                      }}
-                      className={`flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl border font-bold text-xs transition-all relative ${
-                        paymentMethod === pm
-                          ? isCardDisabled
-                            ? 'border-amber-400 bg-amber-50 text-amber-900 shadow-sm'
-                            : 'border-amber-600 bg-amber-600 text-white shadow-sm shadow-amber-600/20'
-                          : isCardDisabled
-                          ? 'border-slate-200 bg-slate-100/70 text-slate-400 hover:bg-slate-100'
-                          : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                      }`}
-                    >
-                      {pm === 'Credit/Khata' && <BookOpen className="w-4 h-4" />}
-                      {pm === 'Cash' && <Banknote className="w-4 h-4" />}
-                      {pm === 'Bank Transfer' && <Building className="w-4 h-4" />}
-                      {pm === 'Card' && <CreditCard className="w-4 h-4" />}
-                      <span>{pm === 'Credit/Khata' ? 'Debit to Khata' : pm}</span>
-                      {isCardDisabled && (
-                        <span className="text-[10px] text-rose-500 font-bold">Disabled</span>
-                      )}
-                    </button>
                   );
                 })}
               </div>
+
+              {/* BOTTOM BAR: Show More Products Button */}
+              {visibleCount < filteredProducts.length && (
+                <div className="flex justify-center pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setVisibleCount(prev => prev + 9)}
+                    className="flex items-center gap-2 px-6 py-2.5 rounded-xl border border-[#DCE3E0] bg-white hover:bg-[#F0F4F2] text-xs font-bold text-[#125E45] shadow-2xs transition-all cursor-pointer hover:border-[#125E45] active:scale-98"
+                  >
+                    <span>Show More Products</span>
+                    <span className="text-[10px] text-[#66726D] font-normal">
+                      (+9 of {filteredProducts.length - visibleCount} remaining)
+                    </span>
+                    <ChevronDown className="w-4 h-4 text-[#125E45]" />
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* CASH WORKFLOW & CASH DRAWER INTEGRATION */}
-            {paymentMethod === 'Cash' && (
-              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="font-bold text-slate-800">CASH TENDERED:</span>
+            {/* ============================================================== */}
+            {/* RIGHT COLUMN: CURRENT BILL PANEL (Exact Wholesale POS UX/UI) */}
+            {/* ============================================================== */}
+            <div className="lg:col-span-4 bg-white rounded-2xl border border-[#DCE3E0] p-4 shadow-2xs flex flex-col justify-between sticky top-4 min-h-[580px] max-h-[calc(100vh-8.5rem)] overflow-hidden">
+              <div className="shrink-0 space-y-3">
+                {/* Cart Header */}
+                <div className="flex items-center justify-between pb-2 border-b border-[#DCE3E0]/70">
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-slate-500">Rs.</span>
-                    <input
-                      type="number"
-                      value={cashReceived || ''}
-                      placeholder="0"
-                      onChange={e => setCashReceived(parseFloat(e.target.value) || 0)}
-                      className="w-36 h-9 px-3 text-right border border-slate-300 rounded-xl font-mono font-bold text-base text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                    />
+                    <h2 className="font-bold text-base text-[#17211D]">Current Bill</h2>
+                    <span className="bg-[#DCEDE6] text-[#125E45] text-xs font-semibold px-2 py-0.5 rounded-full">
+                      {khataCart.length} {khataCart.length === 1 ? 'item' : 'items'}
+                    </span>
                   </div>
-                </div>
 
-                <div className="flex justify-between items-center pt-2 border-t border-slate-200">
-                  <span className="font-bold text-slate-700">CHANGE DUE (BAKAYA):</span>
-                  <span className="font-mono font-black text-base text-amber-800">
-                    Rs. {calculatedChange.toLocaleString()}
-                  </span>
-                </div>
-
-                {isCashInsufficient && (
-                  <div className="p-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-bold flex items-center gap-1.5">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <span>Insufficient cash! Needs Rs. {(khataGrandTotal - cashReceived).toLocaleString()} more.</span>
-                  </div>
-                )}
-
-              </div>
-            )}
-
-            {/* BANK TRANSFER WORKFLOW WITH VERIFICATION */}
-            {paymentMethod === 'Bank Transfer' && (
-              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Select Store Bank Account for Transfer
-                  </label>
-                  <select
-                    value={selectedBank?.id || ''}
-                    onChange={e => {
-                      const b = bankAccounts.find(x => x.id === e.target.value);
-                      setSelectedBank(b || null);
-                      setIsBankPaymentConfirmed(false);
-                    }}
-                    className="w-full text-xs font-semibold bg-white border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  >
-                    {bankAccounts.map(b => (
-                      <option key={b.id} value={b.id}>
-                        {b.bankName} - {b.accountTitle} ({b.accountNumber})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {selectedBank && (
-                  <div className="p-3 bg-white rounded-xl border border-amber-200 space-y-1 font-mono text-xs">
-                    <div className="flex justify-between text-slate-500 font-sans">
-                      <span>Bank Name:</span>
-                      <strong className="text-slate-900">{selectedBank.bankName}</strong>
-                    </div>
-                    <div className="flex justify-between text-slate-500 font-sans">
-                      <span>Account Title:</span>
-                      <strong className="text-slate-900">{selectedBank.accountTitle}</strong>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500 font-sans">Account Number:</span>
-                      <span className="font-bold text-slate-900">{selectedBank.accountNumber}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500 font-sans">IBAN:</span>
-                      <span className="font-bold text-slate-900">{selectedBank.iban}</span>
-                    </div>
-                  </div>
-                )}
-
-                <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] space-y-2">
-                  <p>Customer must transfer from their mobile banking app and show payment proof / slip.</p>
-                  <div className="flex items-center justify-between pt-1 border-t border-amber-200/60">
-                    <span className="font-bold">Staff Verification:</span>
+                  {khataCart.length > 0 && (
                     <button
                       type="button"
-                      onClick={() => setIsBankPaymentConfirmed(prev => !prev)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors ${
+                      onClick={() => {
+                        if (confirm('Clear active Khata bill?')) {
+                          clearKhataCart();
+                        }
+                      }}
+                      className="p-1.5 rounded-lg border border-[#DCE3E0] text-[#8A9590] hover:text-[#C23D45] hover:bg-[#F0F4F2] transition-colors cursor-pointer"
+                      title="Clear Bill"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Customer Section */}
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-[#17211D] block">
+                    Customer & Khata Account
+                  </label>
+                  <div className="border border-[#DCE3E0] rounded-xl px-3 py-2 text-xs text-[#17211D] bg-[#F0F4F2] flex items-center justify-between">
+                    <span className="font-semibold truncate">
+                      {selectedCustomer ? (selectedCustomer.businessName || selectedCustomer.name) : 'Select Khata Account'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsAccountDropdownOpen(true)}
+                      className="text-xs font-semibold text-[#125E45] hover:underline cursor-pointer ml-2 shrink-0"
+                    >
+                      Change
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between text-xs pt-0.5">
+                    <span className="text-[#66726D] truncate">
+                      {customerName.trim() ? `Customer: ${customerName.trim()}` : 'No customer name entered'} {selectedCustomer ? `· ID: ${selectedCustomer.id}` : ''}
+                    </span>
+                    <span className="text-[#8A9590] font-mono text-[10px]">
+                      #{nextInvoiceNumber}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Cart Items List - Internally Scrollable matching Wholesale POS */}
+              <div className="flex-1 overflow-y-auto pr-1 space-y-2.5 my-2 min-h-[200px] max-h-[340px]">
+                {khataCart.length === 0 ? (
+                  <div className="py-6 text-center text-[#8A9590] text-xs space-y-1.5">
+                    <ShoppingBag className="w-7 h-7 text-[#C7D2CD] mx-auto" />
+                    <p className="font-semibold text-[#17211D]">Bill is empty</p>
+                    <p className="text-[11px] text-[#66726D]">
+                      Scan fabric barcode or click [+] on a fabric to add to Khata bill.
+                    </p>
+                  </div>
+                ) : (
+                  khataCart.map(item => {
+                    const unitPrice = Math.max(
+                      0,
+                      item.price - (item.discountPerUnit || 0) - (item.extraDiscountRupees || 0)
+                    );
+
+                    return (
+                      <div
+                        key={item.product.id}
+                        className="space-y-1.5 pb-3 border-b border-[#DCE3E0]/60 last:border-b-0"
+                      >
+                        {/* Line 1: Title + Red Trash Button */}
+                        <div className="flex items-start justify-between gap-2">
+                          <h4 className="font-bold text-xs text-[#17211D] leading-tight">
+                            {item.product.name}
+                          </h4>
+                          <button
+                            type="button"
+                            onClick={() => removeFromKhataCart(item.product.id)}
+                            className="text-[#C23D45] hover:opacity-80 p-0.5 cursor-pointer shrink-0 transition-opacity"
+                            title="Remove item"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        {/* Line 2: Spec / SKU & Unit Rate */}
+                        <div className="flex items-center justify-between text-[11px] text-[#66726D]">
+                          <span>
+                            {item.product.sku} · Qty: {item.quantity}
+                          </span>
+                          <span className="text-[#8A9590] text-[10px]">
+                            PKR {unitPrice.toLocaleString()}
+                          </span>
+                        </div>
+
+                        {/* Line 3: Quantity Controls + Rs Discount Input + Line Total */}
+                        <div className="flex items-center justify-between pt-1 gap-2">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <div className="border border-[#DCE3E0] rounded-lg flex items-center gap-1.5 px-2 h-7 text-xs text-[#17211D] bg-white shadow-2xs">
+                              <button
+                                type="button"
+                                onClick={() => updateKhataQuantity(item.product.id, Math.max(1, item.quantity - 1))}
+                                disabled={item.quantity <= 1}
+                                className="text-[#66726D] hover:text-[#17211D] font-bold text-sm cursor-pointer disabled:opacity-30 px-0.5"
+                              >
+                                −
+                              </button>
+                              <input
+                                type="number"
+                                min="1"
+                                max={item.product.stock}
+                                value={item.quantity}
+                                onChange={e => {
+                                  const raw = e.target.value;
+                                  if (raw === '') return;
+                                  const num = parseInt(raw, 10);
+                                  if (!isNaN(num)) {
+                                    const clamped = Math.max(1, Math.min(item.product.stock, num));
+                                    updateKhataQuantity(item.product.id, clamped);
+                                  }
+                                }}
+                                className="font-bold min-w-[20px] max-w-[34px] text-center text-xs text-[#17211D] bg-transparent focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => updateKhataQuantity(item.product.id, Math.min(item.product.stock, item.quantity + 1))}
+                                disabled={item.quantity >= item.product.stock}
+                                className="text-[#66726D] hover:text-[#17211D] font-bold text-sm cursor-pointer disabled:opacity-30 px-0.5"
+                              >
+                                +
+                              </button>
+                            </div>
+
+                            <div className="border border-[#DCE3E0] rounded-lg flex items-center overflow-hidden bg-white h-7 focus-within:border-[#197A5A] focus-within:ring-1 focus-within:ring-[#197A5A]/30 transition-all shadow-2xs" title="Discount in Rupees per unit">
+                              <span className="bg-[#F0F4F2] text-[#66726D] text-[10px] font-bold px-2 h-full flex items-center border-r border-[#DCE3E0] select-none tracking-tight">
+                                Disc Rs
+                              </span>
+                              <input
+                                type="number"
+                                min="0"
+                                placeholder="0"
+                                value={item.extraDiscountRupees || ''}
+                                onChange={e => {
+                                  const val = parseFloat(e.target.value) || 0;
+                                  updateKhataExtraDiscount(item.product.id, val);
+                                }}
+                                className="w-14 px-2 text-xs font-bold font-mono text-center text-[#16835B] bg-transparent focus:outline-none placeholder:text-[#8A9590] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="font-bold text-sm text-[#17211D] shrink-0">
+                            PKR {item.lineTotal.toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Bottom Financial Totals & Khata Impact Box */}
+              <div className="shrink-0 pt-2 border-t border-[#DCE3E0] space-y-2 bg-white">
+                <div className="space-y-1 text-xs">
+                  <div className="flex items-center justify-between text-[#66726D]">
+                    <span>Subtotal</span>
+                    <span className="font-medium text-[#17211D]">
+                      PKR {khataSubtotal.toLocaleString()}
+                    </span>
+                  </div>
+
+                  {khataDiscountTotal > 0 && (
+                    <div className="flex items-center justify-between text-[#66726D]">
+                      <span>Discount</span>
+                      <span className="font-semibold text-[#16835B]">
+                        − PKR {khataDiscountTotal.toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+
+                  {khataTaxAmount > 0 && (
+                    <div className="flex items-center justify-between text-[#66726D]">
+                      <span>Tax ({khataTaxRate}%)</span>
+                      <span className="font-semibold text-[#17211D]">
+                        PKR {khataTaxAmount.toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="border-t border-[#DCE3E0] pt-1.5 mt-1 flex items-center justify-between">
+                    <span className="font-semibold text-sm text-[#17211D]">Total to charge</span>
+                    <span className="font-black text-xl text-[#17211D]">
+                      PKR {finalKhataGrandTotal.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Balance Impact Preview Box */}
+                <div className="p-2.5 bg-[#F0F4F2] rounded-xl border border-[#DCE3E0] space-y-1 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-[#66726D]">Balance after charge:</span>
+                    <span className="font-bold text-[#17211D]">
+                      PKR {newProjectedBalance.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#66726D]">Credit remaining:</span>
+                    <span className={`font-bold ${isLimitExceeded ? 'text-[#C23D45]' : 'text-[#197A5A]'}`}>
+                      PKR {availableCreditAfterCharge.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Primary Proceed to Tender Button (F8) */}
+                <button
+                  type="button"
+                  onClick={handleOpenCheckout}
+                  disabled={khataCart.length === 0 || !selectedCustomer}
+                  className="w-full bg-[#125E45] hover:bg-[#197A5A] disabled:bg-slate-300 text-white py-2.5 px-3.5 rounded-xl font-bold text-xs flex items-center justify-between transition-colors shadow-2xs cursor-pointer active:scale-[0.99] disabled:cursor-not-allowed"
+                >
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="w-4 h-4" />
+                    <span>Proceed to Tender</span>
+                  </div>
+                  <span className="px-1.5 py-0.5 bg-white/20 rounded text-xs font-mono font-medium">
+                    F8
+                  </span>
+                </button>
+
+                <p className="text-[10px] text-[#8A9590] text-center">
+                  Credit / Khata settlement, cash, or bank transfer
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* ============================================================== */}
+          {/* MODAL: Khata Settlement & Payment Modes (Identical to Wholesale, Card Terminal Removed) */}
+          {/* ============================================================== */}
+          <Modal
+            isOpen={isCheckoutOpen}
+            onClose={() => setIsCheckoutOpen(false)}
+            title="Finalize Khata Credit Invoice"
+            description="Confirm billing details, settlement method, and ledger posting status."
+            maxWidth="2xl"
+          >
+            <div className="space-y-4 text-xs select-none">
+              {/* Net Due Header */}
+              <div className="p-4 bg-[#F0F4F2] rounded-2xl border border-[#DCE3E0] flex items-center justify-between">
+                <div>
+                  <span className="text-xs text-[#66726D]">Net Amount Due:</span>
+                  <div className="text-2xl font-black text-[#17211D]">
+                    Rs. {finalKhataGrandTotal.toLocaleString()}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="bg-[#DCEDE6] text-[#125E45] text-xs font-semibold px-2.5 py-1 rounded-full inline-block mb-1">
+                    Khata Credit Counter
+                  </span>
+                  <div className="text-[11px] text-[#66726D]">
+                    {selectedCustomer ? (selectedCustomer.businessName || selectedCustomer.name) : customerName.trim() || 'Select Khata Account'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Payment Method Selector */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-[#17211D] block">
+                  Settlement Method
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {[
+                    { id: 'Credit/Khata', label: 'Credit / Khata', icon: BookOpen },
+                    { id: 'Cash', label: 'Cash Payment', icon: Banknote },
+                    { id: 'Bank Transfer', label: 'Bank Transfer', icon: Building },
+                  ].map(m => {
+                    const Icon = m.icon;
+                    const isSelected = paymentMethod === m.id;
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => {
+                          setPaymentMethod(m.id as PaymentMethod);
+                          if (m.id === 'Credit/Khata') {
+                            setCashReceived(0);
+                          } else if (m.id === 'Cash') {
+                            setCashReceived(Math.round(finalKhataGrandTotal));
+                          }
+                        }}
+                        className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1.5 text-xs font-bold transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-[#DCEDE6] text-[#125E45] border-[#125E45]'
+                            : 'bg-white border-[#DCE3E0] text-[#66726D] hover:bg-[#F0F4F2]'
+                        }`}
+                      >
+                        <Icon className="w-4 h-4" />
+                        <span>{m.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* CREDIT / KHATA LEDGER WORKFLOW */}
+              {paymentMethod === 'Credit/Khata' && (
+                <div className="p-4 bg-[#F7EEDC] rounded-2xl border border-[#9A6A16]/30 space-y-2">
+                  <div className="font-bold text-[#17211D] flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <BookOpen className="w-4 h-4 text-[#9A6A16]" />
+                      <span>Ledger Credit Charging</span>
+                    </div>
+                    {selectedCustomer && (
+                      <span className="text-[11px] font-mono text-[#9A6A16]">
+                        Current Balance: Rs. {selectedCustomer.currentBalance.toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-[#66726D]">
+                    Net invoice amount <strong>Rs. {finalKhataGrandTotal.toLocaleString()}</strong> will be charged directly to the ledger account of{' '}
+                    <strong>{selectedCustomer?.businessName || selectedCustomer?.name || 'Customer'}</strong>.
+                  </p>
+                  {customerName.trim() && (
+                    <div className="text-[11px] text-[#17211D] bg-white/70 p-2 rounded-lg border border-[#9A6A16]/20">
+                      <span className="text-[#66726D]">Visitor / Bearer picking up: </span>
+                      <strong>{customerName.trim()}</strong>
+                    </div>
+                  )}
+                  {selectedCustomer && selectedCustomer.creditLimit > 0 && (
+                    <div className="pt-2 border-t border-[#9A6A16]/20 flex justify-between text-[11px]">
+                      <span className="text-[#66726D]">Credit Limit: Rs. {selectedCustomer.creditLimit.toLocaleString()}</span>
+                      <span className={`font-semibold ${selectedCustomer.currentBalance + finalKhataGrandTotal > selectedCustomer.creditLimit ? 'text-[#C23D45]' : 'text-[#125E45]'}`}>
+                        Projected: Rs. {(selectedCustomer.currentBalance + finalKhataGrandTotal).toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* CASH WORKFLOW & CASH DRAWER INTEGRATION */}
+              {paymentMethod === 'Cash' && (
+                <div className="p-4 bg-[#F0F4F2] rounded-2xl border border-[#DCE3E0] space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-[#17211D]">Cash Received</label>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="Enter cash received"
+                      value={cashReceived || ''}
+                      onChange={e => setCashReceived(parseFloat(e.target.value) || 0)}
+                      className="w-full p-2.5 text-sm font-bold text-[#17211D] border border-[#DCE3E0] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#197A5A] placeholder:text-[#8A9590] bg-white"
+                    />
+                  </div>
+
+                  {/* Change Due Indicator */}
+                  {cashReceived >= finalKhataGrandTotal && (
+                    <div className="p-3 bg-[#DCEDE6] rounded-xl text-xs flex justify-between font-bold text-[#125E45]">
+                      <span>Change Due Customer:</span>
+                      <span className="text-sm font-black">
+                        Rs. {calculatedChange.toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* BANK TRANSFER DETAILS */}
+              {paymentMethod === 'Bank Transfer' && (
+                <div className="p-4 bg-[#F0F4F2] rounded-2xl border border-[#DCE3E0] space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-[#17211D]">Receiving Bank Account:</span>
+                    <span className="text-[10px] text-[#8A9590]">
+                      Select designated business bank
+                    </span>
+                  </div>
+
+                  {bankAccounts.length === 0 ? (
+                    <p className="text-xs text-[#C23D45]">
+                      No bank accounts configured in Store Settings.
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {bankAccounts.map(b => (
+                        <div
+                          key={b.id}
+                          onClick={() => setSelectedBank(b)}
+                          className={`p-2.5 rounded-xl border text-xs cursor-pointer transition-colors ${
+                            selectedBank?.id === b.id
+                              ? 'border-[#125E45] bg-[#DCEDE6] text-[#125E45] font-bold'
+                              : 'border-[#DCE3E0] bg-white text-[#17211D] hover:bg-[#F0F4F2]'
+                          }`}
+                        >
+                          <div className="font-bold">{b.bankName}</div>
+                          <div className="text-[10px] text-[#66726D] font-mono">{b.accountNumber}</div>
+                          <div className="text-[10px] text-[#8A9590]">{b.accountTitle}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="pt-2 border-t border-[#DCE3E0] flex items-center justify-between">
+                    <span className="text-xs text-[#66726D]">Transfer Slip Verified:</span>
+                    <button
+                      type="button"
+                      onClick={() => setIsBankPaymentConfirmed(!isBankPaymentConfirmed)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
                         isBankPaymentConfirmed
-                          ? 'bg-emerald-600 text-white shadow-xs'
-                          : 'bg-white border border-amber-300 text-amber-900 hover:bg-amber-100'
+                          ? 'bg-[#125E45] text-white shadow-2xs'
+                          : 'bg-white border border-[#DCE3E0] text-[#17211D] hover:bg-[#F0F4F2]'
                       }`}
                     >
-                      {isBankPaymentConfirmed ? (
-                        <>
-                          <Check className="w-3.5 h-3.5" /> Payment Confirmed
-                        </>
-                      ) : (
-                        <span>Confirm Payment</span>
-                      )}
+                      <Check className="w-3.5 h-3.5" />
+                      <span>{isBankPaymentConfirmed ? 'Payment Confirmed' : 'Confirm Slip Received'}</span>
                     </button>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* CARD TERMINAL WORKFLOW */}
-            {paymentMethod === 'Card' && (
-              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                {!isKhataTerminalEnabled && (
-                  <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
-                    <span>Khata Card Terminal is disabled in Store Settings. Cannot authorize payment or submit bill.</span>
-                  </div>
-                )}
-
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-800">Card Terminal Machine</span>
-                  <span
-                    className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
-                      !isKhataTerminalEnabled
-                        ? 'bg-rose-100 text-rose-700'
-                        : cardPaymentState === 'authorized'
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : cardPaymentState === 'failed'
-                        ? 'bg-rose-100 text-rose-800'
-                        : cardPaymentState === 'waiting_card' || cardPaymentState === 'processing'
-                        ? 'bg-amber-100 text-amber-800 animate-pulse'
-                        : 'bg-slate-200 text-slate-700'
-                    }`}
-                  >
-                    {!isKhataTerminalEnabled ? 'Disabled in Settings' : cardPaymentState}
-                  </span>
-                </div>
-
-                {cardStatusMessage && (
-                  <p className="text-xs text-slate-600 italic bg-white p-2.5 rounded-xl border border-slate-200">
-                    {cardStatusMessage}
-                  </p>
-                )}
-
-                {cardPaymentState !== 'authorized' ? (
-                  <Button
-                    type="button"
-                    variant="primary"
-                    size="md"
-                    onClick={handleStartCardPayment}
-                    disabled={!isKhataTerminalEnabled || cardPaymentState === 'processing' || cardPaymentState === 'waiting_card'}
-                    className={`w-full font-bold gap-2 ${
-                      !isKhataTerminalEnabled
-                        ? 'bg-slate-300 text-slate-500 cursor-not-allowed hover:bg-slate-300'
-                        : 'bg-amber-600 hover:bg-amber-700 text-white'
-                    }`}
-                  >
-                    <CreditCard className="w-4 h-4" /> Start Card Terminal Payment
-                  </Button>
-                ) : (
-                  <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 font-bold flex items-center justify-between">
-                    <span>Authorized (Ref: {cardTransactionId})</span>
-                    <CheckCircle2 className="w-4 h-4" />
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Pandi Name / Carrier Loader Autocomplete */}
-            <PandiSelectInput
-              value={pandiName}
-              onChange={(name, obj) => {
-                setPandiName(name);
-                setSelectedPandi(obj || null);
-              }}
-              label="Pandi Name"
-              placeholder="Type or select Pandi name..."
-            />
-
-            {/* Notes / Ledger Reference */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Khata Ledger Reference / PO # / Book Page #
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. Ledger Book 3 Page 45, Dispatched via Bilal Cargo"
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+              {/* Pandi Name / Carrier Loader Autocomplete */}
+              <PandiSelectInput
+                value={pandiName}
+                onChange={(name, obj) => {
+                  setPandiName(name);
+                  setSelectedPandi(obj || null);
+                }}
+                label="Pandi Name / Delivery Loader"
+                placeholder="Type or select Pandi name..."
               />
-            </div>
 
-            {/* Actions */}
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-              <Button variant="outline" size="md" onClick={() => setIsCheckoutOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                variant="accent"
-                size="md"
-                onClick={handleCompleteKhataSale}
-                disabled={
-                  (paymentMethod === 'Cash' && isCashInsufficient) ||
-                  (paymentMethod === 'Bank Transfer' && !isBankPaymentConfirmed) ||
-                  (paymentMethod === 'Card' && (!isKhataTerminalEnabled || cardPaymentState !== 'authorized'))
-                }
-                className="gap-2 font-bold shadow-sm bg-amber-600 hover:bg-amber-700 text-white"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Confirm & Debit Khata Ledger</span>
-              </Button>
-            </div>
-          </div>
-        </Modal>
+              {/* Notes / PO Reference */}
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-[#17211D]">
+                  Khata Reference / Gate Pass / Builty Reference
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Sent via loader Haji Bashir, gate pass # 410"
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  className="w-full px-3 py-2 border border-[#DCE3E0] rounded-xl text-xs bg-white focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
+                />
+              </div>
 
-        {/* MODAL: Printable A4 Khata Commercial Invoice Preview */}
-        <Modal
-          isOpen={isInvoiceModalOpen}
-          onClose={() => setIsInvoiceModalOpen(false)}
-          title="Khata Credit POS Invoice"
-          maxWidth="4xl"
-        >
-          {completedBill && (
-            <WholesaleInvoicePrint
-              bill={completedBill}
-              onClose={() => setIsInvoiceModalOpen(false)}
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#DCE3E0]">
+                <Button variant="outline" size="md" onClick={() => setIsCheckoutOpen(false)}>
+                  Cancel
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => handleFinalizeSale(paymentMethod)}
+                  disabled={isCashInsufficient || (paymentMethod === 'Bank Transfer' && (!isBankPaymentConfirmed || !selectedBank))}
+                  className={`inline-flex items-center justify-center font-bold rounded-xl px-5 py-2.5 text-xs text-white bg-[#125E45] hover:bg-[#197A5A] active:scale-[0.98] transition-all shadow-2xs cursor-pointer gap-2 disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed`}
+                >
+                  <CheckCircle2 className="w-4 h-4 text-white" />
+                  <span>Complete Sale & Save Invoice</span>
+                </button>
+              </div>
+            </div>
+          </Modal>
+
+          {/* ============================================================== */}
+          {/* SEARCH BILLS & HISTORICAL RETURNS MODAL */}
+          {/* ============================================================== */}
+          <WholesaleBillSearchModal
+            isOpen={isBillSearchOpen}
+            onClose={() => setIsBillSearchOpen(false)}
+            onViewBill={bill => {
+              setCompletedBill(bill);
+              setIsBillSearchOpen(false);
+              setIsInvoiceModalOpen(true);
+            }}
+            onSelectPrint={bill => {
+              setCompletedBill(bill);
+              setIsBillSearchOpen(false);
+              setIsInvoiceModalOpen(true);
+            }}
+            onSelectReturn={bill => {
+              setBillForAction(bill);
+              setIsBillSearchOpen(false);
+              setIsReturnModalOpen(true);
+            }}
+            onSelectExchange={bill => {
+              setBillForAction(bill);
+              setIsBillSearchOpen(false);
+              setIsExchangeModalOpen(true);
+            }}
+          />
+
+          {/* Return Modal */}
+          {billForAction && (
+            <WholesaleReturnModal
+              isOpen={isReturnModalOpen}
+              onClose={() => {
+                setIsReturnModalOpen(false);
+                setBillForAction(null);
+              }}
+              bill={billForAction}
+              onReturnCompleted={(retTx, updatedBill) => {
+                setCompletedReturn(retTx);
+                setBillForAction(updatedBill);
+                setIsReturnPrintOpen(true);
+                setProducts(productsService.getAll());
+              }}
             />
           )}
-        </Modal>
 
-        {/* MODAL: Khata Customer Statement Print */}
-        <Modal
-          isOpen={isStatementModalOpen}
-          onClose={() => setIsStatementModalOpen(false)}
-          title="Customer Khata Statement"
-          maxWidth="4xl"
-        >
-          {selectedCustomer && (
-            <KhataStatementPrint
-              customer={selectedCustomer}
-              transactions={customersService.getKhataTransactions(selectedCustomer.id)}
-              onClose={() => setIsStatementModalOpen(false)}
+          {/* Exchange Modal */}
+          {billForAction && (
+            <WholesaleExchangeModal
+              isOpen={isExchangeModalOpen}
+              onClose={() => {
+                setIsExchangeModalOpen(false);
+                setBillForAction(null);
+              }}
+              bill={billForAction}
+              onExchangeCompleted={(excTx, updatedBill) => {
+                setCompletedExchange(excTx);
+                setBillForAction(updatedBill);
+                setIsExchangePrintOpen(true);
+                setProducts(productsService.getAll());
+              }}
             />
           )}
-        </Modal>
 
-        {/* MODAL: Search Past Khata Bills */}
-        <WholesaleBillSearchModal
-          isOpen={isBillSearchOpen}
-          onClose={() => setIsBillSearchOpen(false)}
-          saleType="Khata"
-          title="Search Khata Credit Bills"
-          description="Find historical Khata credit invoices to view, reprint, return, or exchange items."
-          onViewBill={bill => {
-            setCompletedBill(bill);
-            setIsBillSearchOpen(false);
-            setIsInvoiceModalOpen(true);
-          }}
-          onSelectPrint={bill => {
-            setCompletedBill(bill);
-            setIsBillSearchOpen(false);
-            setIsInvoiceModalOpen(true);
-          }}
-          onSelectReturn={bill => {
-            setBillForAction(bill);
-            setIsBillSearchOpen(false);
-            setIsReturnModalOpen(true);
-          }}
-          onSelectExchange={bill => {
-            setBillForAction(bill);
-            setIsBillSearchOpen(false);
-            setIsExchangeModalOpen(true);
-          }}
-        />
-
-        {/* MODAL: Khata Return Workflow */}
-        <WholesaleReturnModal
-          isOpen={isReturnModalOpen}
-          onClose={() => setIsReturnModalOpen(false)}
-          bill={billForAction}
-          onReturnCompleted={(retTx, updatedBill) => {
-            setCompletedReturn(retTx);
-            setBillForAction(updatedBill);
-            setIsReturnPrintOpen(true);
-            setProducts(productsService.getAll());
-          }}
-        />
-
-        {/* MODAL: Khata Exchange Workflow */}
-        <WholesaleExchangeModal
-          isOpen={isExchangeModalOpen}
-          onClose={() => setIsExchangeModalOpen(false)}
-          bill={billForAction}
-          onExchangeCompleted={(excTx, updatedBill) => {
-            setCompletedExchange(excTx);
-            setBillForAction(updatedBill);
-            setIsExchangePrintOpen(true);
-            setProducts(productsService.getAll());
-          }}
-        />
-
-        {/* MODAL: Return Slip Print */}
-        <Modal
-          isOpen={isReturnPrintOpen}
-          onClose={() => setIsReturnPrintOpen(false)}
-          title="Print Khata Return Voucher"
-          maxWidth="2xl"
-        >
+          {/* Return Print Modal */}
           {completedReturn && (
-            <PrintableWholesaleReturn
-              returnTx={completedReturn}
-              bill={billForAction}
-              onClose={() => setIsReturnPrintOpen(false)}
-            />
+            <Modal
+              isOpen={isReturnPrintOpen}
+              onClose={() => {
+                setIsReturnPrintOpen(false);
+                setCompletedReturn(null);
+              }}
+              title={`Return Slip #${completedReturn.id}`}
+              maxWidth="4xl"
+            >
+              <PrintableWholesaleReturn
+                returnTx={completedReturn}
+                bill={billForAction}
+                onClose={() => {
+                  setIsReturnPrintOpen(false);
+                  setCompletedReturn(null);
+                }}
+              />
+            </Modal>
           )}
-        </Modal>
 
-        {/* MODAL: Exchange Slip Print */}
-        <Modal
-          isOpen={isExchangePrintOpen}
-          onClose={() => setIsExchangePrintOpen(false)}
-          title="Print Khata Exchange Voucher"
-          maxWidth="2xl"
-        >
+          {/* Exchange Print Modal */}
           {completedExchange && (
-            <PrintableWholesaleExchange
-              exchangeTx={completedExchange}
-              bill={billForAction}
-              onClose={() => setIsExchangePrintOpen(false)}
-            />
+            <Modal
+              isOpen={isExchangePrintOpen}
+              onClose={() => {
+                setIsExchangePrintOpen(false);
+                setCompletedExchange(null);
+              }}
+              title={`Exchange Voucher #${completedExchange.id}`}
+              maxWidth="4xl"
+            >
+              <PrintableWholesaleExchange
+                exchangeTx={completedExchange}
+                bill={billForAction}
+                onClose={() => {
+                  setIsExchangePrintOpen(false);
+                  setCompletedExchange(null);
+                }}
+              />
+            </Modal>
           )}
-        </Modal>
+
+          {/* Completed Sale Invoice Print Modal */}
+          <Modal
+            isOpen={isInvoiceModalOpen}
+            onClose={() => setIsInvoiceModalOpen(false)}
+            title={`Invoice #${completedBill?.invoiceNumber || ''}`}
+            maxWidth="4xl"
+          >
+            {completedBill && (
+              <WholesaleInvoicePrint
+                bill={completedBill}
+                onClose={() => setIsInvoiceModalOpen(false)}
+              />
+            )}
+          </Modal>
+
+          {/* Khata Statement Modal */}
+          {selectedCustomer && (
+            <Modal
+              isOpen={isStatementModalOpen}
+              onClose={() => setIsStatementModalOpen(false)}
+              title={`${selectedCustomer.name} - Khata Statement`}
+              maxWidth="4xl"
+            >
+              <KhataStatementPrint
+                customer={selectedCustomer}
+                transactions={customersService.getKhataTransactions(selectedCustomer.id)}
+                onClose={() => setIsStatementModalOpen(false)}
+              />
+            </Modal>
+          )}
+        </div>
       </AppShell>
     </ProtectedRoute>
   );

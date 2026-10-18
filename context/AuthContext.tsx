@@ -55,6 +55,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const handleLogout = () => {
     authService.logout();
     refreshStaff();
+    if (typeof window !== 'undefined') {
+      window.location.href = '/login';
+    }
   };
 
   const hasPermission = (permission: PermissionKey): boolean => {

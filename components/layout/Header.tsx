@@ -102,6 +102,23 @@ export function Header({ onOpenMobileMenu, onOpenSearch }: HeaderProps) {
     }
   };
 
+  // Only display the full top bar (Global Search, Branch switcher, Notifications, Profile) to Admin
+  if (currentStaff?.role !== 'Admin') {
+    return (
+      <div className="lg:hidden sticky top-0 z-20 h-11 bg-white border-b border-[#DCE3E0] px-4 flex items-center justify-between no-print shadow-2xs shrink-0">
+        <button
+          onClick={onOpenMobileMenu}
+          className="p-1.5 rounded-lg text-[#66726D] hover:text-[#17211D] hover:bg-[#F0F4F2] transition-colors cursor-pointer"
+          aria-label="Open navigation menu"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+        <span className="font-bold text-xs text-[#17211D] tracking-tight">AL-NOOR FABRICS</span>
+        <div className="w-7" />
+      </div>
+    );
+  }
+
   return (
     <header className="sticky top-0 z-20 h-16 bg-white border-b border-[#DCE3E0] px-4 sm:px-6 flex items-center justify-between gap-4 no-print shadow-2xs">
       {/* Left: Mobile trigger & Search Input */}

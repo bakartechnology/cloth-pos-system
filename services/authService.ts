@@ -82,6 +82,11 @@ export const authService = {
 
   logout(): void {
     storageService.removeItem(ADMIN_SESSION_KEY);
+    const staffList = storageService.getStaff();
+    const admin = staffList.find(s => s.role === 'Admin') || staffList[0];
+    if (admin) {
+      storageService.setActiveStaffId(admin.id);
+    }
   },
 };
 

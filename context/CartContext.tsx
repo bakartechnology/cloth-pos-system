@@ -12,6 +12,7 @@ interface CartContextType {
   removeFromRetailCart: (productId: string) => void;
   updateRetailQuantity: (productId: string, quantity: number) => void;
   updateRetailDiscount: (productId: string, discountPercent: number) => void;
+  updateRetailExtraDiscount: (productId: string, extraDiscountRs: number) => void;
   clearRetailCart: () => void;
   restoreRetailCart: (items: CartItem[]) => void;
   retailSubtotal: number;
@@ -26,6 +27,7 @@ interface CartContextType {
   updateWholesaleDiscount: (productId: string, discountPercent: number) => void;
   updateWholesaleExtraDiscount: (productId: string, extraDiscountRs: number) => void;
   clearWholesaleCart: () => void;
+  restoreWholesaleCart: (items: CartItem[]) => void;
   wholesaleSubtotal: number;
   wholesaleDiscountTotal: number;
   wholesaleGrandTotal: number;
@@ -38,6 +40,7 @@ interface CartContextType {
   updateKhataDiscount: (productId: string, discountPercent: number) => void;
   updateKhataExtraDiscount: (productId: string, extraDiscountRs: number) => void;
   clearKhataCart: () => void;
+  restoreKhataCart: (items: CartItem[]) => void;
   khataSubtotal: number;
   khataDiscountTotal: number;
   khataGrandTotal: number;
@@ -112,17 +115,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
               freshProduct.retailPrice,
               unitDiscount,
               newQty,
-              updated[idx].discountPercent
+              updated[idx].discountPercent,
+              updated[idx].extraDiscountRupees || 0
             ),
           };
         }
         return updated;
-      });
-
-      toast({
-        title: 'Quantity Updated',
-        description: `${freshProduct.name} quantity increased to ${newQty}`,
-        type: 'info',
       });
     } else {
       const item: CartItem = {
@@ -131,18 +129,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         price: freshProduct.retailPrice,
         discountPerUnit: unitDiscount,
         discountPercent: 0,
-        lineTotal: computeLineTotal(freshProduct.retailPrice, unitDiscount, quantity, 0),
+        extraDiscountRupees: 0,
+        lineTotal: computeLineTotal(freshProduct.retailPrice, unitDiscount, quantity, 0, 0),
       };
       setRetailCart(prev => [...prev, item]);
-
-      const finalPrice = Math.max(0, freshProduct.retailPrice - unitDiscount);
-      toast({
-        title: 'Added to Retail Cart',
-        description: `${freshProduct.name} — Retail: Rs. ${freshProduct.retailPrice.toLocaleString()}${
-          unitDiscount > 0 ? ` (Disc: -Rs. ${unitDiscount.toLocaleString()} => Final: Rs. ${finalPrice.toLocaleString()})` : ''
-        }`,
-        type: 'success',
-      });
     }
   };
 
@@ -185,7 +175,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
               freshPrice,
               freshDiscount,
               quantity,
-              item.discountPercent
+              item.discountPercent,
+              item.extraDiscountRupees || 0
             ),
           };
         }
@@ -206,6 +197,30 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
               item.price,
               item.discountPerUnit || 0,
               item.quantity,
+              validDiscount,
+              item.extraDiscountRupees || 0
+            ),
+          };
+        }
+        return item;
+      })
+    );
+  };
+
+  const updateRetailExtraDiscount = (productId: string, extraDiscountRs: number) => {
+    const validDiscount = Math.max(0, extraDiscountRs || 0);
+    setRetailCart(prev =>
+      prev.map(item => {
+        if (item.product.id === productId) {
+          return {
+            ...item,
+            extraDiscountRupees: validDiscount,
+            discountPercent: 0,
+            lineTotal: computeLineTotal(
+              item.price,
+              item.discountPerUnit || 0,
+              item.quantity,
+              0,
               validDiscount
             ),
           };
@@ -221,8 +236,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const restoreRetailCart = (items: CartItem[]) => {
     const refreshed = items.map(item => {
-      const fresh = productsService.getById(item.product.id);
-      if (!fresh) return item;
+      const fresh = productsService.getById(item.product.id) || item.product;
       const unitDiscount = fresh.retailDiscount || 0;
       return {
         ...item,
@@ -233,7 +247,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           fresh.retailPrice,
           unitDiscount,
           item.quantity,
-          item.discountPercent
+          item.discountPercent || 0,
+          item.extraDiscountRupees || 0
         ),
       };
     });
@@ -283,17 +298,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
               freshProduct.wholesalePrice,
               unitDiscount,
               newQty,
-              updated[idx].discountPercent
+              updated[idx].discountPercent,
+              updated[idx].extraDiscountRupees || 0
             ),
           };
         }
         return updated;
-      });
-
-      toast({
-        title: 'Quantity Updated',
-        description: `${freshProduct.name} wholesale quantity increased to ${newQty}`,
-        type: 'info',
       });
     } else {
       const item: CartItem = {
@@ -302,18 +312,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         price: freshProduct.wholesalePrice,
         discountPerUnit: unitDiscount,
         discountPercent: 0,
-        lineTotal: computeLineTotal(freshProduct.wholesalePrice, unitDiscount, quantity, 0),
+        extraDiscountRupees: 0,
+        lineTotal: computeLineTotal(freshProduct.wholesalePrice, unitDiscount, quantity, 0, 0),
       };
       setWholesaleCart(prev => [...prev, item]);
-
-      const finalPrice = Math.max(0, freshProduct.wholesalePrice - unitDiscount);
-      toast({
-        title: 'Added to Wholesale Bill',
-        description: `${freshProduct.name} — Wholesale: Rs. ${freshProduct.wholesalePrice.toLocaleString()}${
-          unitDiscount > 0 ? ` (Disc: -Rs. ${unitDiscount.toLocaleString()} => Final: Rs. ${finalPrice.toLocaleString()})` : ''
-        }`,
-        type: 'success',
-      });
     }
   };
 
@@ -415,6 +417,28 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setWholesaleCart([]);
   };
 
+  const restoreWholesaleCart = (items: CartItem[]) => {
+    const refreshed = items.map(item => {
+      const fresh = productsService.getById(item.product.id) || item.product;
+      const unitDiscount = fresh.wholesaleDiscount || 0;
+      const price = fresh.wholesalePrice || item.price;
+      return {
+        ...item,
+        product: fresh,
+        price,
+        discountPerUnit: unitDiscount,
+        lineTotal: computeLineTotal(
+          price,
+          unitDiscount,
+          item.quantity,
+          item.discountPercent || 0,
+          item.extraDiscountRupees || 0
+        ),
+      };
+    });
+    setWholesaleCart(refreshed);
+  };
+
   // ---------------- Khata Cart Operations ----------------
   const addToKhataCart = (product: Product, quantity = 1) => {
     const freshProduct = productsService.getById(product.id) || product;
@@ -468,17 +492,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
               freshProduct.khataPrice!,
               unitDiscount,
               newQty,
-              updated[idx].discountPercent
+              updated[idx].discountPercent,
+              updated[idx].extraDiscountRupees || 0
             ),
           };
         }
         return updated;
-      });
-
-      toast({
-        title: 'Quantity Updated',
-        description: `${freshProduct.name} Khata quantity increased to ${newQty}`,
-        type: 'info',
       });
     } else {
       const item: CartItem = {
@@ -487,18 +506,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         price: freshProduct.khataPrice!,
         discountPerUnit: unitDiscount,
         discountPercent: 0,
-        lineTotal: computeLineTotal(freshProduct.khataPrice!, unitDiscount, quantity, 0),
+        extraDiscountRupees: 0,
+        lineTotal: computeLineTotal(freshProduct.khataPrice!, unitDiscount, quantity, 0, 0),
       };
       setKhataCart(prev => [...prev, item]);
-
-      const finalPrice = Math.max(0, freshProduct.khataPrice! - unitDiscount);
-      toast({
-        title: 'Added to Khata Bill',
-        description: `${freshProduct.name} — Khata: Rs. ${freshProduct.khataPrice!.toLocaleString()}${
-          unitDiscount > 0 ? ` (Disc: -Rs. ${unitDiscount.toLocaleString()} => Final: Rs. ${finalPrice.toLocaleString()})` : ''
-        }`,
-        type: 'success',
-      });
     }
   };
 
@@ -600,6 +611,28 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setKhataCart([]);
   };
 
+  const restoreKhataCart = (items: CartItem[]) => {
+    const refreshed = items.map(item => {
+      const fresh = productsService.getById(item.product.id) || item.product;
+      const unitDiscount = fresh.khataDiscount || 0;
+      const price = fresh.khataPrice ?? item.price;
+      return {
+        ...item,
+        product: fresh,
+        price,
+        discountPerUnit: unitDiscount,
+        lineTotal: computeLineTotal(
+          price,
+          unitDiscount,
+          item.quantity,
+          item.discountPercent || 0,
+          item.extraDiscountRupees || 0
+        ),
+      };
+    });
+    setKhataCart(refreshed);
+  };
+
   // Sync active cart items with latest prices and discounts from productsService
   const syncWithLatestProducts = () => {
     setRetailCart(prev =>
@@ -687,6 +720,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         removeFromRetailCart,
         updateRetailQuantity,
         updateRetailDiscount,
+        updateRetailExtraDiscount,
         clearRetailCart,
         restoreRetailCart,
         retailSubtotal,
@@ -698,7 +732,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         removeFromWholesaleCart,
         updateWholesaleQuantity,
         updateWholesaleDiscount,
+        updateWholesaleExtraDiscount,
         clearWholesaleCart,
+        restoreWholesaleCart,
         wholesaleSubtotal,
         wholesaleDiscountTotal,
         wholesaleGrandTotal,
@@ -710,11 +746,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         updateKhataDiscount,
         updateKhataExtraDiscount,
         clearKhataCart,
+        restoreKhataCart,
         khataSubtotal,
         khataDiscountTotal,
         khataGrandTotal,
-
-        updateWholesaleExtraDiscount,
 
         syncWithLatestProducts,
       }}

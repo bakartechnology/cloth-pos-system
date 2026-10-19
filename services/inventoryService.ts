@@ -10,7 +10,7 @@ export const inventoryService = {
     const movements = storageService.getStockMovements();
     const newMovement: StockMovement = {
       ...data,
-      id: `mov-${Date.now().toString().slice(-6)}`,
+      id: `mov-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       date: new Date().toISOString(),
     };
 

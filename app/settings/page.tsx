@@ -20,14 +20,167 @@ import {
   CreditCard,
   Radio,
   Usb,
+  Building,
+  Plus,
+  Trash2,
+  Edit,
+  X,
+  Layers,
+  Check,
 } from 'lucide-react';
 import { storageService } from '@/services/storageService';
 import { useToast } from '@/context/ToastContext';
-import { StoreSettings } from '@/types';
+import { StoreSettings, BankAccount, POSChannel } from '@/types';
+import { Modal } from '@/components/ui/Modal';
 
 export default function SettingsPage() {
   const { toast } = useToast();
   const [settings, setSettings] = useState<StoreSettings>(storageService.getSettings());
+
+  // Bank Account Modal State
+  const [isBankModalOpen, setIsBankModalOpen] = useState(false);
+  const [editingBankId, setEditingBankId] = useState<string | null>(null);
+  const [bankName, setBankName] = useState('');
+  const [accountTitle, setAccountTitle] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [iban, setIban] = useState('');
+  const [branchName, setBranchName] = useState('');
+  const [bankChannels, setBankChannels] = useState<POSChannel[]>(['Retail', 'Wholesale', 'Khata']);
+  const [bankIsActive, setBankIsActive] = useState(true);
+
+  const openAddBankModal = () => {
+    setEditingBankId(null);
+    setBankName('Meezan Bank Limited');
+    setAccountTitle(settings.storeName ? `${settings.storeName.toUpperCase()} & TEXTILES` : 'AL-NOOR FABRICS');
+    setAccountNumber('');
+    setIban('');
+    setBranchName('');
+    setBankChannels(['Retail', 'Wholesale', 'Khata']);
+    setBankIsActive(true);
+    setIsBankModalOpen(true);
+  };
+
+  const openEditBankModal = (bank: BankAccount) => {
+    setEditingBankId(bank.id);
+    setBankName(bank.bankName);
+    setAccountTitle(bank.accountTitle);
+    setAccountNumber(bank.accountNumber);
+    setIban(bank.iban || '');
+    setBranchName(bank.branchName || '');
+    setBankChannels(bank.channels && bank.channels.length > 0 ? bank.channels : ['Retail', 'Wholesale', 'Khata']);
+    setBankIsActive(bank.isActive !== false);
+    setIsBankModalOpen(true);
+  };
+
+  const handleSaveBankAccount = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bankName.trim() || !accountTitle.trim() || !accountNumber.trim()) {
+      toast({
+        title: 'Missing Details',
+        description: 'Please fill Bank Name, Account Title, and Account Number.',
+        type: 'warning',
+      });
+      return;
+    }
+
+    if (bankChannels.length === 0) {
+      toast({
+        title: 'Select At Least One Channel',
+        description: 'Please assign this bank account to Retail, Wholesale, or Khata POS.',
+        type: 'warning',
+      });
+      return;
+    }
+
+    const currentBanks = settings.bankAccounts || [];
+    let updatedBanks: BankAccount[];
+
+    if (editingBankId) {
+      updatedBanks = currentBanks.map(b =>
+        b.id === editingBankId
+          ? {
+              ...b,
+              bankName: bankName.trim(),
+              accountTitle: accountTitle.trim(),
+              accountNumber: accountNumber.trim(),
+              iban: iban.trim(),
+              branchName: branchName.trim() || undefined,
+              channels: bankChannels,
+              isActive: bankIsActive,
+            }
+          : b
+      );
+    } else {
+      const newBank: BankAccount = {
+        id: `bnk-${Date.now().toString().slice(-6)}`,
+        bankName: bankName.trim(),
+        accountTitle: accountTitle.trim(),
+        accountNumber: accountNumber.trim(),
+        iban: iban.trim(),
+        branchName: branchName.trim() || undefined,
+        channels: bankChannels,
+        isActive: bankIsActive,
+      };
+      updatedBanks = [...currentBanks, newBank];
+    }
+
+    const updatedSettings: StoreSettings = {
+      ...settings,
+      bankAccounts: updatedBanks,
+    };
+
+    setSettings(updatedSettings);
+    storageService.setSettings(updatedSettings);
+    setIsBankModalOpen(false);
+
+    toast({
+      title: editingBankId ? 'Bank Account Updated' : 'Bank Account Added',
+      description: `${bankName} assigned to ${bankChannels.join(', ')} channels.`,
+      type: 'success',
+    });
+  };
+
+  const handleDeleteBankAccount = (id: string, name: string) => {
+    if (confirm(`Are you sure you want to delete bank account "${name}"?`)) {
+      const updatedBanks = (settings.bankAccounts || []).filter(b => b.id !== id);
+      const updatedSettings = {
+        ...settings,
+        bankAccounts: updatedBanks,
+      };
+      setSettings(updatedSettings);
+      storageService.setSettings(updatedSettings);
+      toast({
+        title: 'Bank Account Deleted',
+        description: `${name} was removed from Store Settings.`,
+        type: 'info',
+      });
+    }
+  };
+
+  const handleToggleBankStatus = (id: string) => {
+    const updatedBanks = (settings.bankAccounts || []).map(b =>
+      b.id === id ? { ...b, isActive: !b.isActive } : b
+    );
+    const updatedSettings = {
+      ...settings,
+      bankAccounts: updatedBanks,
+    };
+    setSettings(updatedSettings);
+    storageService.setSettings(updatedSettings);
+    toast({
+      title: 'Status Updated',
+      description: 'Bank account active status has been toggled.',
+      type: 'success',
+    });
+  };
+
+  const toggleChannel = (channel: POSChannel) => {
+    if (bankChannels.includes(channel)) {
+      setBankChannels(bankChannels.filter(c => c !== channel));
+    } else {
+      setBankChannels([...bankChannels, channel]);
+    }
+  };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -522,6 +675,134 @@ export default function SettingsPage() {
               </CardContent>
             </Card>
 
+            {/* Bank Accounts & POS Channel Assignment */}
+            <Card>
+              <CardHeader>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-sm font-bold flex items-center gap-2">
+                      <Building className="w-4 h-4 text-emerald-600" /> Bank Accounts & POS Channel Assignment
+                    </CardTitle>
+                    <CardDescription>
+                      Configure bank receiving accounts for online/IBFT transfers and assign them to Retail, Wholesale, or Khata POS counters.
+                    </CardDescription>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={openAddBankModal}
+                    className="gap-1.5 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-200 self-start sm:self-auto cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" /> Add Bank Account
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {(!settings.bankAccounts || settings.bankAccounts.length === 0) ? (
+                  <div className="p-6 text-center text-slate-500 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-xs space-y-2">
+                    <Building className="w-8 h-8 text-slate-400 mx-auto" />
+                    <p className="font-semibold text-slate-700">No Bank Accounts Configured</p>
+                    <p className="text-[11px] text-slate-500">
+                      Click &quot;Add Bank Account&quot; to register your receiving accounts and assign them to POS settlement channels.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {settings.bankAccounts.map(b => {
+                      const channels = b.channels && b.channels.length > 0 ? b.channels : ['Retail', 'Wholesale', 'Khata'];
+                      return (
+                        <div
+                          key={b.id}
+                          className={`p-3.5 rounded-xl border transition-all ${
+                            b.isActive !== false
+                              ? 'bg-white border-slate-200 shadow-2xs'
+                              : 'bg-slate-50/70 border-slate-200 opacity-60'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <div>
+                              <div className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
+                                <Building className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                <span>{b.bankName}</span>
+                              </div>
+                              <div className="text-[11px] text-slate-600 font-medium">
+                                Title: <strong className="text-slate-800">{b.accountTitle}</strong>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => openEditBankModal(b)}
+                                className="p-1.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                                title="Edit Bank Account"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteBankAccount(b.id, b.bankName)}
+                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                title="Delete Bank Account"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="p-2 bg-slate-50 rounded-lg border border-slate-100 font-mono text-xs space-y-0.5 mb-2.5">
+                            <div className="text-slate-800 font-bold select-all tracking-wide">
+                              Acc: {b.accountNumber}
+                            </div>
+                            {b.iban && (
+                              <div className="text-[10px] text-slate-500 truncate select-all">
+                                IBAN: {b.iban}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Channel Badges */}
+                          <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[10px]">
+                            <div className="flex items-center gap-1 flex-wrap">
+                              <span className="text-slate-400 font-semibold mr-0.5">Assigned to:</span>
+                              {channels.includes('Retail') && (
+                                <span className="bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded-full border border-blue-200/60">
+                                  Retail POS
+                                </span>
+                              )}
+                              {channels.includes('Wholesale') && (
+                                <span className="bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full border border-emerald-200/60">
+                                  Wholesale POS
+                                </span>
+                              )}
+                              {channels.includes('Khata') && (
+                                <span className="bg-amber-50 text-amber-700 font-bold px-2 py-0.5 rounded-full border border-amber-200/60">
+                                  Khata POS
+                                </span>
+                              )}
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleToggleBankStatus(b.id)}
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full cursor-pointer transition-colors ${
+                                b.isActive !== false
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-slate-200 text-slate-600'
+                              }`}
+                            >
+                              {b.isActive !== false ? 'Active' : 'Disabled'}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             {/* 5-Year Data Retention Policy Card */}
             <Card className="border-blue-200 bg-blue-50/30">
               <CardHeader>
@@ -558,6 +839,247 @@ export default function SettingsPage() {
               </Button>
             </div>
           </form>
+
+          {/* Add / Edit Bank Account Modal */}
+          <Modal
+            isOpen={isBankModalOpen}
+            onClose={() => setIsBankModalOpen(false)}
+            title={editingBankId ? 'Edit Bank Account & POS Channels' : 'Add Bank Account & POS Channels'}
+            maxWidth="lg"
+          >
+            <form onSubmit={handleSaveBankAccount} className="space-y-4">
+              <datalist id="pakistan-banks">
+                <option value="Meezan Bank Limited" />
+                <option value="Habib Bank Limited (HBL)" />
+                <option value="United Bank Limited (UBL)" />
+                <option value="MCB Bank Limited" />
+                <option value="Allied Bank Limited (ABL)" />
+                <option value="Bank Alfalah" />
+                <option value="Bank Al Habib" />
+                <option value="Faysal Bank Limited" />
+                <option value="Askari Bank Limited" />
+                <option value="Standard Chartered Pakistan" />
+                <option value="Dubai Islamic Bank" />
+                <option value="National Bank of Pakistan (NBP)" />
+                <option value="JS Bank" />
+                <option value="Soneri Bank" />
+              </datalist>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">
+                    Bank Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    list="pakistan-banks"
+                    value={bankName}
+                    onChange={e => setBankName(e.target.value)}
+                    placeholder="e.g. Meezan Bank Limited"
+                    className="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">
+                    Account Title / Beneficiary <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={accountTitle}
+                    onChange={e => setAccountTitle(e.target.value)}
+                    placeholder="e.g. AL-NOOR FABRICS & TEXTILES"
+                    className="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">
+                    Account Number <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={accountNumber}
+                    onChange={e => setAccountNumber(e.target.value)}
+                    placeholder="e.g. 02010108920192"
+                    className="w-full text-sm font-mono border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">
+                    IBAN (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={iban}
+                    onChange={e => setIban(e.target.value)}
+                    placeholder="e.g. PK36MEZN0002010108920192"
+                    className="w-full text-sm font-mono uppercase border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">
+                  Branch Name / City (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={branchName}
+                  onChange={e => setBranchName(e.target.value)}
+                  placeholder="e.g. Cloth Market Branch, Faisalabad"
+                  className="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* POS Channel Routing */}
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <Layers className="w-4 h-4 text-blue-600" />
+                    Target POS Channels (Assign where this account shows up)
+                  </label>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setBankChannels(['Retail', 'Wholesale', 'Khata'])}
+                      className="text-[10px] bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 px-2 py-1 rounded font-semibold transition-colors"
+                    >
+                      All 3 Channels
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBankChannels(['Wholesale'])}
+                      className="text-[10px] bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 px-2 py-1 rounded font-semibold transition-colors"
+                    >
+                      Wholesale Only
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBankChannels(['Khata'])}
+                      className="text-[10px] bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 px-2 py-1 rounded font-semibold transition-colors"
+                    >
+                      Khata Only
+                    </button>
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-500 leading-normal">
+                  Chunain ke yeh bank account Retail POS finalize mein aaye, Wholesale finalize mein aaye, ya Khata POS finalize mein aaye (ya teeno ya koi bhi 2 combination):
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                  <label
+                    className={`flex items-center gap-2.5 p-3 rounded-lg border cursor-pointer transition-all ${
+                      bankChannels.includes('Retail')
+                        ? 'bg-blue-50 border-blue-300 text-blue-900 shadow-sm'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100/60'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={bankChannels.includes('Retail')}
+                      onChange={e => {
+                        if (e.target.checked) {
+                          setBankChannels(prev => [...prev, 'Retail']);
+                        } else {
+                          setBankChannels(prev => prev.filter(c => c !== 'Retail'));
+                        }
+                      }}
+                      className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
+                    />
+                    <div className="text-left">
+                      <div className="text-xs font-bold">Retail POS</div>
+                      <div className="text-[10px] text-slate-500">Counter Sale Modal</div>
+                    </div>
+                  </label>
+
+                  <label
+                    className={`flex items-center gap-2.5 p-3 rounded-lg border cursor-pointer transition-all ${
+                      bankChannels.includes('Wholesale')
+                        ? 'bg-indigo-50 border-indigo-300 text-indigo-900 shadow-sm'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100/60'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={bankChannels.includes('Wholesale')}
+                      onChange={e => {
+                        if (e.target.checked) {
+                          setBankChannels(prev => [...prev, 'Wholesale']);
+                        } else {
+                          setBankChannels(prev => prev.filter(c => c !== 'Wholesale'));
+                        }
+                      }}
+                      className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                    />
+                    <div className="text-left">
+                      <div className="text-xs font-bold">Wholesale POS</div>
+                      <div className="text-[10px] text-slate-500">Tax Invoice Modal</div>
+                    </div>
+                  </label>
+
+                  <label
+                    className={`flex items-center gap-2.5 p-3 rounded-lg border cursor-pointer transition-all ${
+                      bankChannels.includes('Khata')
+                        ? 'bg-amber-50 border-amber-300 text-amber-900 shadow-sm'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100/60'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={bankChannels.includes('Khata')}
+                      onChange={e => {
+                        if (e.target.checked) {
+                          setBankChannels(prev => [...prev, 'Khata']);
+                        } else {
+                          setBankChannels(prev => prev.filter(c => c !== 'Khata'));
+                        }
+                      }}
+                      className="rounded text-amber-600 focus:ring-amber-500 w-4 h-4"
+                    />
+                    <div className="text-left">
+                      <div className="text-xs font-bold">Khata POS</div>
+                      <div className="text-[10px] text-slate-500">Credit Bill Modal</div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Status */}
+              <div className="flex items-center justify-between pt-1">
+                <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={bankIsActive}
+                    onChange={e => setBankIsActive(e.target.checked)}
+                    className="rounded text-blue-600 focus:ring-blue-500"
+                  />
+                  <span>Active bank account (Ready to receive payments)</span>
+                </label>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsBankModalOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" className="font-bold gap-2">
+                  <Check className="w-4 h-4" />
+                  {editingBankId ? 'Update Bank Account' : 'Save Bank Account'}
+                </Button>
+              </div>
+            </form>
+          </Modal>
         </div>
       </AppShell>
     </ProtectedRoute>

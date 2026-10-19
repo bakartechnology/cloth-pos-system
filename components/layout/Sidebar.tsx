@@ -30,6 +30,7 @@ import {
   Truck,
   Plus,
   LogOut,
+  CheckCircle2,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { PermissionKey } from '@/types';
@@ -139,6 +140,7 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
       subItems: [
         { label: 'Field Recovery', href: '/payments', icon: Banknote, permission: 'payment_collection' },
         { label: 'Wholesale Recovery', href: '/payments/wholesale', icon: Receipt, permission: 'wholesale_recovery' },
+        { label: 'Pending Cheques', href: '/payments/cheques', icon: CheckCircle2, permission: 'wholesale_recovery' },
         { label: 'Staff Khata', href: '/staff-khata', icon: Briefcase, permission: 'staff_khata' },
       ],
     },

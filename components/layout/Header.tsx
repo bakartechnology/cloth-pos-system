@@ -59,6 +59,7 @@ export function Header({ onOpenMobileMenu, onOpenSearch }: HeaderProps) {
 
   const canViewChequeNotifs =
     currentStaff?.role === 'Admin' ||
+    currentStaff?.role === 'Wholesale Cashier' ||
     hasPermission('cheque_notifications') ||
     hasPermission('payment_collection');
 
@@ -225,15 +226,36 @@ export function Header({ onOpenMobileMenu, onOpenSearch }: HeaderProps) {
                         <div className="flex items-center justify-between">
                           <span className="font-bold text-[#9A6A16] flex items-center gap-1.5">
                             <span className="w-2 h-2 rounded-full bg-[#9A6A16] animate-pulse" />
-                            Cheque Due Today
+                            Cheque Due for Clearance
                           </span>
                           <span className="font-mono text-[10px] font-bold text-[#9A6A16] bg-white/70 px-1.5 py-0.5 rounded">
                             Rs. {item.cheque.chequeAmount.toLocaleString()}
                           </span>
                         </div>
                         <p className="text-[11px] text-[#17211D] leading-relaxed">
-                          Cheque due today. Customer: <span className="font-semibold">{item.customerName}</span>.
+                          Cheque: <span className="font-mono font-bold">{item.cheque.chequeNumber || 'N/A'}</span> ({item.cheque.bankName || 'Bank'}) · Client: <span className="font-semibold">{item.customerName}</span>
                         </p>
+                        <div className="pt-1 flex items-center justify-between border-t border-[#9A6A16]/20">
+                          <span className="text-[10px] text-[#9A6A16]">Due: {item.cheque.clearingDate}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const res = paymentsService.passCheque(item.collectionId, item.cheque.id, currentStaff?.id, currentStaff?.name);
+                              if (res.success) {
+                                setDueCheques(paymentsService.getDueCheques());
+                                toast({
+                                  title: 'Cheque Marked as Passed (OK)',
+                                  description: `Rs. ${item.cheque.chequeAmount.toLocaleString()} deducted from ${item.customerName}'s account today (${new Date().toLocaleDateString()}).`,
+                                  type: 'success',
+                                });
+                              }
+                            }}
+                            className="px-2 py-1 bg-[#125E45] hover:bg-[#197A5A] text-white rounded-lg text-[10px] font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                          >
+                            <Check className="w-3 h-3" />
+                            <span>Pass Cheque (OK)</span>
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>

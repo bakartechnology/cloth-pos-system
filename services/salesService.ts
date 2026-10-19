@@ -14,6 +14,7 @@ import { storageService } from './storageService';
 import { productsService } from './productsService';
 import { customersService } from './customersService';
 import { inventoryService } from './inventoryService';
+import { paymentsService } from './paymentsService';
 
 export const salesService = {
   getAllBills(): Bill[] {
@@ -155,7 +156,8 @@ export const salesService = {
       params.saleType === 'Khata' ? 'Khata' : 'Retail';
 
     let billCustomer = params.customer;
-    if (!billCustomer && finalCustomerName && finalCustomerName !== 'Walk-in customer' && finalCustomerName !== 'Walk-in Wholesale Customer') {
+    // Only auto-create customer in CRM for Retail or Khata; Wholesale counter customerName is one-time and should NOT pollute CRM
+    if (!billCustomer && finalCustomerName && finalCustomerName !== 'Walk-in customer' && finalCustomerName !== 'Walk-in Wholesale Customer' && params.saleType !== 'Wholesale') {
       billCustomer = customersService.findOrCreateCustomerByName(finalCustomerName, finalCustomerPhone, targetAccountType);
     }
 
@@ -221,7 +223,79 @@ export const salesService = {
 
     // 3. Update customer transaction ledger & account type strictly according to POS origin
     if (billCustomer) {
-      if (params.paymentMethod === 'Credit/Khata' || params.saleType === 'Khata') {
+      const isSplitCheque =
+        params.paymentMethod === 'Split' &&
+        (params.splitPayment?.mode === 'CashCheque' ||
+         params.splitPayment?.mode === 'BankCheque' ||
+         params.splitPayment?.mode === 'CashBankCheque');
+
+      if (isSplitCheque && params.splitPayment) {
+        // Wholesale / Khata Split with Cheque:
+        // Immediate portion (Cash / Bank) is credited immediately.
+        // Cheque portion is NOT deducted until approved/passed by admin or cashier!
+        let immediatePaid = 0;
+        let chequeAmount = 0;
+        let primaryMethod: PaymentMethod = 'Cash';
+
+        if (params.splitPayment.mode === 'CashBankCheque') {
+          const cashPortion = params.splitPayment.cashAmount || 0;
+          const bankPortion = params.splitPayment.bankAmount || 0;
+          immediatePaid = cashPortion + bankPortion;
+          chequeAmount = params.splitPayment.chequeAmount ?? params.splitPayment.secondaryAmount ?? 0;
+          primaryMethod = 'Split';
+        } else {
+          immediatePaid = params.splitPayment.primaryAmount ?? params.splitPayment.cashAmount ?? 0;
+          chequeAmount = params.splitPayment.secondaryAmount || 0;
+          primaryMethod = params.splitPayment.primaryMethod || (params.splitPayment.mode === 'BankCheque' ? 'Bank Transfer' : 'Cash');
+        }
+
+        // 1. Debit full invoice amount to customer ledger
+        customersService.recordKhataDebit({
+          customerId: billCustomer.id,
+          customerName: billCustomer.name,
+          amount: grandTotal,
+          invoiceId: invoiceNumber,
+          description: `${params.saleType} invoice #${invoiceNumber} (Total Due: Rs. ${grandTotal.toLocaleString()})`,
+          staffId: params.staffId,
+          staffName: params.staffName,
+        });
+
+        // 2. Immediately credit the cash or bank transfer received at the counter
+        if (immediatePaid > 0) {
+          customersService.recordKhataPayment({
+            customerId: billCustomer.id,
+            customerName: billCustomer.name,
+            amount: immediatePaid,
+            paymentMethod: primaryMethod,
+            staffId: params.staffId,
+            staffName: params.staffName,
+            notes: `Counter ${params.splitPayment.mode === 'CashBankCheque' ? `Cash: Rs. ${(params.splitPayment.cashAmount || 0).toLocaleString()} + Bank: Rs. ${(params.splitPayment.bankAmount || 0).toLocaleString()}` : primaryMethod} payment for Invoice #${invoiceNumber}`,
+          });
+        }
+
+        // 3. Register cheque(s) with 'Pending' status in paymentsService
+        paymentsService.createWholesaleChequeRecord({
+          invoiceNumber,
+          customerId: billCustomer.id,
+          customerName: billCustomer.name,
+          customerPhone: billCustomer.phone || '',
+          staffId: params.staffId,
+          staffName: params.staffName,
+          chequeAmount,
+          chequeNumber: params.splitPayment.chequeNumber || '',
+          bankName: params.splitPayment.chequeBankName || '',
+          clearingDate: params.splitPayment.chequeClearingDate || new Date().toISOString().split('T')[0],
+          primaryMethod: primaryMethod === 'Bank Transfer' ? 'Bank Transfer' : 'Cash',
+          primaryAmount: immediatePaid,
+          saleType: params.saleType,
+          cheques: params.splitPayment.cheques?.map(c => ({
+            bankName: c.bankName,
+            chequeNumber: c.chequeNumber,
+            chequeAmount: c.amount,
+            clearingDate: c.clearingDate,
+          })),
+        });
+      } else if (params.paymentMethod === 'Credit/Khata') {
         customersService.update(billCustomer.id, { type: 'Khata' });
         customersService.recordKhataDebit({
           customerId: billCustomer.id,
@@ -231,6 +305,51 @@ export const salesService = {
           description: `Sale invoice #${invoiceNumber} (${params.saleType})`,
           staffId: params.staffId,
           staffName: params.staffName,
+        });
+      } else if (params.saleType === 'Khata' && params.paymentMethod === 'Split' && params.splitPayment?.mode === 'CashBank') {
+        // Cash + Bank split without cheque in Khata
+        customersService.update(billCustomer.id, { type: 'Khata' });
+        customersService.recordKhataDebit({
+          customerId: billCustomer.id,
+          customerName: billCustomer.name,
+          amount: grandTotal,
+          invoiceId: invoiceNumber,
+          description: `Sale invoice #${invoiceNumber} (Khata)`,
+          staffId: params.staffId,
+          staffName: params.staffName,
+        });
+        const paidAmt = (params.splitPayment.cashAmount || 0) + (params.splitPayment.bankAmount || 0);
+        if (paidAmt > 0) {
+          customersService.recordKhataPayment({
+            customerId: billCustomer.id,
+            customerName: billCustomer.name,
+            amount: paidAmt,
+            paymentMethod: 'Split',
+            staffId: params.staffId,
+            staffName: params.staffName,
+            notes: `Counter Cash & Bank Transfer payment for Invoice #${invoiceNumber}`,
+          });
+        }
+      } else if (params.saleType === 'Khata' && (params.paymentMethod === 'Cash' || params.paymentMethod === 'Bank Transfer')) {
+        // Immediate counter cash or bank settlement in Khata POS
+        customersService.update(billCustomer.id, { type: 'Khata' });
+        customersService.recordKhataDebit({
+          customerId: billCustomer.id,
+          customerName: billCustomer.name,
+          amount: grandTotal,
+          invoiceId: invoiceNumber,
+          description: `Sale invoice #${invoiceNumber} (Khata)`,
+          staffId: params.staffId,
+          staffName: params.staffName,
+        });
+        customersService.recordKhataPayment({
+          customerId: billCustomer.id,
+          customerName: billCustomer.name,
+          amount: grandTotal,
+          paymentMethod: params.paymentMethod,
+          staffId: params.staffId,
+          staffName: params.staffName,
+          notes: `Counter ${params.paymentMethod} payment for Invoice #${invoiceNumber}`,
         });
       } else {
         const currentPurchased = billCustomer.totalPurchased || 0;

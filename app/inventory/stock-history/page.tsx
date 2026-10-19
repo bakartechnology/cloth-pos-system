@@ -113,11 +113,11 @@ export default function StockHistoryPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {filtered.map(mov => {
+                    {filtered.map((mov, index) => {
                       const isPositive = mov.quantityChange > 0;
 
                       return (
-                        <tr key={mov.id} className="hover:bg-slate-50/60 transition-colors">
+                        <tr key={`${mov.id}-${index}`} className="hover:bg-slate-50/60 transition-colors">
                           <td className="py-3 px-4 whitespace-nowrap text-slate-500 font-mono text-[11px]">
                             {new Date(mov.date).toLocaleString('en-PK', {
                               day: '2-digit',

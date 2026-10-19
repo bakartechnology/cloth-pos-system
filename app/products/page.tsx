@@ -37,7 +37,7 @@ export default function ProductsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedUnit, setSelectedUnit] = useState<string>('All');
-  const [sortBy, setSortBy] = useState<'name' | 'stock' | 'retailPrice'>('name');
+  const [sortBy, setSortBy] = useState<'name' | 'stock'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   // Barcode quick print modal state
@@ -105,7 +105,6 @@ export default function ProductsPage() {
       let comparison = 0;
       if (sortBy === 'name') comparison = a.name.localeCompare(b.name);
       if (sortBy === 'stock') comparison = a.stock - b.stock;
-      if (sortBy === 'retailPrice') comparison = a.retailPrice - b.retailPrice;
       return sortOrder === 'asc' ? comparison : -comparison;
     });
 
@@ -188,12 +187,11 @@ export default function ProductsPage() {
               <div className="flex items-center gap-2">
                 <select
                   value={sortBy}
-                  onChange={e => setSortBy(e.target.value as 'name' | 'stock' | 'retailPrice')}
+                  onChange={e => setSortBy(e.target.value as 'name' | 'stock')}
                   className="flex-1 text-xs border border-slate-200 rounded-lg px-3 py-2 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-medium"
                 >
                   <option value="name">Sort by Name</option>
                   <option value="stock">Sort by Stock</option>
-                  <option value="retailPrice">Sort by Retail Price</option>
                 </select>
                 <button
                   onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}

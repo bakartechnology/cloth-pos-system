@@ -56,14 +56,10 @@ export function WholesaleCustomerInput({
   };
 
   const selectExistingCustomer = (cust: Customer) => {
-    let activeCustomer = cust;
-    if (activeCustomer.type === 'Retail') {
-      activeCustomer = customersService.update(activeCustomer.id, { type: 'Wholesale' }) || activeCustomer;
-    }
-    setInputValue(activeCustomer.name);
-    onChange(activeCustomer.name, activeCustomer);
+    setInputValue(cust.name);
+    onChange(cust.name, cust);
     if (onSelectCustomer) {
-      onSelectCustomer(activeCustomer);
+      onSelectCustomer(cust);
     }
     setIsOpen(false);
   };
@@ -72,16 +68,9 @@ export function WholesaleCustomerInput({
     const clean = name.trim();
     if (!clean) return;
 
-    try {
-      const cust = customersService.findOrCreateCustomerByName(clean, undefined, 'Wholesale');
-      setInputValue(cust.name);
-      onChange(cust.name, cust);
-      if (onSelectCustomer) {
-        onSelectCustomer(cust);
-      }
-    } catch {
-      onChange(clean);
-    }
+    // Do NOT create customer in CRM/database! Just use name for this wholesale invoice
+    setInputValue(clean);
+    onChange(clean);
     setIsOpen(false);
   };
 
@@ -106,15 +95,7 @@ export function WholesaleCustomerInput({
       if (isOpen && highlightedIndex >= 0 && suggestions[highlightedIndex]) {
         selectExistingCustomer(suggestions[highlightedIndex]);
       } else if (inputValue.trim().length > 0) {
-        // If there's an exact match in suggestions, choose that, otherwise create/confirm
-        const exactMatch = suggestions.find(
-          s => s.name.toLowerCase() === inputValue.trim().toLowerCase()
-        );
-        if (exactMatch) {
-          selectExistingCustomer(exactMatch);
-        } else {
-          createOrConfirmCustomer(inputValue);
-        }
+        createOrConfirmCustomer(inputValue);
       }
     } else if (e.key === 'Escape') {
       setIsOpen(false);
@@ -227,24 +208,24 @@ export function WholesaleCustomerInput({
                   onMouseDown={() => createOrConfirmCustomer(inputValue)}
                   className="mt-1 pt-1 border-t border-[#DCE3E0] px-2.5 py-1.5 text-xs text-[#197A5A] font-bold hover:bg-[#E9F3EF] rounded-lg cursor-pointer flex items-center gap-1.5"
                 >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Save "{inputValue.trim()}" as new customer (Press Enter)</span>
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Use &quot;{inputValue.trim()}&quot; on this invoice (Press Enter)</span>
                 </div>
               )}
             </div>
           ) : (
             inputValue.trim().length > 0 && (
-              <div className="p-2.5 text-center">
-                <p className="text-xs text-[#66726D]">
-                  No existing customer named "{inputValue.trim()}"
+              <div
+                onMouseDown={() => createOrConfirmCustomer(inputValue)}
+                className="p-2.5 text-center cursor-pointer hover:bg-[#F0F4F2]"
+              >
+                <div className="text-xs font-bold text-[#197A5A] flex items-center justify-center gap-1.5">
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Use &quot;{inputValue.trim()}&quot; for this invoice</span>
+                </div>
+                <p className="text-[10px] text-[#8A9590] mt-0.5">
+                  One-time customer / collector name (not added to clients list)
                 </p>
-                <button
-                  type="button"
-                  onMouseDown={() => createOrConfirmCustomer(inputValue)}
-                  className="mt-1.5 inline-flex items-center gap-1 px-3 py-1 bg-[#197A5A] text-white text-xs font-bold rounded-lg hover:bg-[#125E45] transition-colors shadow-2xs"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Save New Customer
-                </button>
               </div>
             )
           )}

@@ -85,6 +85,7 @@ export const INITIAL_SETTINGS: StoreSettings = {
       iban: 'PK62MEZN0002190104829102',
       branchName: 'Liberty Market Branch, Lahore',
       isActive: true,
+      channels: ['Retail', 'Wholesale', 'Khata'],
     },
     {
       id: 'bnk-002',
@@ -94,6 +95,7 @@ export const INITIAL_SETTINGS: StoreSettings = {
       iban: 'PK36HABB0010489920194012',
       branchName: 'Main Gulberg Branch, Lahore',
       isActive: true,
+      channels: ['Wholesale'],
     },
     {
       id: 'bnk-003',
@@ -103,6 +105,7 @@ export const INITIAL_SETTINGS: StoreSettings = {
       iban: 'PK55UNIL0022091847192831',
       branchName: 'Model Town Branch, Lahore',
       isActive: true,
+      channels: ['Retail', 'Wholesale'],
     },
     {
       id: 'bnk-004',
@@ -112,6 +115,7 @@ export const INITIAL_SETTINGS: StoreSettings = {
       iban: 'PK89ABPA0000100482910291',
       branchName: 'Anarkali Branch, Lahore',
       isActive: true,
+      channels: ['Khata'],
     },
   ],
   retailCardTerminal: {

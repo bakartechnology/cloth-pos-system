@@ -69,9 +69,16 @@ export type SaleType = 'Retail' | 'Wholesale' | 'Khata';
 
 export type PaymentMethod = 'Cash' | 'Card' | 'Bank Transfer' | 'Credit/Khata' | 'Cheque' | 'Split' | 'Other';
 
+export type SplitMode = 'CashCard' | 'CashBank' | 'CashCheque' | 'BankCheque' | 'CashBankCheque';
+
 export interface SplitPaymentDetail {
+  mode?: SplitMode;
   cashAmount: number;
-  secondaryMethod: 'Card' | 'Bank Transfer';
+  bankAmount?: number;
+  chequeAmount?: number;
+  primaryMethod?: 'Cash' | 'Bank Transfer';
+  primaryAmount?: number;
+  secondaryMethod: 'Card' | 'Bank Transfer' | 'Cheque';
   secondaryAmount: number;
   cardTransactionId?: string;
   bankDetails?: {
@@ -85,6 +92,21 @@ export interface SplitPaymentDetail {
     confirmedAt: string;
   };
   slipReference?: string;
+  // Cheque details for Cash + Cheque or Bank Transfer + Cheque
+  chequeNumber?: string;
+  chequeBankName?: string;
+  chequeClearingDate?: string; // YYYY-MM-DD (date & month)
+  chequeStatus?: 'Pending' | 'Passed' | 'Bounced';
+  chequePassedAt?: string;
+  // Multiple cheques support
+  cheques?: {
+    id: string;
+    bankName: string;
+    chequeNumber?: string;
+    amount: number;
+    clearingDate: string;
+    status?: 'Pending' | 'Passed' | 'Bounced';
+  }[];
 }
 
 export interface ChequeItem {
@@ -95,6 +117,11 @@ export interface ChequeItem {
   bankName?: string;
   status?: 'Pending' | 'Passed' | 'Bounced';
   passedAt?: string;
+  invoiceNumber?: string;
+  customerId?: string;
+  customerName?: string;
+  customerPhone?: string;
+  saleType?: SaleType;
 }
 
 export interface ChequeDetails {
@@ -411,6 +438,8 @@ export interface StockMovement {
   notes?: string;
 }
 
+export type POSChannel = 'Retail' | 'Wholesale' | 'Khata';
+
 export interface BankAccount {
   id: string;
   bankName: string;
@@ -419,6 +448,7 @@ export interface BankAccount {
   iban: string;
   branchName?: string;
   isActive: boolean;
+  channels?: POSChannel[];
 }
 
 export interface CardTerminalConfig {

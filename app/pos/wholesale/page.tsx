@@ -39,15 +39,24 @@ import {
   Keyboard,
   ShieldCheck,
   ShoppingBag,
+  Layers,
+  AlertCircle,
+  Calendar,
+  DollarSign,
+  Copy,
+  ExternalLink,
 } from 'lucide-react';
+import Link from 'next/link';
 import { productsService } from '@/services/productsService';
 import { customersService } from '@/services/customersService';
 import { salesService } from '@/services/salesService';
 import { storageService } from '@/services/storageService';
 import { wholesaleSessionService } from '@/services/wholesaleSessionService';
+import { paymentsService } from '@/services/paymentsService';
 import { barcodeScannerService } from '@/services/hardware/barcodeScannerService';
 import { cashDrawerService } from '@/services/hardware/cashDrawerService';
-import { cardTerminalService, CardPaymentState } from '@/services/hardware/cardTerminalService';
+import { cardTerminalService, CardPaymentState, CardPaymentResponse } from '@/services/hardware/cardTerminalService';
+import { CardTerminalModal } from '@/components/retail-pos/CardTerminalModal';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import { useToast } from '@/context/ToastContext';
@@ -61,6 +70,7 @@ import {
   ExchangeTransaction,
   WholesaleSessionDraft,
   Pandi,
+  SplitMode,
 } from '@/types';
 import { PandiSelectInput } from '@/components/pandi/PandiSelectInput';
 
@@ -118,6 +128,53 @@ export default function WholesalePOSPage() {
   const [cardTransactionId, setCardTransactionId] = useState<string | undefined>(undefined);
   const [isWholesaleTerminalEnabled, setIsWholesaleTerminalEnabled] = useState<boolean>(false);
 
+  // Split / Mixed Payment States (Retail Mirror + Cash/Bank + Cheque + 3-Way Split)
+  const [splitMode, setSplitMode] = useState<SplitMode>('CashCard');
+  const [splitCashInput, setSplitCashInput] = useState<string>('');
+  const [splitBankInput, setSplitBankInput] = useState<string>('');
+  const [splitSecondaryInput, setSplitSecondaryInput] = useState<string>('');
+  const [splitCardAuth, setSplitCardAuth] = useState<CardPaymentResponse | null>(null);
+  const [splitManualCardRef, setSplitManualCardRef] = useState<string>('');
+  const [splitCardVerified, setSplitCardVerified] = useState(false);
+  const [splitBankSlipVerified, setSplitBankSlipVerified] = useState(false);
+  const [splitChequeVerified, setSplitChequeVerified] = useState(false);
+  const [splitReference, setSplitReference] = useState('');
+  const [splitChequeNumber, setSplitChequeNumber] = useState('');
+  const [splitChequeBankName, setSplitChequeBankName] = useState('Meezan Bank');
+  const [splitChequeClearingDate, setSplitChequeClearingDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return d.toISOString().split('T')[0];
+  });
+  // Multiple Cheques State for Wholesale Finalize
+  const [chequeEntries, setChequeEntries] = useState<Array<{
+    id: string;
+    bankName: string;
+    chequeNumber: string;
+    amount: string;
+    clearingDate: string;
+  }>>([
+    {
+      id: 'chq-init-1',
+      bankName: 'Meezan Bank',
+      chequeNumber: '',
+      amount: '',
+      clearingDate: (() => {
+        const d = new Date();
+        d.setDate(d.getDate() + 7);
+        return d.toISOString().split('T')[0];
+      })(),
+    },
+  ]);
+  const [isSplitCardTerminalModalOpen, setIsSplitCardTerminalModalOpen] = useState(false);
+  const [copiedBankId, setCopiedBankId] = useState<string | null>(null);
+
+  // Pending Wholesale Cheques Modal State
+  const [isPendingChequesModalOpen, setIsPendingChequesModalOpen] = useState(false);
+  const [pendingCheques, setPendingCheques] = useState<ReturnType<typeof paymentsService.getWholesalePendingCheques>>([]);
+  const [pendingChequesSearch, setPendingChequesSearch] = useState('');
+  const [pendingOriginFilter, setPendingOriginFilter] = useState<'All' | 'Wholesale' | 'Khata'>('All');
+
   // Cash Drawer State
   const [isCashDrawerOpen, setIsCashDrawerOpen] = useState(false);
 
@@ -147,10 +204,14 @@ export default function WholesalePOSPage() {
       setNextInvoiceNumber(nextInv ? `#${nextInv}` : '#WB-026184');
       const settings = storageService.getSettings();
       setIsWholesaleTerminalEnabled(Boolean(settings.wholesaleCardTerminal?.enabled));
-      const banks = settings.bankAccounts || [];
+      const banks = (settings.bankAccounts || []).filter(
+        b => b.isActive !== false && (!b.channels || b.channels.length === 0 || b.channels.includes('Wholesale'))
+      );
       setBankAccounts(banks);
       if (banks.length > 0) {
-        setSelectedBank(banks[0]);
+        setSelectedBank(prev => (prev && banks.some(b => b.id === prev.id)) ? prev : banks[0]);
+      } else {
+        setSelectedBank(null);
       }
       syncWithLatestProducts();
     };
@@ -285,11 +346,6 @@ export default function WholesalePOSPage() {
     }
 
     setAvailableDraft(null);
-    toast({
-      title: 'Previous Work Resumed',
-      description: 'Your previous wholesale work session has been restored.',
-      type: 'success',
-    });
   };
 
   // Discard Draft Handler
@@ -303,11 +359,6 @@ export default function WholesalePOSPage() {
     setSelectedCustomer(null);
     setNotes('');
     setCashReceived(0);
-    toast({
-      title: 'Draft Discarded',
-      description: 'Previous unfinished session was cleared.',
-      type: 'info',
-    });
   };
 
   // Dynamic Category List from real products + standard suits/fabrics
@@ -430,6 +481,171 @@ export default function WholesalePOSPage() {
     barcodeInputRef.current?.focus();
   };
 
+  // Load pending cheques for wholesale
+  const loadPendingCheques = () => {
+    const list = paymentsService.getWholesalePendingCheques();
+    setPendingCheques(list);
+  };
+
+  useEffect(() => {
+    loadPendingCheques();
+  }, []);
+
+  const dueTodayCount = useMemo(() => {
+    return pendingCheques.filter(p => p.isDueToday || p.isOverdue).length;
+  }, [pendingCheques]);
+
+  const handlePassCheque = (collectionId: string, chequeId: string) => {
+    const res = paymentsService.passCheque(
+      collectionId,
+      chequeId,
+      currentStaff?.id,
+      currentStaff?.name
+    );
+    if (res.success) {
+      loadPendingCheques();
+      toast({
+        title: 'Cheque Passed & Settled (OK)',
+        description: `Rs. ${res.amount?.toLocaleString()} deducted from ${res.customerName}'s account on today's statement (${new Date().toLocaleDateString()}).`,
+        type: 'success',
+      });
+    } else {
+      toast({
+        title: 'Action Failed',
+        description: res.message,
+        type: 'error',
+      });
+    }
+  };
+
+  const handleSplitCashChange = (val: string) => {
+    setSplitCashInput(val);
+    if (!val || val.trim() === '') {
+      setSplitSecondaryInput('');
+      return;
+    }
+    const num = parseFloat(val);
+    if (isNaN(num)) {
+      setSplitSecondaryInput('');
+      return;
+    }
+    const remaining = Math.max(0, Math.round((finalWholesaleGrandTotal - num) * 100) / 100);
+    setSplitSecondaryInput(String(remaining));
+  };
+
+  const handleSplitSecondaryChange = (val: string) => {
+    setSplitSecondaryInput(val);
+    if (!val || val.trim() === '') {
+      setSplitCashInput('');
+      return;
+    }
+    const num = parseFloat(val);
+    if (isNaN(num)) {
+      setSplitCashInput('');
+      return;
+    }
+    const remaining = Math.max(0, Math.round((finalWholesaleGrandTotal - num) * 100) / 100);
+    setSplitCashInput(String(remaining));
+  };
+
+  const handleSplit3WayChange = (field: 'cash' | 'bank' | 'cheque', val: string) => {
+    if (field === 'cash') {
+      setSplitCashInput(val);
+      if (val === '') return;
+      const c = parseFloat(val) || 0;
+      const b = parseFloat(splitBankInput) || 0;
+      const rem = Math.max(0, Math.round((finalWholesaleGrandTotal - c - b) * 100) / 100);
+      setSplitSecondaryInput(String(rem));
+      if (chequeEntries.length === 1) {
+        setChequeEntries([{ ...chequeEntries[0], amount: rem > 0 ? String(rem) : '' }]);
+      }
+    } else if (field === 'bank') {
+      setSplitBankInput(val);
+      if (val === '') return;
+      const b = parseFloat(val) || 0;
+      const c = parseFloat(splitCashInput) || 0;
+      const rem = Math.max(0, Math.round((finalWholesaleGrandTotal - c - b) * 100) / 100);
+      setSplitSecondaryInput(String(rem));
+      if (chequeEntries.length === 1) {
+        setChequeEntries([{ ...chequeEntries[0], amount: rem > 0 ? String(rem) : '' }]);
+      }
+    } else if (field === 'cheque') {
+      setSplitSecondaryInput(val);
+      if (chequeEntries.length === 1) {
+        setChequeEntries([{ ...chequeEntries[0], amount: val }]);
+      }
+      if (val === '') return;
+      const chq = parseFloat(val) || 0;
+      const c = parseFloat(splitCashInput) || 0;
+      const rem = Math.max(0, Math.round((finalWholesaleGrandTotal - c - chq) * 100) / 100);
+      setSplitBankInput(String(rem));
+    }
+  };
+
+  const handleAddCheque = () => {
+    const primary = (parseFloat(splitCashInput) || 0) + (splitMode === 'CashBankCheque' ? (parseFloat(splitBankInput) || 0) : 0);
+    const existingChequesSum = chequeEntries.reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0);
+    const remaining = Math.max(0, Math.round((finalWholesaleGrandTotal - primary - existingChequesSum) * 100) / 100);
+
+    const prevDate = chequeEntries[chequeEntries.length - 1]?.clearingDate || (() => {
+      const d = new Date();
+      d.setDate(d.getDate() + 7);
+      return d.toISOString().split('T')[0];
+    })();
+    const prevBank = chequeEntries[chequeEntries.length - 1]?.bankName || 'Meezan Bank';
+
+    const newCheque = {
+      id: `chq-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      bankName: prevBank,
+      chequeNumber: '',
+      amount: remaining > 0 ? String(remaining) : '',
+      clearingDate: prevDate,
+    };
+
+    const updated = [...chequeEntries, newCheque];
+    setChequeEntries(updated);
+    const totalCheques = updated.reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0);
+    setSplitSecondaryInput(totalCheques > 0 ? String(totalCheques) : '');
+  };
+
+  const handleRemoveCheque = (id: string) => {
+    if (chequeEntries.length <= 1) return;
+    const updated = chequeEntries.filter(c => c.id !== id);
+    setChequeEntries(updated);
+    const totalCheques = updated.reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0);
+    setSplitSecondaryInput(totalCheques > 0 ? String(totalCheques) : '');
+  };
+
+  const handleUpdateCheque = (id: string, field: 'bankName' | 'chequeNumber' | 'amount' | 'clearingDate', value: string) => {
+    const updated = chequeEntries.map(c => (c.id === id ? { ...c, [field]: value } : c));
+    setChequeEntries(updated);
+    if (field === 'amount') {
+      const totalCheques = updated.reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0);
+      setSplitSecondaryInput(totalCheques > 0 ? String(totalCheques) : '');
+      if (splitMode === 'CashCheque' || splitMode === 'BankCheque') {
+        const remaining = Math.max(0, Math.round((finalWholesaleGrandTotal - totalCheques) * 100) / 100);
+        setSplitCashInput(remaining > 0 ? String(remaining) : '');
+      } else if (splitMode === 'CashBankCheque') {
+        const c = parseFloat(splitCashInput) || 0;
+        const remaining = Math.max(0, Math.round((finalWholesaleGrandTotal - c - totalCheques) * 100) / 100);
+        setSplitBankInput(remaining > 0 ? String(remaining) : '');
+      }
+    }
+  };
+
+  const handleCopyAccount = (accNo: string, bankId: string) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(accNo);
+      setCopiedBankId(bankId);
+      setTimeout(() => setCopiedBankId(null), 2000);
+      toast({
+        title: 'Account Number Copied',
+        description: `${accNo} copied to clipboard.`,
+        type: 'info',
+      });
+    }
+  };
+
   // Open Checkout Modal
   const handleOpenCheckout = () => {
     if (wholesaleCart.length === 0) {
@@ -454,6 +670,23 @@ export default function WholesalePOSPage() {
     setIsBankPaymentConfirmed(false);
     setCardPaymentState('idle');
     setCardTransactionId(undefined);
+
+    // Start split mode on Cash + Card and amounts blank
+    setSplitMode('CashCard');
+    setSplitCashInput('');
+    setSplitBankInput('');
+    setSplitSecondaryInput('');
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    setChequeEntries([
+      {
+        id: `chq-${Date.now()}`,
+        bankName: 'Meezan Bank',
+        chequeNumber: '',
+        amount: '',
+        clearingDate: d.toISOString().split('T')[0],
+      },
+    ]);
     setIsCheckoutOpen(true);
   };
 
@@ -546,24 +779,114 @@ export default function WholesalePOSPage() {
         });
         return;
       }
+    } else if (paymentMethod === 'Split') {
+      const primaryAmt = parseFloat(splitCashInput) || 0;
+      const bankAmt = parseFloat(splitBankInput) || 0;
+      const secondaryAmt = parseFloat(splitSecondaryInput) || 0;
+      const totalSplit = splitMode === 'CashBankCheque' ? (primaryAmt + bankAmt + secondaryAmt) : (primaryAmt + secondaryAmt);
+
+      if (Math.round(totalSplit) < Math.round(finalWholesaleGrandTotal)) {
+        toast({
+          title: 'Incomplete Split Payment',
+          description: `Total split payment (Rs. ${totalSplit.toLocaleString()}) is less than net payable (Rs. ${finalWholesaleGrandTotal.toLocaleString()}).`,
+          type: 'error',
+        });
+        return;
+      }
+
+      if (splitMode === 'CashCard') {
+        if (!splitCardVerified && !splitCardAuth && !splitManualCardRef.trim()) {
+          toast({
+            title: 'Card Payment Not Confirmed',
+            description: 'Please authorize card terminal or enter manual authorization reference & confirm checkbox.',
+            type: 'warning',
+          });
+          return;
+        }
+      } else if (splitMode === 'CashBank') {
+        if (!splitBankSlipVerified) {
+          toast({
+            title: 'Transfer Slip Required',
+            description: 'Please confirm that the bank transfer slip has been verified.',
+            type: 'warning',
+          });
+          return;
+        }
+      } else if (splitMode === 'CashCheque' || splitMode === 'BankCheque' || splitMode === 'CashBankCheque') {
+        if (splitMode === 'BankCheque' || splitMode === 'CashBankCheque') {
+          if (!splitBankSlipVerified) {
+            toast({
+              title: 'Bank Transfer Slip Required',
+              description: 'Please verify the bank transfer portion slip and confirm checkbox.',
+              type: 'warning',
+            });
+            return;
+          }
+        }
+        for (let i = 0; i < chequeEntries.length; i++) {
+          const chq = chequeEntries[i];
+          if (!chq.bankName.trim()) {
+            toast({
+              title: `Bank Name Required (Cheque #${i + 1})`,
+              description: `Please enter or select the bank name for Cheque #${i + 1}.`,
+              type: 'warning',
+            });
+            return;
+          }
+          if ((parseFloat(chq.amount) || 0) <= 0) {
+            toast({
+              title: `Amount Required (Cheque #${i + 1})`,
+              description: `Please enter a valid amount for Cheque #${i + 1}.`,
+              type: 'warning',
+            });
+            return;
+          }
+          if (!chq.clearingDate) {
+            toast({
+              title: `Passing Date Required (Cheque #${i + 1})`,
+              description: `Please specify the scheduled passing date for Cheque #${i + 1}.`,
+              type: 'warning',
+            });
+            return;
+          }
+        }
+        if (!splitChequeVerified) {
+          toast({
+            title: 'Cheque Verification Required',
+            description: 'Please confirm that physical cheque(s) and details are verified.',
+            type: 'warning',
+          });
+          return;
+        }
+      }
     }
 
     const effectiveCustomerName = customerName.trim() || selectedCustomer?.name || 'Walk-in Wholesale Customer';
     const effectivePhone = selectedCustomer?.phone || '';
 
-    let billCustomer = selectedCustomer;
-    if (!billCustomer && customerName.trim()) {
-      billCustomer = customersService.findOrCreateCustomerByName(customerName.trim(), effectivePhone, 'Wholesale');
-    }
-    if (billCustomer && billCustomer.type !== 'Wholesale') {
-      billCustomer = customersService.update(billCustomer.id, { type: 'Wholesale' }) || billCustomer;
-    }
+    // Only attach billCustomer if an existing client was selected; do not create permanent client for one-time wholesale customerName
+    const billCustomer = selectedCustomer || undefined;
+
+    const primaryAmt = parseFloat(splitCashInput) || 0;
+    const bankAmt = parseFloat(splitBankInput) || 0;
+    const secondaryAmt = parseFloat(splitSecondaryInput) || 0;
 
     const bill = salesService.completeSale({
       saleType: 'Wholesale',
       cartItems: wholesaleCart,
       paymentMethod,
-      amountReceived: paymentMethod === 'Credit/Khata' ? 0 : paymentMethod === 'Cash' ? cashReceived : finalWholesaleGrandTotal,
+      amountReceived:
+        paymentMethod === 'Credit/Khata'
+          ? 0
+          : paymentMethod === 'Cash'
+          ? cashReceived
+          : paymentMethod === 'Split'
+          ? (splitMode === 'CashBankCheque'
+              ? (primaryAmt + bankAmt)
+              : (splitMode === 'CashCheque' || splitMode === 'BankCheque'
+                  ? primaryAmt
+                  : finalWholesaleGrandTotal))
+          : finalWholesaleGrandTotal,
       discountTotal: wholesaleDiscountTotal,
       taxTotal: wholesaleTaxAmount,
       staffId: currentStaff.id,
@@ -590,6 +913,63 @@ export default function WholesalePOSPage() {
               confirmedAt: new Date().toISOString(),
             }
           : undefined,
+      splitPayment:
+        paymentMethod === 'Split'
+          ? {
+              mode: splitMode,
+              cashAmount: splitMode === 'BankCheque' ? 0 : primaryAmt,
+              bankAmount:
+                splitMode === 'CashBankCheque'
+                  ? bankAmt
+                  : splitMode === 'BankCheque'
+                  ? primaryAmt
+                  : splitMode === 'CashBank'
+                  ? secondaryAmt
+                  : undefined,
+              chequeAmount:
+                (splitMode === 'CashCheque' || splitMode === 'BankCheque' || splitMode === 'CashBankCheque')
+                  ? secondaryAmt
+                  : undefined,
+              primaryMethod: splitMode === 'BankCheque' ? 'Bank Transfer' : 'Cash',
+              primaryAmount: splitMode === 'CashBankCheque' ? (primaryAmt + bankAmt) : primaryAmt,
+              secondaryMethod:
+                splitMode === 'CashCard'
+                  ? 'Card'
+                  : splitMode === 'CashBank'
+                  ? 'Bank Transfer'
+                  : 'Cheque',
+              secondaryAmount: secondaryAmt,
+              cardTransactionId: splitCardAuth?.transactionId || splitManualCardRef.trim() || undefined,
+              bankDetails:
+                (splitMode === 'CashBank' || splitMode === 'BankCheque' || splitMode === 'CashBankCheque') && selectedBank
+                  ? {
+                      bankId: selectedBank.id,
+                      bankName: selectedBank.bankName,
+                      accountTitle: selectedBank.accountTitle,
+                      accountNumber: selectedBank.accountNumber,
+                      iban: selectedBank.iban,
+                      confirmedByStaffId: currentStaff.id,
+                      confirmedByStaffName: currentStaff.name,
+                      confirmedAt: new Date().toISOString(),
+                    }
+                  : undefined,
+              slipReference: splitReference.trim() || undefined,
+              chequeNumber: chequeEntries[0]?.chequeNumber?.trim() || splitChequeNumber.trim() || undefined,
+              chequeBankName: chequeEntries[0]?.bankName?.trim() || splitChequeBankName.trim() || undefined,
+              chequeClearingDate: chequeEntries[0]?.clearingDate || splitChequeClearingDate || undefined,
+              cheques: (splitMode === 'CashCheque' || splitMode === 'BankCheque' || splitMode === 'CashBankCheque')
+                ? chequeEntries.map(c => ({
+                    id: c.id,
+                    bankName: c.bankName.trim(),
+                    chequeNumber: c.chequeNumber.trim() || undefined,
+                    amount: parseFloat(c.amount) || 0,
+                    clearingDate: c.clearingDate,
+                    status: 'Pending' as const,
+                  }))
+                : undefined,
+              chequeStatus: 'Pending',
+            }
+          : undefined,
       notes,
     });
 
@@ -603,6 +983,28 @@ export default function WholesalePOSPage() {
     setNotes('');
     setPandiName('');
     setSelectedPandi(null);
+    setSplitCashInput('');
+    setSplitBankInput('');
+    setSplitSecondaryInput('');
+    setSplitCardAuth(null);
+    setSplitManualCardRef('');
+    setSplitCardVerified(false);
+    setSplitBankSlipVerified(false);
+    setSplitChequeVerified(false);
+    setSplitChequeNumber('');
+    setSplitReference('');
+    const dReset = new Date();
+    dReset.setDate(dReset.getDate() + 7);
+    setChequeEntries([
+      {
+        id: `chq-${Date.now()}`,
+        bankName: 'Meezan Bank',
+        chequeNumber: '',
+        amount: '',
+        clearingDate: dReset.toISOString().split('T')[0],
+      },
+    ]);
+    loadPendingCheques();
     setIsCashDrawerOpen(false);
     setIsCheckoutOpen(false);
     setIsInvoiceModalOpen(true);
@@ -676,8 +1078,37 @@ export default function WholesalePOSPage() {
               </div>
             </div>
 
-            {/* Right: Shortcuts -> Search Past Bills -> Hardware Dot -> Time */}
+            {/* Right: Pending Cheques -> Search Past Bills -> Shortcuts -> Hardware Dot -> Time */}
             <div className="flex items-center gap-3 shrink-0 ml-auto">
+              {/* Pending Cheques Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  loadPendingCheques();
+                  setIsPendingChequesModalOpen(true);
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors shadow-2xs cursor-pointer ${
+                  dueTodayCount > 0
+                    ? 'bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100 ring-1 ring-amber-400'
+                    : pendingCheques.length > 0
+                    ? 'bg-[#DCEDE6] border-[#125E45]/40 text-[#125E45] hover:bg-[#cde4db]'
+                    : 'bg-white border-[#DCE3E0] hover:bg-[#F0F4F2] text-[#17211D]'
+                }`}
+                title="Wholesale Uncleared / Pending Cheques"
+              >
+                <Layers className="w-3.5 h-3.5 text-current" />
+                <span>Pending Cheques</span>
+                {pendingCheques.length > 0 && (
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                      dueTodayCount > 0 ? 'bg-amber-600 text-white animate-pulse' : 'bg-[#125E45] text-white'
+                    }`}
+                  >
+                    {pendingCheques.length}
+                  </span>
+                )}
+              </button>
+
               {/* Search Past Bills/Returns Button */}
               <button
                 type="button"
@@ -716,72 +1147,39 @@ export default function WholesalePOSPage() {
             </div>
           </div>
 
-          {/* ============================================================== */}
-          {/* 2. WORKFLOW STEPPER RIBBON */}
-          {/* ============================================================== */}
-          <div className="bg-[#DCEDE6] rounded-xl px-4 py-2.5 flex items-center justify-between text-xs overflow-x-auto shadow-2xs border border-[#C7D2CD]/60 select-none">
-            {/* Step 1: Customer */}
-            <div className={`flex items-center gap-1.5 shrink-0 ${customerName.trim() ? 'font-bold text-[#125E45]' : 'text-[#66726D] font-medium'}`}>
-              <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${customerName.trim() ? 'bg-[#125E45] text-white' : 'border border-[#8A9590]'}`}>
-                {customerName.trim() ? '✓' : '1'}
-              </span>
-              <span>Customer</span>
-              <span className="text-[#8A9590] ml-2 font-normal">&gt;</span>
+          {/* CHEQUE DUE TODAY NOTIFICATION BANNER */}
+          {dueTodayCount > 0 && (
+            <div className="p-3 rounded-2xl bg-[#F7EEDC] border border-[#9A6A16]/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-[#9A6A16] text-white flex items-center justify-center font-bold shrink-0">
+                  <Clock className="w-4 h-4 animate-spin" />
+                </div>
+                <div>
+                  <div className="font-bold text-[#17211D] flex items-center gap-2">
+                    <span>{dueTodayCount} Wholesale Cheque(s) Due for Clearance Today</span>
+                    <span className="text-[10px] bg-[#9A6A16]/20 text-[#9A6A16] px-1.5 py-0.2 rounded font-bold uppercase">
+                      Action Required
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-[#66726D]">
+                    Cheques are scheduled for clearance. Click &quot;Pass Cheque (OK)&quot; to clear and deduct from client accounts.
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  loadPendingCheques();
+                  setIsPendingChequesModalOpen(true);
+                }}
+                className="px-3 py-1.5 bg-[#9A6A16] hover:bg-[#835911] text-white text-xs font-bold rounded-xl transition-colors cursor-pointer shadow-2xs shrink-0 flex items-center gap-1.5"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>View & Pass Cheques</span>
+              </button>
             </div>
+          )}
 
-            {/* Step 2: Client */}
-            <div className={`flex items-center gap-1.5 shrink-0 ${selectedCustomer ? 'font-bold text-[#125E45]' : 'text-[#66726D] font-medium'}`}>
-              <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${selectedCustomer ? 'bg-[#125E45] text-white' : 'border border-[#8A9590]'}`}>
-                {selectedCustomer ? '✓' : '2'}
-              </span>
-              <span>Client</span>
-              <span className="text-[#8A9590] ml-2 font-normal">&gt;</span>
-            </div>
-
-            {/* Step 3: Scan/Search */}
-            <div className={`flex items-center gap-1.5 shrink-0 ${wholesaleCart.length > 0 ? 'font-bold text-[#125E45]' : 'text-[#66726D] font-medium'}`}>
-              <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${wholesaleCart.length > 0 ? 'bg-[#125E45] text-white' : 'border border-[#8A9590]'}`}>
-                3
-              </span>
-              <span>Scan/Search</span>
-              <span className="text-[#8A9590] ml-2 font-normal">&gt;</span>
-            </div>
-
-            {/* Step 4: Bulk Quantity */}
-            <div className={`flex items-center gap-1.5 shrink-0 ${wholesaleCart.length > 0 ? 'font-bold text-[#125E45]' : 'text-[#66726D] font-medium'}`}>
-              <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${wholesaleCart.length > 0 ? 'bg-[#125E45] text-white' : 'border border-[#8A9590]'}`}>
-                4
-              </span>
-              <span>Bulk Quantity</span>
-              <span className="text-[#8A9590] ml-2 font-normal">&gt;</span>
-            </div>
-
-            {/* Step 5: Pricing */}
-            <div className="flex items-center gap-1.5 text-[#66726D] font-medium shrink-0">
-              <span className="w-4 h-4 rounded-full border border-[#8A9590] flex items-center justify-center text-[10px]">
-                5
-              </span>
-              <span>Pricing</span>
-              <span className="text-[#8A9590] ml-2 font-normal">&gt;</span>
-            </div>
-
-            {/* Step 6: Invoice */}
-            <div className="flex items-center gap-1.5 text-[#66726D] font-medium shrink-0">
-              <span className="w-4 h-4 rounded-full border border-[#8A9590] flex items-center justify-center text-[10px]">
-                6
-              </span>
-              <span>Invoice</span>
-              <span className="text-[#8A9590] ml-2 font-normal">&gt;</span>
-            </div>
-
-            {/* Step 7: Checkout */}
-            <div className="flex items-center gap-1.5 text-[#66726D] font-medium shrink-0">
-              <span className="w-4 h-4 rounded-full border border-[#8A9590] flex items-center justify-center text-[10px]">
-                7
-              </span>
-              <span>Checkout</span>
-            </div>
-          </div>
 
           {/* DRAFT NOTIFICATION BANNER (ONLY shown when there were real items saved) */}
           {availableDraft && availableDraft.cartItems && availableDraft.cartItems.length > 0 && (
@@ -837,9 +1235,6 @@ export default function WholesalePOSPage() {
                     Customer & wholesale account
                   </h3>
                   <div className="flex items-center gap-2">
-                    <span className="bg-[#DCEDE6] text-[#125E45] text-xs font-semibold px-3 py-0.5 rounded-full">
-                      Active wholesale account
-                    </span>
                     {(customerName.trim() || selectedCustomer) && (
                       <button
                         type="button"
@@ -950,7 +1345,7 @@ export default function WholesalePOSPage() {
                 <div>
                   <h2 className="text-base font-bold text-[#17211D]">Product catalog</h2>
                   <p className="text-xs text-[#66726D]">
-                    {filteredProducts.length} products · {displayedProducts.length} shown · Sold by metre
+                    {displayedProducts.length} of {filteredProducts.length} products shown
                   </p>
                 </div>
 
@@ -1318,18 +1713,18 @@ export default function WholesalePOSPage() {
         >
           <div className="space-y-4 text-xs select-none">
             {/* Net Due Header */}
-            <div className="p-4 bg-[#F0F4F2] rounded-2xl border border-[#DCE3E0] flex items-center justify-between">
+            <div className="p-3.5 sm:p-4 bg-[#F0F4F2] rounded-2xl border border-[#DCE3E0] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
               <div>
-                <span className="text-xs text-[#66726D]">Net Amount Due:</span>
-                <div className="text-2xl font-black text-[#17211D]">
+                <span className="text-[11px] sm:text-xs text-[#66726D]">Net Amount Due:</span>
+                <div className="text-xl sm:text-2xl font-black text-[#17211D]">
                   Rs. {finalWholesaleGrandTotal.toLocaleString()}
                 </div>
               </div>
-              <div className="text-right">
-                <span className="bg-[#DCEDE6] text-[#125E45] text-xs font-semibold px-2.5 py-1 rounded-full inline-block mb-1">
+              <div className="text-left sm:text-right">
+                <span className="bg-[#DCEDE6] text-[#125E45] text-[10px] sm:text-xs font-semibold px-2.5 py-1 rounded-full inline-block mb-1">
                   Wholesale Counter
                 </span>
-                <div className="text-[11px] text-[#66726D]">
+                <div className="text-[11px] text-[#66726D] truncate max-w-full sm:max-w-xs">
                   {selectedCustomer ? (selectedCustomer.businessName || selectedCustomer.name) : customerName.trim() || 'Walk-in Customer'}
                 </div>
               </div>
@@ -1340,8 +1735,8 @@ export default function WholesalePOSPage() {
               <label className="text-xs font-bold text-[#17211D] block">
                 Settlement Method
               </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {(['Cash', 'Bank Transfer', 'Card', 'Credit/Khata'] as PaymentMethod[]).map(pm => {
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-1.5 sm:gap-2">
+                {(['Cash', 'Bank Transfer', 'Card', 'Credit/Khata', 'Split'] as PaymentMethod[]).map(pm => {
                   const isCardDisabled = pm === 'Card' && !isWholesaleTerminalEnabled;
                   const isSelected = paymentMethod === pm;
                   return (
@@ -1365,8 +1760,13 @@ export default function WholesalePOSPage() {
                         if (pm === 'Cash') {
                           setCashReceived(Math.round(finalWholesaleGrandTotal));
                         }
+                        if (pm === 'Split') {
+                          setSplitMode('CashCard');
+                          setSplitCashInput('');
+                          setSplitSecondaryInput('');
+                        }
                       }}
-                      className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1.5 text-xs font-bold transition-all cursor-pointer ${
+                      className={`p-2 sm:p-3 rounded-xl border flex flex-col items-center justify-center gap-1 sm:gap-1.5 text-[11px] sm:text-xs font-bold text-center transition-all cursor-pointer ${
                         isSelected
                           ? isCardDisabled
                             ? 'bg-rose-50 text-rose-800 border-rose-300'
@@ -1374,14 +1774,15 @@ export default function WholesalePOSPage() {
                           : 'bg-white border-[#DCE3E0] text-[#66726D] hover:bg-[#F0F4F2]'
                       }`}
                     >
-                      {pm === 'Cash' && <Banknote className="w-4 h-4" />}
-                      {pm === 'Bank Transfer' && <Building className="w-4 h-4" />}
-                      {pm === 'Card' && <CreditCard className="w-4 h-4" />}
-                      {pm === 'Credit/Khata' && <BookOpen className="w-4 h-4" />}
-                      <span>{pm}</span>
+                      {pm === 'Cash' && <Banknote className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />}
+                      {pm === 'Bank Transfer' && <Building className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />}
+                      {pm === 'Card' && <CreditCard className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />}
+                      {pm === 'Credit/Khata' && <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />}
+                      {pm === 'Split' && <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />}
+                      <span className="truncate max-w-full">{pm === 'Split' ? 'Split / Mixed' : pm}</span>
                       {isCardDisabled && (
                         <span className="text-[9px] font-normal text-rose-600">
-                          (Disabled in Settings)
+                          (Disabled)
                         </span>
                       )}
                     </button>
@@ -1431,32 +1832,128 @@ export default function WholesalePOSPage() {
                   <p className="text-xs text-[#C23D45]">
                     No bank accounts configured in Store Settings.
                   </p>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {bankAccounts.map(b => (
-                      <div
-                        key={b.id}
-                        onClick={() => setSelectedBank(b)}
-                        className={`p-2.5 rounded-xl border text-xs cursor-pointer transition-colors ${
-                          selectedBank?.id === b.id
-                            ? 'border-[#125E45] bg-[#DCEDE6] text-[#125E45] font-bold'
-                            : 'border-[#DCE3E0] bg-white text-[#17211D] hover:bg-[#F0F4F2]'
-                        }`}
-                      >
-                        <div className="font-bold">{b.bankName}</div>
-                        <div className="text-[10px] text-[#66726D] font-mono">{b.accountNumber}</div>
-                        <div className="text-[10px] text-[#8A9590]">{b.accountTitle}</div>
+                ) : bankAccounts.length === 1 ? (
+                  /* Single Bank Account: Show directly as requested */
+                  <div className="p-3 sm:p-3.5 rounded-xl border border-[#125E45] bg-[#DCEDE6]/40 shadow-2xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1">
+                      <span className="font-bold text-xs text-[#17211D] flex items-center gap-1.5 min-w-0">
+                        <Building className="w-3.5 h-3.5 text-[#125E45] shrink-0" />
+                        <span className="truncate">{bankAccounts[0].bankName}</span>
+                      </span>
+                      <span className="text-[10px] text-[#66726D] font-medium truncate">
+                        Title: <strong className="text-[#17211D]">{bankAccounts[0].accountTitle}</strong>
+                      </span>
+                    </div>
+                    <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-2 p-2.5 bg-white rounded-lg border border-[#DCE3E0] mt-1.5">
+                      <div className="min-w-0">
+                        <span className="text-[9px] text-[#8A9590] block uppercase font-semibold">
+                          Account Number
+                        </span>
+                        <span className="text-xs font-black font-mono text-[#17211D] tracking-wider select-all break-all">
+                          {bankAccounts[0].accountNumber}
+                        </span>
                       </div>
-                    ))}
+                      <button
+                        type="button"
+                        onClick={() => handleCopyAccount(bankAccounts[0].accountNumber, bankAccounts[0].id)}
+                        className="px-2.5 py-1.5 bg-[#F6F8F7] hover:bg-[#DCEDE6] text-[#125E45] border border-[#DCE3E0] rounded-md text-[10px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer shrink-0 self-start xs:self-center"
+                      >
+                        {copiedBankId === bankAccounts[0].id ? (
+                          <>
+                            <Check className="w-3 h-3 text-[#125E45]" />
+                            <span>Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3" />
+                            <span>Copy</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    {bankAccounts[0].iban && (
+                      <div className="text-[9px] text-[#8A9590] font-mono mt-1 break-all">
+                        IBAN: {bankAccounts[0].iban}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  /* Multiple Bank Accounts: Dropdown with Bank Names + Selected Bank Account Number */
+                  <div className="space-y-2">
+                    <div>
+                      <label className="text-[10px] font-bold text-[#66726D] block mb-1">
+                        Select Receiving Bank:
+                      </label>
+                      <select
+                        value={selectedBank?.id || bankAccounts[0]?.id || ''}
+                        onChange={e => {
+                          const found = bankAccounts.find(b => b.id === e.target.value);
+                          if (found) setSelectedBank(found);
+                        }}
+                        className="w-full p-2 text-xs font-bold text-[#17211D] bg-white border border-[#DCE3E0] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#197A5A] cursor-pointer"
+                      >
+                        {bankAccounts.map(b => (
+                          <option key={b.id} value={b.id}>
+                            {b.bankName} — {b.accountTitle}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {selectedBank && (
+                      <div className="p-3 sm:p-3.5 rounded-xl border border-[#125E45] bg-[#DCEDE6]/40 shadow-2xs">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1">
+                          <span className="font-bold text-xs text-[#17211D] flex items-center gap-1.5 min-w-0">
+                            <Building className="w-3.5 h-3.5 text-[#125E45] shrink-0" />
+                            <span className="truncate">{selectedBank.bankName}</span>
+                          </span>
+                          <span className="text-[10px] text-[#66726D] font-medium truncate">
+                            Title: <strong className="text-[#17211D]">{selectedBank.accountTitle}</strong>
+                          </span>
+                        </div>
+                        <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-2 p-2.5 bg-white rounded-lg border border-[#DCE3E0] mt-1.5">
+                          <div className="min-w-0">
+                            <span className="text-[9px] text-[#8A9590] block uppercase font-semibold">
+                              Account Number
+                            </span>
+                            <span className="text-xs font-black font-mono text-[#17211D] tracking-wider select-all break-all">
+                              {selectedBank.accountNumber}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyAccount(selectedBank.accountNumber, selectedBank.id)}
+                            className="px-2.5 py-1.5 bg-[#F6F8F7] hover:bg-[#DCEDE6] text-[#125E45] border border-[#DCE3E0] rounded-md text-[10px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer shrink-0 self-start xs:self-center"
+                          >
+                            {copiedBankId === selectedBank.id ? (
+                              <>
+                                <Check className="w-3 h-3 text-[#125E45]" />
+                                <span>Copied</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3 h-3" />
+                                <span>Copy</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                        {selectedBank.iban && (
+                          <div className="text-[9px] text-[#8A9590] font-mono mt-1 break-all">
+                            IBAN: {selectedBank.iban}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
-                <div className="pt-2 border-t border-[#DCE3E0] flex items-center justify-between">
+                <div className="pt-2 border-t border-[#DCE3E0] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <span className="text-xs text-[#66726D]">Transfer Slip Verified:</span>
                   <button
                     type="button"
                     onClick={() => setIsBankPaymentConfirmed(!isBankPaymentConfirmed)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                    className={`w-full sm:w-auto px-3 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
                       isBankPaymentConfirmed
                         ? 'bg-[#125E45] text-white shadow-2xs'
                         : 'bg-white border border-[#DCE3E0] text-[#17211D] hover:bg-[#F0F4F2]'
@@ -1518,6 +2015,739 @@ export default function WholesalePOSPage() {
               </div>
             )}
 
+            {/* SPLIT / MIXED PAYMENT WORKFLOW (Retail Mirror + Cash/Bank + Cheque) */}
+            {paymentMethod === 'Split' && (
+              <div className="space-y-3.5 p-3 sm:p-4 bg-[#F8FAFA] rounded-2xl border border-[#DCE3E0]">
+                {/* Mode Selector (5 Tabs): Cash + Card, Cash + Bank, Cash + Cheque, Bank + Cheque, Cash + Bank + Cheque */}
+                <div className="space-y-1.5">
+                  <div>
+                    <span className="text-xs font-bold text-[#17211D] block mb-1">Split Mode Selection:</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-1 sm:gap-1.5 p-1 bg-white rounded-xl border border-[#DCE3E0]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSplitMode('CashCard');
+                        setSplitCardVerified(false);
+                        setSplitBankSlipVerified(false);
+                        setSplitChequeVerified(false);
+                        setSplitCashInput('');
+                        setSplitBankInput('');
+                        setSplitSecondaryInput('');
+                      }}
+                      className={`px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer text-center ${
+                        splitMode === 'CashCard'
+                          ? 'bg-[#125E45] text-white shadow-2xs'
+                          : 'text-[#66726D] hover:text-[#17211D] hover:bg-[#F0F4F2]'
+                      }`}
+                    >
+                      <CreditCard className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">Cash + Card</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSplitMode('CashBank');
+                        setSplitCardVerified(false);
+                        setSplitBankSlipVerified(false);
+                        setSplitChequeVerified(false);
+                        setSplitCashInput('');
+                        setSplitBankInput('');
+                        setSplitSecondaryInput('');
+                      }}
+                      className={`px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer text-center ${
+                        splitMode === 'CashBank'
+                          ? 'bg-[#125E45] text-white shadow-2xs'
+                          : 'text-[#66726D] hover:text-[#17211D] hover:bg-[#F0F4F2]'
+                      }`}
+                    >
+                      <Building className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">Cash + Bank</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSplitMode('CashCheque');
+                        setSplitCardVerified(false);
+                        setSplitBankSlipVerified(false);
+                        setSplitChequeVerified(false);
+                        setSplitCashInput('');
+                        setSplitBankInput('');
+                        setSplitSecondaryInput('');
+                      }}
+                      className={`px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer text-center ${
+                        splitMode === 'CashCheque'
+                          ? 'bg-[#125E45] text-white shadow-2xs'
+                          : 'text-[#66726D] hover:text-[#17211D] hover:bg-[#F0F4F2]'
+                      }`}
+                    >
+                      <Layers className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">Cash + Cheque</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSplitMode('BankCheque');
+                        setSplitCardVerified(false);
+                        setSplitBankSlipVerified(false);
+                        setSplitChequeVerified(false);
+                        setSplitCashInput('');
+                        setSplitBankInput('');
+                        setSplitSecondaryInput('');
+                      }}
+                      className={`px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer text-center ${
+                        splitMode === 'BankCheque'
+                          ? 'bg-[#125E45] text-white shadow-2xs'
+                          : 'text-[#66726D] hover:text-[#17211D] hover:bg-[#F0F4F2]'
+                      }`}
+                    >
+                      <Building className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">Bank + Cheque</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSplitMode('CashBankCheque');
+                        setSplitCardVerified(false);
+                        setSplitBankSlipVerified(false);
+                        setSplitChequeVerified(false);
+                        setSplitCashInput('');
+                        setSplitBankInput('');
+                        setSplitSecondaryInput('');
+                      }}
+                      className={`px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer text-center ${
+                        splitMode === 'CashBankCheque'
+                          ? 'bg-[#125E45] text-white shadow-2xs'
+                          : 'text-[#66726D] hover:text-[#17211D] hover:bg-[#F0F4F2]'
+                      }`}
+                    >
+                      <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">Cash+Bank+Chq</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Amount Inputs: 3-way if CashBankCheque, else dual inputs */}
+                {splitMode === 'CashBankCheque' ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-2.5">
+                    {/* Portion 1: Cash Amount */}
+                    <div className="p-2.5 bg-white rounded-xl border border-[#DCE3E0] space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-[#17211D] flex items-center gap-1">
+                          <Banknote className="w-3.5 h-3.5 text-[#125E45]" />
+                          <span>1. Cash (Rs.)</span>
+                        </span>
+                        <span className="text-[9px] text-[#8A9590]">Immediate</span>
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="Enter cash amount"
+                        value={splitCashInput}
+                        onChange={e => handleSplit3WayChange('cash', e.target.value)}
+                        className="w-full p-2 text-sm font-bold text-[#17211D] border border-[#DCE3E0] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
+                      />
+                    </div>
+
+                    {/* Portion 2: Bank Transfer Amount */}
+                    <div className="p-2.5 bg-white rounded-xl border border-[#DCE3E0] space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-[#17211D] flex items-center gap-1">
+                          <Building className="w-3.5 h-3.5 text-[#125E45]" />
+                          <span>2. Bank (Rs.)</span>
+                        </span>
+                        <span className="text-[9px] text-[#8A9590]">IBFT / Transfer</span>
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="Enter bank amount"
+                        value={splitBankInput}
+                        onChange={e => handleSplit3WayChange('bank', e.target.value)}
+                        className="w-full p-2 text-sm font-bold text-[#17211D] border border-[#DCE3E0] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
+                      />
+                    </div>
+
+                    {/* Portion 3: Cheque Amount */}
+                    <div className="p-2.5 bg-white rounded-xl border border-[#DCE3E0] space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-[#17211D] flex items-center gap-1">
+                          <FileText className="w-3.5 h-3.5 text-[#125E45]" />
+                          <span>3. Cheque (Rs.)</span>
+                        </span>
+                        <span className="text-[9px] text-amber-600 font-bold">Pending</span>
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="Enter cheque amount"
+                        value={splitSecondaryInput}
+                        onChange={e => handleSplit3WayChange('cheque', e.target.value)}
+                        className="w-full p-2 text-sm font-bold text-[#17211D] border border-[#DCE3E0] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* Portion 1: Cash or Bank Amount */}
+                    <div className="p-3 bg-white rounded-xl border border-[#DCE3E0] space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-[#17211D] flex items-center gap-1.5">
+                          {splitMode === 'BankCheque' ? (
+                            <>
+                              <Building className="w-3.5 h-3.5 text-[#125E45]" />
+                              <span>1. Bank Transfer Amount (Rs.)</span>
+                            </>
+                          ) : (
+                            <>
+                              <Banknote className="w-3.5 h-3.5 text-[#125E45]" />
+                              <span>1. Cash Amount (Rs.)</span>
+                            </>
+                          )}
+                        </span>
+                        <span className="text-[10px] text-[#8A9590]">Received Immediately</span>
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder={splitMode === 'BankCheque' ? 'Enter bank amount' : 'Enter cash amount'}
+                        value={splitCashInput}
+                        onChange={e => handleSplitCashChange(e.target.value)}
+                        className="w-full p-2 text-sm font-bold text-[#17211D] border border-[#DCE3E0] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
+                      />
+                    </div>
+
+                    {/* Portion 2: Card, Bank, or Cheque Amount */}
+                    <div className="p-3 bg-white rounded-xl border border-[#DCE3E0] space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-[#17211D] flex items-center gap-1.5">
+                          {splitMode === 'CashCard' && (
+                            <>
+                              <CreditCard className="w-3.5 h-3.5 text-[#125E45]" />
+                              <span>2. Card Amount (Rs.)</span>
+                            </>
+                          )}
+                          {splitMode === 'CashBank' && (
+                            <>
+                              <Building className="w-3.5 h-3.5 text-[#125E45]" />
+                              <span>2. Bank Transfer Amount (Rs.)</span>
+                            </>
+                          )}
+                          {(splitMode === 'CashCheque' || splitMode === 'BankCheque') && (
+                            <>
+                              <FileText className="w-3.5 h-3.5 text-[#125E45]" />
+                              <span>2. Cheque Amount (Rs.)</span>
+                            </>
+                          )}
+                        </span>
+                        <span className="text-[10px] text-[#8A9590]">
+                          {splitMode === 'CashCheque' || splitMode === 'BankCheque' ? 'Pending Clearance' : 'Secondary Portion'}
+                        </span>
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder={splitMode === 'CashCard' ? 'Enter card amount' : splitMode === 'CashBank' ? 'Enter bank amount' : 'Enter cheque amount'}
+                        value={splitSecondaryInput}
+                        onChange={e => handleSplitSecondaryChange(e.target.value)}
+                        className="w-full p-2 text-sm font-bold text-[#17211D] border border-[#DCE3E0] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Sub-Workflow 1: Cash + Card */}
+                {splitMode === 'CashCard' && (
+                  <div className="p-3.5 bg-white rounded-xl border border-[#DCE3E0] space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="font-bold text-xs text-[#17211D] flex items-center gap-1.5">
+                        <CreditCard className="w-4 h-4 text-[#125E45]" />
+                        <span>Card Portion{splitSecondaryInput ? `: Rs. ${(parseFloat(splitSecondaryInput) || 0).toLocaleString()}` : ''}</span>
+                      </div>
+                      <span className="text-[10px] text-[#66726D]">POS Terminal Swipe</span>
+                    </div>
+
+                    {!isWholesaleTerminalEnabled ? (
+                      <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs space-y-1.5">
+                        <div className="font-bold text-rose-900">Card Terminal Disabled in Settings</div>
+                        <p className="text-[11px] text-rose-700">
+                          Integrated terminal is disabled. Enter external machine auth code or enable in settings:
+                        </p>
+                        <div className="pt-1">
+                          <label className="text-[10px] font-bold text-[#66726D] block mb-1">
+                            External Terminal Card Auth / Ref #:
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. AUTH-84920"
+                            value={splitManualCardRef}
+                            onChange={e => setSplitManualCardRef(e.target.value)}
+                            className="w-full p-1.5 text-xs border border-rose-300 rounded-md bg-white focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        {splitCardAuth ? (
+                          <div className="p-2.5 bg-[#DCEDE6] border border-[#125E45]/30 rounded-lg text-xs font-bold text-[#125E45] flex items-center justify-between">
+                            <span className="flex items-center gap-1.5">
+                              <CheckCircle2 className="w-4 h-4" />
+                              <span>Card Authorized (Ref: {splitCardAuth.transactionId})</span>
+                            </span>
+                            <span>Rs. {(parseFloat(splitSecondaryInput) || 0).toLocaleString()}</span>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setIsSplitCardTerminalModalOpen(true)}
+                            className="w-full py-2 px-3 bg-[#125E45] hover:bg-[#197A5A] text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-2xs"
+                          >
+                            <CreditCard className="w-3.5 h-3.5" />
+                            <span>Authorize Card Terminal for Rs. {(parseFloat(splitSecondaryInput) || 0).toLocaleString()}</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    <label
+                      className={`flex items-start gap-2.5 p-2.5 rounded-lg border transition-all cursor-pointer ${
+                        splitCardVerified
+                          ? 'bg-[#DCEDE6] border-[#125E45]'
+                          : 'bg-[#F6F8F7] border-[#DCE3E0] hover:bg-[#F0F4F2]'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={splitCardVerified}
+                        onChange={e => setSplitCardVerified(e.target.checked)}
+                        className="mt-0.5 w-4 h-4 text-[#125E45] rounded accent-[#125E45] cursor-pointer shrink-0"
+                      />
+                      <div className="text-xs text-[#17211D]">
+                        <span className="font-bold">
+                          Cash (Rs. {(parseFloat(splitCashInput) || 0).toLocaleString()}) Received & Card (Rs. {(parseFloat(splitSecondaryInput) || 0).toLocaleString()}) Authorized
+                        </span>
+                        <span className="block text-[10px] text-[#66726D]">
+                          Confirmed cash collected at counter and card transaction processed.
+                        </span>
+                      </div>
+                    </label>
+                  </div>
+                )}
+
+                {/* Sub-Workflow 2: Cash + Bank Transfer OR Cash + Bank + Cheque (Bank Portion) */}
+                {(splitMode === 'CashBank' || splitMode === 'CashBankCheque') && (
+                  <div className="p-3.5 bg-white rounded-xl border border-[#DCE3E0] space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="font-bold text-xs text-[#17211D] flex items-center gap-1.5">
+                        <Building className="w-4 h-4 text-[#125E45]" />
+                        <span>Bank Transfer Portion{splitMode === 'CashBankCheque' ? (splitBankInput ? `: Rs. ${(parseFloat(splitBankInput) || 0).toLocaleString()}` : '') : (splitSecondaryInput ? `: Rs. ${(parseFloat(splitSecondaryInput) || 0).toLocaleString()}` : '')}</span>
+                      </div>
+                      <span className="text-[10px] text-[#66726D]">Online / IBFT</span>
+                    </div>
+
+                    {bankAccounts.length === 0 ? (
+                      <p className="text-xs text-[#C23D45]">
+                        No bank accounts configured in Store Settings.
+                      </p>
+                    ) : bankAccounts.length === 1 ? (
+                      <div className="p-3 bg-[#F6F8F7] rounded-xl border border-[#DCE3E0] space-y-1">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                          <span className="font-bold text-xs text-[#17211D] flex items-center gap-1.5 min-w-0">
+                            <Building className="w-3.5 h-3.5 text-[#125E45] shrink-0" />
+                            <span className="truncate">{bankAccounts[0].bankName}</span>
+                          </span>
+                          <span className="text-[10px] text-[#66726D] truncate">{bankAccounts[0].accountTitle}</span>
+                        </div>
+                        <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-2 p-2 bg-white rounded-lg border border-[#DCE3E0] mt-1">
+                          <div className="min-w-0">
+                            <span className="text-[9px] text-[#8A9590] block">Account Number for Customer Transfer:</span>
+                            <span className="text-xs font-black font-mono text-[#17211D] tracking-wider select-all break-all">
+                              {bankAccounts[0].accountNumber}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyAccount(bankAccounts[0].accountNumber, bankAccounts[0].id)}
+                            className="px-2 py-1 bg-[#F6F8F7] hover:bg-[#DCEDE6] text-[#125E45] border border-[#DCE3E0] rounded-md text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer shrink-0 self-start xs:self-center"
+                          >
+                            {copiedBankId === bankAccounts[0].id ? (
+                              <>
+                                <Check className="w-3 h-3 text-[#125E45]" />
+                                <span>Copied</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3 h-3" />
+                                <span>Copy</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div>
+                          <label className="text-[10px] font-bold text-[#66726D] block mb-1">
+                            Select Receiving Bank:
+                          </label>
+                          <select
+                            value={selectedBank?.id || bankAccounts[0]?.id || ''}
+                            onChange={e => {
+                              const found = bankAccounts.find(b => b.id === e.target.value);
+                              if (found) setSelectedBank(found);
+                            }}
+                            className="w-full p-2 text-xs font-bold text-[#17211D] bg-white border border-[#DCE3E0] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#197A5A] cursor-pointer"
+                          >
+                            {bankAccounts.map(b => (
+                              <option key={b.id} value={b.id}>
+                                {b.bankName} — {b.accountTitle}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {selectedBank && (
+                          <div className="p-3 bg-[#F6F8F7] rounded-xl border border-[#DCE3E0] space-y-1">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                              <span className="font-bold text-xs text-[#17211D] flex items-center gap-1.5 min-w-0">
+                                <Building className="w-3.5 h-3.5 text-[#125E45] shrink-0" />
+                                <span className="truncate">{selectedBank.bankName}</span>
+                              </span>
+                              <span className="text-[10px] text-[#66726D] truncate">{selectedBank.accountTitle}</span>
+                            </div>
+                            <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-2 p-2 bg-white rounded-lg border border-[#DCE3E0] mt-1">
+                              <div className="min-w-0">
+                                <span className="text-[9px] text-[#8A9590] block">Account Number for Customer Transfer:</span>
+                                <span className="text-xs font-black font-mono text-[#17211D] tracking-wider select-all break-all">
+                                  {selectedBank.accountNumber}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyAccount(selectedBank.accountNumber, selectedBank.id)}
+                                className="px-2 py-1 bg-[#F6F8F7] hover:bg-[#DCEDE6] text-[#125E45] border border-[#DCE3E0] rounded-md text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer shrink-0 self-start xs:self-center"
+                              >
+                                {copiedBankId === selectedBank.id ? (
+                                  <>
+                                    <Check className="w-3 h-3 text-[#125E45]" />
+                                    <span>Copied</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="w-3 h-3" />
+                                    <span>Copy</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <input
+                      type="text"
+                      placeholder="Bank Transfer Slip # / Sender Details (Optional)"
+                      value={splitReference}
+                      onChange={e => setSplitReference(e.target.value)}
+                      className="w-full p-2 text-xs border border-[#DCE3E0] rounded-lg bg-white focus:outline-none"
+                    />
+
+                    <label
+                      className={`flex items-start gap-2.5 p-2.5 rounded-lg border transition-all cursor-pointer ${
+                        splitBankSlipVerified
+                          ? 'bg-[#DCEDE6] border-[#125E45]'
+                          : 'bg-[#F6F8F7] border-[#DCE3E0] hover:bg-[#F0F4F2]'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={splitBankSlipVerified}
+                        onChange={e => setSplitBankSlipVerified(e.target.checked)}
+                        className="mt-0.5 w-4 h-4 text-[#125E45] rounded accent-[#125E45] cursor-pointer shrink-0"
+                      />
+                      <div className="text-xs text-[#17211D]">
+                        <span className="font-bold">
+                          Cash (Rs. {(parseFloat(splitCashInput) || 0).toLocaleString()}) Received & Bank Slip (Rs. {(parseFloat(splitMode === 'CashBankCheque' ? splitBankInput : splitSecondaryInput) || 0).toLocaleString()}) Verified
+                        </span>
+                        <span className="block text-[10px] text-[#66726D]">
+                          Confirmed cash received in drawer and bank slip confirmed.
+                        </span>
+                      </div>
+                    </label>
+                  </div>
+                )}
+
+                {/* Sub-Workflow 3, 4 & 5: Cheque Details (Pending Clearance) */}
+                {(splitMode === 'CashCheque' || splitMode === 'BankCheque' || splitMode === 'CashBankCheque') && (
+                  <div className="p-3.5 bg-white rounded-xl border border-[#DCE3E0] space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="font-bold text-xs text-[#17211D] flex items-center gap-1.5">
+                        <FileText className="w-4 h-4 text-[#125E45]" />
+                        <span>Cheque Details (Pending Clearance)</span>
+                      </div>
+                      <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full">
+                        {splitSecondaryInput ? `Rs. ${(parseFloat(splitSecondaryInput) || 0).toLocaleString()}` : 'Enter cheque amount'}
+                      </span>
+                    </div>
+
+                    {/* Bank transfer info if Bank + Cheque (not 3-way since 3-way already shows bank above) */}
+                    {splitMode === 'BankCheque' && (
+                      <div className="p-2.5 bg-[#F6F8F7] rounded-xl border border-[#DCE3E0] space-y-2">
+                        {bankAccounts.length === 0 ? (
+                          <p className="text-xs text-[#C23D45]">
+                            No bank accounts configured in Store Settings.
+                          </p>
+                        ) : bankAccounts.length === 1 ? (
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-[#17211D] flex items-center gap-1.5">
+                              <Building className="w-3.5 h-3.5 text-[#125E45]" />
+                              <span>{bankAccounts[0].bankName}</span>
+                            </span>
+                            <span className="text-[10px] text-[#66726D] font-mono">{bankAccounts[0].accountNumber}</span>
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-[#66726D] block">
+                              Select Receiving Bank:
+                            </label>
+                            <select
+                              value={selectedBank?.id || bankAccounts[0]?.id || ''}
+                              onChange={e => {
+                                const found = bankAccounts.find(b => b.id === e.target.value);
+                                if (found) setSelectedBank(found);
+                              }}
+                              className="w-full p-1.5 text-xs font-bold text-[#17211D] bg-white border border-[#DCE3E0] rounded-lg focus:outline-none"
+                            >
+                              {bankAccounts.map(b => (
+                                <option key={b.id} value={b.id}>
+                                  {b.bankName} — {b.accountTitle}
+                                </option>
+                              ))}
+                            </select>
+                            {selectedBank && (
+                              <div className="text-[10px] text-[#125E45] font-bold font-mono">
+                                Acc: {selectedBank.accountNumber}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        <input
+                          type="text"
+                          placeholder="Bank Transfer Reference / Slip # (Optional)"
+                          value={splitReference}
+                          onChange={e => setSplitReference(e.target.value)}
+                          className="w-full p-1.5 text-xs border border-[#DCE3E0] rounded-lg bg-white focus:outline-none"
+                        />
+                      </div>
+                    )}
+
+                    {/* Multiple Cheques List & Management */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-[#17211D] flex items-center gap-1.5">
+                          <span>Client Cheque(s) Details</span>
+                          <span className="bg-[#DCEDE6] text-[#125E45] font-bold text-[10px] px-2 py-0.5 rounded-full">
+                            {chequeEntries.length} {chequeEntries.length === 1 ? 'Cheque' : 'Cheques'}
+                          </span>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={handleAddCheque}
+                          className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-lg bg-[#DCEDE6] hover:bg-[#c2e4d7] text-[#125E45] border border-[#125E45]/30 transition-all cursor-pointer shadow-2xs"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add Another Cheque</span>
+                        </button>
+                      </div>
+
+                      {/* Cheque Cards */}
+                      <div className="space-y-2.5">
+                        {chequeEntries.map((cheque, index) => (
+                          <div
+                            key={cheque.id}
+                            className="p-3 bg-white rounded-xl border border-[#DCE3E0] shadow-2xs space-y-2.5 relative"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-bold text-[#125E45] bg-[#F0F4F2] px-2 py-0.5 rounded-md border border-[#DCE3E0]">
+                                Cheque #{index + 1}
+                              </span>
+                              {chequeEntries.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveCheque(cheque.id)}
+                                  className="text-[10px] text-rose-600 hover:text-rose-800 font-bold flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-rose-50 transition-colors cursor-pointer"
+                                  title="Remove this cheque"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  <span>Remove</span>
+                                </button>
+                              )}
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-[10px] font-semibold text-[#66726D] block mb-1">
+                                  Cheque Bank Name <span className="text-rose-500">*</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. Meezan Bank / HBL"
+                                  value={cheque.bankName}
+                                  onChange={e => handleUpdateCheque(cheque.id, 'bankName', e.target.value)}
+                                  list="pk-banks-list"
+                                  className="w-full p-2 text-xs font-bold border border-[#DCE3E0] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
+                                  required
+                                />
+                              </div>
+
+                              <div>
+                                <label className="text-[10px] font-semibold text-[#66726D] block mb-1">
+                                  Cheque Amount (PKR) <span className="text-rose-500">*</span>
+                                </label>
+                                <input
+                                  type="number"
+                                  placeholder="Cheque Amount"
+                                  value={cheque.amount}
+                                  onChange={e => handleUpdateCheque(cheque.id, 'amount', e.target.value)}
+                                  className="w-full p-2 text-xs font-black text-[#17211D] border border-[#DCE3E0] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
+                                  required
+                                />
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
+                              <div>
+                                <label className="text-[10px] font-semibold text-[#66726D] flex items-center gap-1 mb-1">
+                                  <Calendar className="w-3 h-3 text-[#125E45]" />
+                                  <span>Scheduled Passing Date & Month <span className="text-rose-500">*</span></span>
+                                </label>
+                                <input
+                                  type="date"
+                                  value={cheque.clearingDate}
+                                  onChange={e => handleUpdateCheque(cheque.id, 'clearingDate', e.target.value)}
+                                  className="w-full p-1.5 text-xs font-bold border border-[#DCE3E0] rounded-lg bg-[#F8FAFA] focus:outline-none focus:ring-1 focus:ring-[#197A5A] cursor-pointer"
+                                  required
+                                />
+                              </div>
+
+                              <div>
+                                <label className="text-[10px] font-semibold text-[#66726D] block mb-1">
+                                  Cheque / Leaf # (Optional)
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. CHQ-92810"
+                                  value={cheque.chequeNumber}
+                                  onChange={e => handleUpdateCheque(cheque.id, 'chequeNumber', e.target.value)}
+                                  className="w-full p-1.5 text-xs font-mono border border-[#DCE3E0] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <datalist id="pk-banks-list">
+                        <option value="Meezan Bank" />
+                        <option value="Habib Bank Limited (HBL)" />
+                        <option value="MCB Bank" />
+                        <option value="Allied Bank Limited (ABL)" />
+                        <option value="United Bank Limited (UBL)" />
+                        <option value="Bank Alfalah" />
+                        <option value="Askari Bank" />
+                        <option value="Faysal Bank" />
+                        <option value="Bank Al Habib" />
+                        <option value="Dubai Islamic Bank" />
+                      </datalist>
+
+                      {/* Add Another Cheque Button */}
+                      <button
+                        type="button"
+                        onClick={handleAddCheque}
+                        className="w-full py-2 border-2 border-dashed border-[#125E45]/40 hover:border-[#125E45] bg-[#DCEDE6]/30 hover:bg-[#DCEDE6]/60 text-[#125E45] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>+ Add Another Cheque for This Invoice</span>
+                      </button>
+
+                      {/* Cheques Summary Box */}
+                      {chequeEntries.length > 1 && (
+                        <div className="p-2.5 bg-[#DCEDE6]/50 rounded-lg border border-[#125E45]/20 flex items-center justify-between text-xs font-bold text-[#125E45]">
+                          <span>Total Cheques ({chequeEntries.length}):</span>
+                          <span className="text-sm font-black">
+                            Rs. {chequeEntries.reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0).toLocaleString()}
+                          </span>
+                        </div>
+                      )}
+
+                      <p className="text-[10px] text-[#66726D] leading-relaxed">
+                        Notifications will alert Admin & Wholesale Cashier on each cheque&apos;s scheduled passing date. Cheque amounts will <strong>NOT</strong> be deducted from client balance until marked &quot;Pass Cheque (OK)&quot;.
+                      </p>
+                    </div>
+
+                    {/* Important Account Ledger Notice */}
+                    <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="text-[11px] leading-relaxed">
+                        Client ledger will reflect the full purchase of Rs. {finalWholesaleGrandTotal.toLocaleString()}. Only the immediate {splitMode === 'CashBankCheque' ? 'Cash & Bank' : splitMode === 'BankCheque' ? 'Bank' : 'Cash'} portion (Rs. {((parseFloat(splitCashInput) || 0) + (splitMode === 'CashBankCheque' ? (parseFloat(splitBankInput) || 0) : 0)).toLocaleString()}) will be credited now. The cheque portion (Rs. {(parseFloat(splitSecondaryInput) || 0).toLocaleString()}) remains in client ledger until passed.
+                      </div>
+                    </div>
+
+                    {/* Checkbox for Bank Slip if Bank + Cheque */}
+                    {splitMode === 'BankCheque' && (
+                      <label
+                        className={`flex items-start gap-2.5 p-2 rounded-lg border transition-all cursor-pointer ${
+                          splitBankSlipVerified
+                            ? 'bg-[#DCEDE6] border-[#125E45]'
+                            : 'bg-[#F6F8F7] border-[#DCE3E0] hover:bg-[#F0F4F2]'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={splitBankSlipVerified}
+                          onChange={e => setSplitBankSlipVerified(e.target.checked)}
+                          className="mt-0.5 w-4 h-4 text-[#125E45] rounded accent-[#125E45] cursor-pointer shrink-0"
+                        />
+                        <span className="text-xs font-semibold text-[#17211D]">
+                          Bank transfer portion (Rs. {(parseFloat(splitCashInput) || 0).toLocaleString()}) slip verified.
+                        </span>
+                      </label>
+                    )}
+
+                    {/* Cheque Verified Checkbox */}
+                    <label
+                      className={`flex items-start gap-2.5 p-2.5 rounded-lg border transition-all cursor-pointer ${
+                        splitChequeVerified
+                          ? 'bg-[#DCEDE6] border-[#125E45]'
+                          : 'bg-[#F6F8F7] border-[#DCE3E0] hover:bg-[#F0F4F2]'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={splitChequeVerified}
+                        onChange={e => setSplitChequeVerified(e.target.checked)}
+                        className="mt-0.5 w-4 h-4 text-[#125E45] rounded accent-[#125E45] cursor-pointer shrink-0"
+                      />
+                      <div className="text-xs text-[#17211D]">
+                        <span className="font-bold">
+                          Physical Cheque & Signature Verified
+                        </span>
+                        <span className="block text-[10px] text-[#66726D]">
+                          Confirmed physical cheque details for Rs. {(parseFloat(splitSecondaryInput) || 0).toLocaleString()} payable to store.
+                        </span>
+                      </div>
+                    </label>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Pandi Name / Carrier Loader Autocomplete */}
             <PandiSelectInput
               value={pandiName}
@@ -1544,14 +2774,14 @@ export default function WholesalePOSPage() {
             </div>
 
             {/* Actions */}
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#DCE3E0]">
-              <Button variant="outline" size="md" onClick={() => setIsCheckoutOpen(false)}>
+            <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-3 border-t border-[#DCE3E0]">
+              <Button variant="outline" size="md" onClick={() => setIsCheckoutOpen(false)} className="w-full sm:w-auto">
                 Cancel
               </Button>
               <button
                 type="button"
                 onClick={handleCompleteWholesaleSale}
-                className="inline-flex items-center justify-center font-bold rounded-xl px-5 py-2.5 text-xs text-white bg-[#125E45] hover:bg-[#197A5A] active:scale-[0.98] transition-all shadow-2xs cursor-pointer gap-2"
+                className="w-full sm:w-auto inline-flex items-center justify-center font-bold rounded-xl px-5 py-2.5 text-xs text-white bg-[#125E45] hover:bg-[#197A5A] active:scale-[0.98] transition-all shadow-2xs cursor-pointer gap-2"
               >
                 <CheckCircle2 className="w-4 h-4 text-white" />
                 <span>Complete Sale & Save Invoice</span>
@@ -1663,6 +2893,209 @@ export default function WholesalePOSPage() {
               onClose={() => setIsExchangePrintOpen(false)}
             />
           )}
+        </Modal>
+
+        {/* MODAL: Card Terminal (Split Mode) */}
+        <CardTerminalModal
+          isOpen={isSplitCardTerminalModalOpen}
+          onClose={() => setIsSplitCardTerminalModalOpen(false)}
+          grandTotal={parseFloat(splitSecondaryInput) || 0}
+          onPaymentSuccess={authData => {
+            setSplitCardAuth(authData);
+            setSplitCardVerified(true);
+            setIsSplitCardTerminalModalOpen(false);
+            toast({
+              title: 'Card Payment Approved',
+              description: `Split card portion of Rs. ${(parseFloat(splitSecondaryInput) || 0).toLocaleString()} authorized.`,
+              type: 'success',
+            });
+          }}
+        />
+
+        {/* MODAL: Wholesale Pending Cheques Management */}
+        <Modal
+          isOpen={isPendingChequesModalOpen}
+          onClose={() => setIsPendingChequesModalOpen(false)}
+          title="Wholesale Uncleared & Pending Cheques"
+          description="Manage client cheques awaiting bank clearance. Pass cheques to deduct from client ledgers on today's date."
+          maxWidth="4xl"
+        >
+          <div className="space-y-4 text-xs select-none">
+            {/* Category Origin Tabs: All, Wholesale, Khata/Credit POS */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-[#F0F4F2] rounded-2xl border border-[#DCE3E0]">
+              <div className="flex items-center gap-1.5 p-1 bg-white rounded-xl border border-[#DCE3E0]">
+                <button
+                  type="button"
+                  onClick={() => setPendingOriginFilter('All')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    pendingOriginFilter === 'All'
+                      ? 'bg-[#125E45] text-white shadow-2xs'
+                      : 'text-[#66726D] hover:text-[#17211D]'
+                  }`}
+                >
+                  All ({pendingCheques.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPendingOriginFilter('Wholesale')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    pendingOriginFilter === 'Wholesale'
+                      ? 'bg-[#125E45] text-white shadow-2xs'
+                      : 'text-[#66726D] hover:text-[#17211D]'
+                  }`}
+                >
+                  Wholesale ({pendingCheques.filter(p => p.originType === 'Wholesale').length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPendingOriginFilter('Khata')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    pendingOriginFilter === 'Khata'
+                      ? 'bg-[#125E45] text-white shadow-2xs'
+                      : 'text-[#66726D] hover:text-[#17211D]'
+                  }`}
+                >
+                  Khata / Credit POS ({pendingCheques.filter(p => p.originType === 'Khata').length})
+                </button>
+              </div>
+
+              <div className="relative flex-1 max-w-xs">
+                <Search className="w-3.5 h-3.5 text-[#8A9590] absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Filter by customer, bank, or invoice..."
+                  value={pendingChequesSearch}
+                  onChange={e => setPendingChequesSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-[#DCE3E0] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
+                />
+              </div>
+            </div>
+
+            {/* Cheques Table */}
+            <div className="overflow-x-auto border border-[#DCE3E0] rounded-2xl bg-white">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-[#F8FAFA] border-b border-[#DCE3E0] text-[10px] font-bold text-[#8A9590] uppercase tracking-wider">
+                    <th className="py-2.5 px-3">Client / Customer</th>
+                    <th className="py-2.5 px-3">Invoice #</th>
+                    <th className="py-2.5 px-3">Cheque Details</th>
+                    <th className="py-2.5 px-3 text-right">Amount</th>
+                    <th className="py-2.5 px-3">Scheduled Date</th>
+                    <th className="py-2.5 px-3">Status</th>
+                    <th className="py-2.5 px-3 text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#DCE3E0]/60">
+                  {pendingCheques
+                    .filter(item => {
+                      if (pendingOriginFilter === 'Wholesale' && item.originType !== 'Wholesale') return false;
+                      if (pendingOriginFilter === 'Khata' && item.originType !== 'Khata') return false;
+                      if (!pendingChequesSearch.trim()) return true;
+                      const q = pendingChequesSearch.toLowerCase();
+                      return (
+                        item.customerName.toLowerCase().includes(q) ||
+                        (item.cheque.chequeNumber || '').toLowerCase().includes(q) ||
+                        (item.cheque.bankName || '').toLowerCase().includes(q) ||
+                        (item.cheque.invoiceNumber || '').toLowerCase().includes(q)
+                      );
+                    })
+                    .map(item => {
+                      return (
+                        <tr
+                          key={`${item.collectionId}-${item.cheque.id}`}
+                          className={`hover:bg-[#F0F4F2]/50 transition-colors ${
+                            item.isDueToday
+                              ? 'bg-amber-50/50'
+                              : item.isOverdue
+                              ? 'bg-rose-50/40'
+                              : ''
+                          }`}
+                        >
+                          <td className="py-3 px-3">
+                            <div className="font-bold text-[#17211D]">{item.customerName}</div>
+                            {item.customerPhone && (
+                              <div className="text-[10px] text-[#8A9590]">{item.customerPhone}</div>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 font-mono font-bold text-[#125E45]">
+                            {item.cheque.invoiceNumber || item.receiptNumber.replace('CHQ-', '')}
+                          </td>
+                          <td className="py-3 px-3">
+                            <div className="font-mono font-bold text-[#17211D]">
+                              {item.cheque.chequeNumber || 'N/A'}
+                            </div>
+                            <div className="text-[10px] text-[#66726D]">{item.cheque.bankName || 'Bank'}</div>
+                          </td>
+                          <td className="py-3 px-3 text-right font-black text-sm text-[#17211D]">
+                            Rs. {item.cheque.chequeAmount.toLocaleString()}
+                          </td>
+                          <td className="py-3 px-3">
+                            <div className="font-bold text-[#17211D]">
+                              {item.cheque.clearingDate
+                                ? new Date(item.cheque.clearingDate).toLocaleDateString('en-GB', {
+                                    day: 'numeric',
+                                    month: 'short',
+                                    year: 'numeric',
+                                  })
+                                : 'N/A'}
+                            </div>
+                          </td>
+                          <td className="py-3 px-3">
+                            {item.isDueToday ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1 w-fit">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse" />
+                                Due Today
+                              </span>
+                            ) : item.isOverdue ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300 w-fit inline-block">
+                                Overdue
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#DCEDE6] text-[#125E45] border border-[#125E45]/30 w-fit inline-block">
+                                Scheduled
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handlePassCheque(item.collectionId, item.cheque.id)}
+                              className="px-3 py-1.5 bg-[#125E45] hover:bg-[#197A5A] text-white rounded-lg text-xs font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                              title="Click to pass cheque and deduct from client statement today"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Pass Cheque (OK)</span>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+
+                  {pendingCheques.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-[#8A9590] text-xs">
+                        No pending or uncleared wholesale cheques at this time.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Explanatory footer note */}
+            <div className="p-3 bg-[#F0F4F2] rounded-xl border border-[#DCE3E0] text-[11px] text-[#66726D] flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-[#125E45] shrink-0" />
+              <span>
+                Clicking <strong>&quot;Pass Cheque (OK)&quot;</strong> clears the cheque on today&apos;s date and automatically posts a CREDIT transaction to the client&apos;s ledger on today&apos;s statement, whether passed before, on, or after the scheduled date.
+              </span>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <Button variant="outline" size="md" onClick={() => setIsPendingChequesModalOpen(false)}>
+                Close
+              </Button>
+            </div>
+          </div>
         </Modal>
       </AppShell>
     </ProtectedRoute>

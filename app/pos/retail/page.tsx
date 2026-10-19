@@ -177,11 +177,6 @@ export default function RetailPOSPage() {
       restoreRetailCart(availableDraft.cartItems);
     }
     setAvailableDraft(null);
-    toast({
-      title: 'Previous Work Resumed',
-      description: 'Your previous retail work session has been restored.',
-      type: 'success',
-    });
   };
 
   const handleDiscardDraft = () => {
@@ -190,11 +185,6 @@ export default function RetailPOSPage() {
     clearRetailCart();
     setCustomerName('Walk-in customer');
     setCustomerPhone('');
-    toast({
-      title: 'Draft Discarded',
-      description: 'Previous unfinished session was cleared.',
-      type: 'info',
-    });
   };
 
   // Refresh Real Products & Next Invoice Number & Terminal Access
@@ -204,10 +194,14 @@ export default function RetailPOSPage() {
     setNextInvoiceNumber(salesService.peekNextInvoiceNumber('Retail'));
     const settings = storageService.getSettings();
     setIsCardTerminalEnabled(Boolean(settings.retailCardTerminal?.enabled));
-    const banks = (settings.bankAccounts || []).filter(b => b.isActive !== false);
+    const banks = (settings.bankAccounts || []).filter(
+      b => b.isActive !== false && (!b.channels || b.channels.length === 0 || b.channels.includes('Retail'))
+    );
     setBankAccounts(banks);
     if (banks.length > 0) {
-      setSelectedBank(prev => prev || banks[0]);
+      setSelectedBank(prev => (prev && banks.some(b => b.id === prev.id)) ? prev : banks[0]);
+    } else {
+      setSelectedBank(null);
     }
     syncWithLatestProducts();
   };
@@ -402,25 +396,40 @@ export default function RetailPOSPage() {
     setBankReference('');
     setSplitReference('');
 
-    // Setup initial 50/50 split amounts
-    const half = Math.floor(finalRetailGrandTotal / 2);
-    setSplitCashInput(String(half));
-    setSplitSecondaryInput(String(finalRetailGrandTotal - half));
+    // Do NOT prefill split amounts - let user enter amount himself
+    setSplitCashInput('');
+    setSplitSecondaryInput('');
 
     setIsCheckoutOpen(true);
   };
 
   const handleSplitCashChange = (val: string) => {
     setSplitCashInput(val);
-    const num = parseFloat(val) || 0;
-    const remaining = Math.max(0, finalRetailGrandTotal - num);
+    if (!val || val.trim() === '') {
+      setSplitSecondaryInput('');
+      return;
+    }
+    const num = parseFloat(val);
+    if (isNaN(num)) {
+      setSplitSecondaryInput('');
+      return;
+    }
+    const remaining = Math.max(0, Math.round((finalRetailGrandTotal - num) * 100) / 100);
     setSplitSecondaryInput(String(remaining));
   };
 
   const handleSplitSecondaryChange = (val: string) => {
     setSplitSecondaryInput(val);
-    const num = parseFloat(val) || 0;
-    const remaining = Math.max(0, finalRetailGrandTotal - num);
+    if (!val || val.trim() === '') {
+      setSplitCashInput('');
+      return;
+    }
+    const num = parseFloat(val);
+    if (isNaN(num)) {
+      setSplitCashInput('');
+      return;
+    }
+    const remaining = Math.max(0, Math.round((finalRetailGrandTotal - num) * 100) / 100);
     setSplitCashInput(String(remaining));
   };
 
@@ -747,61 +756,6 @@ export default function RetailPOSPage() {
             </div>
           </div>
 
-          {/* WORKFLOW STEPPER RIBBON (Horizontal 6-Step Banner) */}
-          <div className="bg-[#DCEDE6] rounded-xl px-4 py-2.5 flex items-center justify-between text-xs overflow-x-auto shadow-2xs border border-[#C7D2CD]/60">
-            {/* Step 1: Scan (Active) */}
-            <div className="flex items-center gap-1.5 font-bold text-[#125E45] shrink-0">
-              <span className="w-4 h-4 rounded-full bg-[#125E45] text-white flex items-center justify-center text-[10px]">
-                1
-              </span>
-              <span>Scan</span>
-              <span className="text-[#8A9590] ml-2 font-normal">&gt;</span>
-            </div>
-
-            {/* Step 2: Search */}
-            <div className="flex items-center gap-1.5 text-[#66726D] font-medium shrink-0">
-              <span className="w-4 h-4 rounded-full border border-[#8A9590] flex items-center justify-center text-[10px]">
-                2
-              </span>
-              <span>Search</span>
-              <span className="text-[#8A9590] ml-2 font-normal">&gt;</span>
-            </div>
-
-            {/* Step 3: Select */}
-            <div className="flex items-center gap-1.5 text-[#66726D] font-medium shrink-0">
-              <span className="w-4 h-4 rounded-full border border-[#8A9590] flex items-center justify-center text-[10px]">
-                3
-              </span>
-              <span>Select</span>
-              <span className="text-[#8A9590] ml-2 font-normal">&gt;</span>
-            </div>
-
-            {/* Step 4: Add to Cart */}
-            <div className="flex items-center gap-1.5 text-[#66726D] font-medium shrink-0">
-              <span className="w-4 h-4 rounded-full border border-[#8A9590] flex items-center justify-center text-[10px]">
-                4
-              </span>
-              <span>Add to Cart</span>
-              <span className="text-[#8A9590] ml-2 font-normal">&gt;</span>
-            </div>
-
-            {/* Step 5: Review */}
-            <div className="flex items-center gap-1.5 text-[#66726D] font-medium shrink-0">
-              <span className="w-4 h-4 rounded-full border border-[#8A9590] flex items-center justify-center text-[10px]">
-                5
-              </span>
-              <span>Review</span>
-              <span className="text-[#8A9590] ml-2 font-normal">&gt;</span>
-            </div>
-
-            {/* Step 6: Payment */}
-            <div className="flex items-center gap-1.5 text-[#66726D] font-medium shrink-0">
-              <span className="w-4 h-4 rounded-full border border-[#8A9590] flex items-center justify-center text-[10px]">
-                6
-              </span>
-              <span>Payment</span>
-            </div>
-          </div>
 
           {/* DRAFT NOTIFICATION BANNER (ONLY shown when there were real items saved) */}
           {availableDraft && availableDraft.cartItems && availableDraft.cartItems.length > 0 && (
@@ -1080,9 +1034,6 @@ export default function RetailPOSPage() {
                       Customer
                     </label>
                     <div className="flex items-center gap-1.5">
-                      <span className="bg-[#DCEDE6] text-[#125E45] text-[11px] font-semibold px-2 py-0.5 rounded-full">
-                        Active retail account
-                      </span>
                       {customerName && customerName !== 'Walk-in customer' && (
                         <button
                           type="button"
@@ -1470,79 +1421,136 @@ export default function RetailPOSPage() {
                     </div>
                   </div>
 
-                  {/* Bank Accounts Grid */}
+                  {/* Bank Accounts Display / Dropdown */}
                   <div>
-                    <label className="text-[11px] font-bold text-[#66726D] block mb-1.5">
-                      Select Designated Shop Account:
-                    </label>
                     {bankAccounts.length === 0 ? (
                       <p className="text-xs text-rose-600 font-semibold p-2 bg-rose-50 rounded-lg">
                         No bank accounts found in Store Settings.
                       </p>
-                    ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {bankAccounts.map(b => {
-                          const isSelected = selectedBank?.id === b.id;
-                          return (
-                            <div
-                              key={b.id}
-                              onClick={() => setSelectedBank(b)}
-                              className={`p-3 rounded-xl border text-xs cursor-pointer transition-all ${
-                                isSelected
-                                  ? 'border-[#125E45] bg-[#DCEDE6]/50 shadow-2xs ring-1 ring-[#125E45]'
-                                  : 'border-[#DCE3E0] bg-white hover:bg-[#F0F4F2]'
-                              }`}
-                            >
-                              <div className="flex items-center justify-between mb-1">
-                                <span className="font-bold text-[#17211D]">{b.bankName}</span>
-                                {isSelected && (
-                                  <span className="w-2 h-2 rounded-full bg-[#125E45]" />
-                                )}
-                              </div>
-                              <div className="text-[10px] text-[#66726D] mb-1.5 truncate">
-                                Title: <strong className="text-[#17211D]">{b.accountTitle}</strong>
-                              </div>
+                    ) : bankAccounts.length === 1 ? (
+                      /* Single Bank Account: Show directly as requested */
+                      <div>
+                        <label className="text-[11px] font-bold text-[#66726D] block mb-1.5">
+                          Shop Bank Account:
+                        </label>
+                        <div className="p-3.5 rounded-xl border border-[#125E45] bg-[#DCEDE6]/40 shadow-2xs">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-bold text-xs text-[#17211D] flex items-center gap-1.5">
+                              <Building2 className="w-4 h-4 text-[#125E45]" />
+                              <span>{bankAccounts[0].bankName}</span>
+                            </span>
+                            <span className="text-[10px] text-[#66726D]">
+                              Title: <strong className="text-[#17211D]">{bankAccounts[0].accountTitle}</strong>
+                            </span>
+                          </div>
 
-                              {/* Prominent Account Number with Copy Button */}
-                              <div className="flex items-center justify-between p-2 bg-white rounded-lg border border-[#DCE3E0]">
-                                <div>
-                                  <span className="text-[9px] text-[#8A9590] block uppercase font-semibold">
-                                    Account No
-                                  </span>
-                                  <span className="text-xs font-black font-mono text-[#17211D] tracking-wider select-all">
-                                    {b.accountNumber}
-                                  </span>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={e => {
-                                    e.stopPropagation();
-                                    handleCopyAccount(b.accountNumber, b.id);
-                                  }}
-                                  className="px-2 py-1 bg-[#F6F8F7] hover:bg-[#DCEDE6] text-[#125E45] border border-[#DCE3E0] hover:border-[#125E45] rounded-md text-[10px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
-                                >
-                                  {copiedBankId === b.id ? (
-                                    <>
-                                      <Check className="w-3 h-3 text-[#125E45]" />
-                                      <span>Copied</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Copy className="w-3 h-3" />
-                                      <span>Copy</span>
-                                    </>
-                                  )}
-                                </button>
-                              </div>
-
-                              {b.iban && (
-                                <div className="text-[9px] text-[#8A9590] font-mono mt-1 truncate">
-                                  IBAN: {b.iban}
-                                </div>
-                              )}
+                          <div className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-[#DCE3E0] mt-1.5">
+                            <div>
+                              <span className="text-[9px] text-[#8A9590] block uppercase font-semibold">
+                                Account Number
+                              </span>
+                              <span className="text-xs font-black font-mono text-[#17211D] tracking-wider select-all">
+                                {bankAccounts[0].accountNumber}
+                              </span>
                             </div>
-                          );
-                        })}
+                            <button
+                              type="button"
+                              onClick={() => handleCopyAccount(bankAccounts[0].accountNumber, bankAccounts[0].id)}
+                              className="px-2.5 py-1.5 bg-[#F6F8F7] hover:bg-[#DCEDE6] text-[#125E45] border border-[#DCE3E0] hover:border-[#125E45] rounded-md text-[10px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                            >
+                              {copiedBankId === bankAccounts[0].id ? (
+                                <>
+                                  <Check className="w-3 h-3 text-[#125E45]" />
+                                  <span>Copied</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3 h-3" />
+                                  <span>Copy</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+
+                          {bankAccounts[0].iban && (
+                            <div className="text-[10px] text-[#8A9590] font-mono mt-1.5">
+                              IBAN: {bankAccounts[0].iban}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      /* Multiple Bank Accounts: Dropdown with Bank Names + Selected Bank Account Number */
+                      <div className="space-y-2">
+                        <div>
+                          <label className="text-[11px] font-bold text-[#66726D] block mb-1">
+                            Select Receiving Bank:
+                          </label>
+                          <div className="relative">
+                            <select
+                              value={selectedBank?.id || bankAccounts[0]?.id || ''}
+                              onChange={e => {
+                                const found = bankAccounts.find(b => b.id === e.target.value);
+                                if (found) setSelectedBank(found);
+                              }}
+                              className="w-full p-2.5 pl-3 pr-8 text-xs font-bold text-[#17211D] bg-white border border-[#DCE3E0] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#197A5A] cursor-pointer"
+                            >
+                              {bankAccounts.map(b => (
+                                <option key={b.id} value={b.id}>
+                                  {b.bankName} — {b.accountTitle}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        {selectedBank && (
+                          <div className="p-3.5 rounded-xl border border-[#125E45] bg-[#DCEDE6]/40 shadow-2xs">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="font-bold text-xs text-[#17211D] flex items-center gap-1.5">
+                                <Building2 className="w-4 h-4 text-[#125E45]" />
+                                <span>{selectedBank.bankName}</span>
+                              </span>
+                              <span className="text-[10px] text-[#66726D]">
+                                Title: <strong className="text-[#17211D]">{selectedBank.accountTitle}</strong>
+                              </span>
+                            </div>
+
+                            <div className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-[#DCE3E0] mt-1.5">
+                              <div>
+                                <span className="text-[9px] text-[#8A9590] block uppercase font-semibold">
+                                  Account Number
+                                </span>
+                                <span className="text-xs font-black font-mono text-[#17211D] tracking-wider select-all">
+                                  {selectedBank.accountNumber}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyAccount(selectedBank.accountNumber, selectedBank.id)}
+                                className="px-2.5 py-1.5 bg-[#F6F8F7] hover:bg-[#DCEDE6] text-[#125E45] border border-[#DCE3E0] hover:border-[#125E45] rounded-md text-[10px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                              >
+                                {copiedBankId === selectedBank.id ? (
+                                  <>
+                                    <Check className="w-3 h-3 text-[#125E45]" />
+                                    <span>Copied</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="w-3 h-3" />
+                                    <span>Copy</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+
+                            {selectedBank.iban && (
+                              <div className="text-[10px] text-[#8A9590] font-mono mt-1.5">
+                                IBAN: {selectedBank.iban}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1599,6 +1607,8 @@ export default function RetailPOSPage() {
                           setSplitMode('CashCard');
                           setSplitCardVerified(false);
                           setSplitBankSlipVerified(false);
+                          setSplitCashInput('');
+                          setSplitSecondaryInput('');
                         }}
                         className={`flex-1 px-4 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                           splitMode === 'CashCard'
@@ -1616,6 +1626,8 @@ export default function RetailPOSPage() {
                           setSplitMode('CashBank');
                           setSplitCardVerified(false);
                           setSplitBankSlipVerified(false);
+                          setSplitCashInput('');
+                          setSplitSecondaryInput('');
                         }}
                         className={`flex-1 px-4 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                           splitMode === 'CashBank'
@@ -1643,7 +1655,7 @@ export default function RetailPOSPage() {
                       <input
                         type="number"
                         min="0"
-                        placeholder="Cash amount"
+                        placeholder="Enter cash amount"
                         value={splitCashInput}
                         onChange={e => handleSplitCashChange(e.target.value)}
                         className="w-full p-2 text-sm font-bold text-[#17211D] border border-[#DCE3E0] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
@@ -1671,7 +1683,7 @@ export default function RetailPOSPage() {
                       <input
                         type="number"
                         min="0"
-                        placeholder="Secondary amount"
+                        placeholder={splitMode === 'CashCard' ? 'Enter card amount' : 'Enter bank amount'}
                         value={splitSecondaryInput}
                         onChange={e => handleSplitSecondaryChange(e.target.value)}
                         className="w-full p-2 text-sm font-bold text-[#17211D] border border-[#DCE3E0] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
@@ -1780,25 +1792,33 @@ export default function RetailPOSPage() {
                       </div>
 
                       {/* Display Selected Bank Account for Customer to Transfer */}
-                      {selectedBank && (
+                      {bankAccounts.length === 0 ? (
+                        <p className="text-xs text-rose-600 font-semibold p-2 bg-rose-50 rounded-lg">
+                          No bank accounts found in Store Settings.
+                        </p>
+                      ) : bankAccounts.length === 1 ? (
+                        /* Single Bank Account: Show directly as requested */
                         <div className="p-3 bg-[#F6F8F7] rounded-xl border border-[#DCE3E0] space-y-1">
                           <div className="flex items-center justify-between">
-                            <span className="font-bold text-xs text-[#17211D]">{selectedBank.bankName}</span>
-                            <span className="text-[10px] text-[#66726D]">{selectedBank.accountTitle}</span>
+                            <span className="font-bold text-xs text-[#17211D] flex items-center gap-1.5">
+                              <Building2 className="w-3.5 h-3.5 text-[#125E45]" />
+                              <span>{bankAccounts[0].bankName}</span>
+                            </span>
+                            <span className="text-[10px] text-[#66726D]">{bankAccounts[0].accountTitle}</span>
                           </div>
                           <div className="flex items-center justify-between p-2 bg-white rounded-lg border border-[#DCE3E0] mt-1">
                             <div>
                               <span className="text-[9px] text-[#8A9590] block">Account Number for Customer Transfer:</span>
                               <span className="text-xs font-black font-mono text-[#17211D] tracking-wider select-all">
-                                {selectedBank.accountNumber}
+                                {bankAccounts[0].accountNumber}
                               </span>
                             </div>
                             <button
                               type="button"
-                              onClick={() => handleCopyAccount(selectedBank.accountNumber, selectedBank.id)}
+                              onClick={() => handleCopyAccount(bankAccounts[0].accountNumber, bankAccounts[0].id)}
                               className="px-2 py-1 bg-[#F6F8F7] hover:bg-[#DCEDE6] text-[#125E45] border border-[#DCE3E0] rounded-md text-[10px] font-bold flex items-center gap-1 cursor-pointer"
                             >
-                              {copiedBankId === selectedBank.id ? (
+                              {copiedBankId === bankAccounts[0].id ? (
                                 <>
                                   <Check className="w-3 h-3 text-[#125E45]" />
                                   <span>Copied</span>
@@ -1811,6 +1831,66 @@ export default function RetailPOSPage() {
                               )}
                             </button>
                           </div>
+                        </div>
+                      ) : (
+                        /* Multiple Bank Accounts: Dropdown + Selected Bank Account Number */
+                        <div className="space-y-2">
+                          <div>
+                            <label className="text-[10px] font-bold text-[#66726D] block mb-1">
+                              Select Receiving Bank:
+                            </label>
+                            <select
+                              value={selectedBank?.id || bankAccounts[0]?.id || ''}
+                              onChange={e => {
+                                const found = bankAccounts.find(b => b.id === e.target.value);
+                                if (found) setSelectedBank(found);
+                              }}
+                              className="w-full p-2 text-xs font-bold text-[#17211D] bg-white border border-[#DCE3E0] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#197A5A] cursor-pointer"
+                            >
+                              {bankAccounts.map(b => (
+                                <option key={b.id} value={b.id}>
+                                  {b.bankName} — {b.accountTitle}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {selectedBank && (
+                            <div className="p-3 bg-[#F6F8F7] rounded-xl border border-[#DCE3E0] space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold text-xs text-[#17211D] flex items-center gap-1.5">
+                                  <Building2 className="w-3.5 h-3.5 text-[#125E45]" />
+                                  <span>{selectedBank.bankName}</span>
+                                </span>
+                                <span className="text-[10px] text-[#66726D]">{selectedBank.accountTitle}</span>
+                              </div>
+                              <div className="flex items-center justify-between p-2 bg-white rounded-lg border border-[#DCE3E0] mt-1">
+                                <div>
+                                  <span className="text-[9px] text-[#8A9590] block">Account Number for Customer Transfer:</span>
+                                  <span className="text-xs font-black font-mono text-[#17211D] tracking-wider select-all">
+                                    {selectedBank.accountNumber}
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyAccount(selectedBank.accountNumber, selectedBank.id)}
+                                  className="px-2 py-1 bg-[#F6F8F7] hover:bg-[#DCEDE6] text-[#125E45] border border-[#DCE3E0] rounded-md text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                                >
+                                  {copiedBankId === selectedBank.id ? (
+                                    <>
+                                      <Check className="w-3 h-3 text-[#125E45]" />
+                                      <span>Copied</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Copy className="w-3 h-3" />
+                                      <span>Copy</span>
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
 

@@ -361,14 +361,6 @@ export default function WholesalePOSPage() {
     setCashReceived(0);
   };
 
-  // Dynamic Category List from real products + standard suits/fabrics
-  const categories = useMemo(() => {
-    const base = ['All fabrics', 'Lawn', 'Cotton', 'Khaddar', 'Wash & Wear', 'Silk & Chiffon'];
-    const fromProds = Array.from(new Set(products.map(p => p.category).filter(Boolean)));
-    const merged = Array.from(new Set([...base, ...fromProds]));
-    return merged;
-  }, [products]);
-
   // Product Filter & Sorting (Real Data)
   const filteredProducts = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
@@ -1317,27 +1309,6 @@ export default function WholesalePOSPage() {
                 <span className="px-1.5 py-0.5 rounded bg-[#F0F4F2] text-[10px] text-[#8A9590] font-mono border border-[#DCE3E0]">
                   F2
                 </span>
-              </div>
-
-              {/* CATEGORY FILTER PILLS */}
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar text-xs">
-                {categories.map(cat => {
-                  const isActive = selectedCategory === cat;
-                  return (
-                    <button
-                      key={cat}
-                      type="button"
-                      onClick={() => setSelectedCategory(cat)}
-                      className={`whitespace-nowrap px-3.5 py-1.5 rounded-full font-semibold transition-all cursor-pointer ${
-                        isActive
-                          ? 'bg-[#125E45] text-white shadow-2xs'
-                          : 'bg-white border border-[#DCE3E0] text-[#17211D] hover:bg-[#F0F4F2]'
-                      }`}
-                    >
-                      {cat}
-                    </button>
-                  );
-                })}
               </div>
 
               {/* PRODUCT CATALOG HEADER (Count + Sorting Dropdown) */}

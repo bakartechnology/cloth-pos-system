@@ -31,20 +31,20 @@ export default function LoginPage() {
       const result = authService.login(username, password);
       if (result.success && result.staff) {
         refreshStaff();
-        if (authService.hasPermission('dashboard_view', result.staff)) {
+        if (result.staff.role === 'Admin') {
           router.push('/dashboard');
-        } else if (authService.hasPermission('pos_retail', result.staff)) {
+        } else if (result.staff.role === 'Retail Cashier' || authService.hasPermission('pos_retail', result.staff)) {
           router.push('/pos/retail');
-        } else if (authService.hasPermission('pos_wholesale', result.staff)) {
+        } else if (result.staff.role === 'Wholesale Cashier' || authService.hasPermission('pos_wholesale', result.staff)) {
           router.push('/pos/wholesale');
-        } else if (authService.hasPermission('pos_khata', result.staff)) {
+        } else if (result.staff.role === 'Khata Staff' || authService.hasPermission('pos_khata', result.staff)) {
           router.push('/pos/khata');
         } else if (authService.hasPermission('stock_view', result.staff)) {
           router.push('/products');
         } else if (authService.hasPermission('payment_collection', result.staff)) {
           router.push('/payments');
         } else {
-          router.push('/dashboard');
+          router.push('/pos/retail');
         }
       } else {
         setError(result.error || 'Invalid credentials.');

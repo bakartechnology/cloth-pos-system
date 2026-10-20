@@ -2,20 +2,62 @@ export type UnitType =
   | 'Thaan'
   | 'Meter'
   | 'Unstitched Box'
+  | 'Suit Box'
   | 'Suit Packet'
-  | 'Cut Piece';
+  | 'Stitched Suit'
+  | 'Cut Piece'
+  | '3-Piece Box (3PC)'
+  | '2-Piece Suit (2PC)'
+  | '1-Piece'
+  | '1-Piece / Kurti'
+  | 'Suit Packet (Standard 4.5m / 4.0m)'
+  | 'Suit (4.5m)'
+  | 'Thaan (Roll: 20m - 40m)'
+  | 'Thaan (Roll: 30m - 40m)'
+  | 'Meter (Running Yardage)'
+  | 'Dupatta / Shawl'
+  | (string & {});
 
 export type ProductCategory =
-  | 'Lawn'
-  | 'Cotton'
-  | 'Khaddar'
+  | 'Cotton Suit'
   | 'Wash & Wear'
+  | 'Blended Fabric'
+  | 'Lawn'
+  | 'Cambric'
+  | 'Khaddar'
+  | 'Linen'
+  | 'Boski'
+  | 'Karandi'
+  | 'Latha'
+  | 'Tropical'
+  | 'Wool'
+  | 'Tweed'
+  | 'Flannel'
+  | 'Fleece'
+  | 'Velvet'
+  | 'Pashmina-style Fabric'
+  | 'Blended Wool'
+  | 'Heavy Khaddar'
+  | 'Winter Wash & Wear'
+  | 'Chiffon'
+  | 'Georgette'
+  | 'Silk'
+  | 'Satin'
+  | 'Organza'
+  | 'Net'
+  | 'Marina'
+  | 'Jacquard'
+  | 'Embroidered Fabric'
+  | 'Printed Fabric'
+  | 'Plain Fabric'
+  | 'Cotton'
+  | 'Silk & Chiffon'
   | 'Unstitched'
   | 'Suit'
   | 'Shalwar Kameez'
   | 'Cut Piece'
   | 'Thaan'
-  | 'Silk & Chiffon';
+  | (string & {});
 
 export type SeasonCategory = 'Summer' | 'Winter';
 
@@ -479,6 +521,7 @@ export interface StoreSettings {
   retailCardTerminal?: CardTerminalConfig;
   wholesaleCardTerminal?: CardTerminalConfig;
   khataCardTerminal?: CardTerminalConfig;
+  defaultFabricGender?: 'Male' | 'Female' | 'Both';
 }
 
 export interface WholesaleSessionDraft {

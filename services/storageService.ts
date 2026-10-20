@@ -96,7 +96,17 @@ class StorageService {
   }
 
   getStaff() {
-    return this.getItem(KEYS.STAFF, INITIAL_STAFF);
+    const staff = this.getItem(KEYS.STAFF, INITIAL_STAFF);
+    // Enforce that ONLY Admin role has dashboard_view permission
+    return staff.map(s => {
+      if (s.role !== 'Admin') {
+        return {
+          ...s,
+          permissions: s.permissions.filter(p => p !== 'dashboard_view'),
+        };
+      }
+      return s;
+    });
   }
 
   setStaff(data: typeof INITIAL_STAFF) {
@@ -159,12 +169,27 @@ class StorageService {
     this.setItem(KEYS.PANDIS, data);
   }
 
-  getActiveStaffId(): string {
-    return this.getItem(KEYS.ACTIVE_STAFF_ID, 'stf-001'); // Default to Admin
+  getActiveStaffId(): string | null {
+    if (!this.isBrowser()) return null;
+    try {
+      const stored = localStorage.getItem(KEYS.ACTIVE_STAFF_ID);
+      if (!stored) return null;
+      return JSON.parse(stored) as string;
+    } catch {
+      return null;
+    }
   }
 
-  setActiveStaffId(id: string) {
-    this.setItem(KEYS.ACTIVE_STAFF_ID, id);
+  setActiveStaffId(id: string | null) {
+    if (!id) {
+      this.removeItem(KEYS.ACTIVE_STAFF_ID);
+    } else {
+      this.setItem(KEYS.ACTIVE_STAFF_ID, id);
+    }
+  }
+
+  clearActiveStaff() {
+    this.removeItem(KEYS.ACTIVE_STAFF_ID);
   }
 
   getNextRetailInvoiceNumber(): string {

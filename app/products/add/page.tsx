@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
@@ -13,10 +13,19 @@ import {
   Sparkles,
   ArrowLeft,
   CheckCircle2,
+  ChevronDown,
+  Check,
 } from 'lucide-react';
 import Link from 'next/link';
 import { productsService } from '@/services/productsService';
 import { inventoryService } from '@/services/inventoryService';
+import { storageService } from '@/services/storageService';
+import {
+  MALE_FABRIC_CATEGORIES,
+  FEMALE_FABRIC_CATEGORIES,
+  MALE_PACKAGING_UNITS,
+  FEMALE_PACKAGING_UNITS,
+} from '@/data/fabricCategories';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { ProductCategory, UnitType, SeasonCategory } from '@/types';
@@ -26,23 +35,42 @@ export default function AddProductPage() {
   const { currentStaff } = useAuth();
   const { toast } = useToast();
 
+  const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
+  const categoryWrapperRef = useRef<HTMLDivElement>(null);
+
+  const [isUnitDropdownOpen, setIsUnitDropdownOpen] = useState(false);
+  const unitWrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (categoryWrapperRef.current && !categoryWrapperRef.current.contains(event.target as Node)) {
+        setIsCategoryDropdownOpen(false);
+      }
+      if (unitWrapperRef.current && !unitWrapperRef.current.contains(event.target as Node)) {
+        setIsUnitDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const [name, setName] = useState('');
   const [sku, setSku] = useState('');
-  const [category, setCategory] = useState<ProductCategory>('Lawn');
-  const [seasonCategory, setSeasonCategory] = useState<SeasonCategory>('Summer');
+  const [category, setCategory] = useState<ProductCategory>('' as ProductCategory);
+  const [seasonCategory, setSeasonCategory] = useState<SeasonCategory | ''>('');
   const [subcategory, setSubcategory] = useState('');
-  const [unit, setUnit] = useState<UnitType>('Unstitched Box');
-  const [retailPrice, setRetailPrice] = useState<number>(4500);
-  const [wholesalePrice, setWholesalePrice] = useState<number>(3600);
-  const [khataPrice, setKhataPrice] = useState<number>(3800);
-  const [retailDiscount, setRetailDiscount] = useState<number>(0);
-  const [wholesaleDiscount, setWholesaleDiscount] = useState<number>(0);
-  const [khataDiscount, setKhataDiscount] = useState<number>(0);
-  const [taxRate, setTaxRate] = useState<number>(0);
-  const [initialStock, setInitialStock] = useState<number>(30);
-  const [minStockAlert, setMinStockAlert] = useState<number>(8);
-  const [supplier, setSupplier] = useState('Gul Ahmed Textiles');
-  const [description, setDescription] = useState('');
+  const [unit, setUnit] = useState<UnitType | ''>('');
+  const [retailPrice, setRetailPrice] = useState<number | ''>('');
+  const [wholesalePrice, setWholesalePrice] = useState<number | ''>('');
+  const [khataPrice, setKhataPrice] = useState<number | ''>('');
+  const [retailDiscount, setRetailDiscount] = useState<number | ''>('');
+  const [wholesaleDiscount, setWholesaleDiscount] = useState<number | ''>('');
+  const [khataDiscount, setKhataDiscount] = useState<number | ''>('');
+  const [taxRate, setTaxRate] = useState<number | ''>('');
+  const [initialStock, setInitialStock] = useState<number | ''>('');
+  const [minStockAlert, setMinStockAlert] = useState<number | ''>('');
+  const [supplier] = useState('');
+  const [description] = useState('');
   const [barcode, setBarcode] = useState('896400100001');
   const [wholesaleBarcode, setWholesaleBarcode] = useState('896401100001');
 
@@ -57,7 +85,7 @@ export default function AddProductPage() {
   }, []);
 
   // Helper to generate SKU from article name with guaranteed uniqueness
-  const generateSkuFromName = (articleName: string, cat: ProductCategory) => {
+  const generateSkuFromName = (articleName: string, cat?: ProductCategory) => {
     if (!articleName.trim()) return '';
     const words = articleName
       .trim()
@@ -70,7 +98,7 @@ export default function AddProductPage() {
     }
     if (!acronym) acronym = 'FAB';
 
-    const catCode = cat.slice(0, 3).toUpperCase();
+    const catCode = (cat || 'FAB').slice(0, 3).toUpperCase();
     const baseSku = `${acronym}-${catCode}`;
 
     // Verify uniqueness against existing inventory
@@ -91,11 +119,34 @@ export default function AddProductPage() {
     }
   };
 
+  const handleCategoryChange = (newCat: string) => {
+    setCategory(newCat as ProductCategory);
+    if (!skuManuallyEdited && name.trim()) {
+      setSku(generateSkuFromName(name, newCat as ProductCategory));
+    }
+  };
+
+  const filteredMaleCategories = MALE_FABRIC_CATEGORIES.filter(cat =>
+    !category.trim() || cat.toLowerCase().includes(category.toLowerCase().trim())
+  );
+  const filteredFemaleCategories = FEMALE_FABRIC_CATEGORIES.filter(cat =>
+    !category.trim() || cat.toLowerCase().includes(category.toLowerCase().trim())
+  );
+
+  const filteredMaleUnits = MALE_PACKAGING_UNITS.filter(u =>
+    !unit.trim() || u.toLowerCase().includes(unit.toLowerCase().trim())
+  );
+  const filteredFemaleUnits = FEMALE_PACKAGING_UNITS.filter(u =>
+    !unit.trim() || u.toLowerCase().includes(unit.toLowerCase().trim())
+  );
+
   // Auto-generate realistic SKU and Barcode
   const handleAutoGenerateSKU = () => {
+    const catCode = category ? category.slice(0, 3).toUpperCase() : 'FAB';
+    const unitCode = unit ? unit.slice(0, 3).toUpperCase() : 'BOX';
     const newSku = name.trim()
-      ? generateSkuFromName(name, category)
-      : `${category.slice(0, 3).toUpperCase()}-${unit.slice(0, 3).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`;
+      ? generateSkuFromName(name, category || ('Fabric' as ProductCategory))
+      : `${catCode}-${unitCode}-${Math.floor(100 + Math.random() * 900)}`;
 
     setSku(newSku);
     setSkuManuallyEdited(false);
@@ -116,9 +167,40 @@ export default function AddProductPage() {
     e.preventDefault();
 
     if (!name.trim()) {
-      toast({ title: 'Validation Error', description: 'Product name is required.', type: 'error' });
+      toast({ title: 'Validation Error', description: 'Fabric / Article name is required.', type: 'error' });
       return;
     }
+
+    if (!category.trim()) {
+      toast({ title: 'Validation Error', description: 'Please select or enter a Fabric Category.', type: 'error' });
+      return;
+    }
+
+    if (!unit) {
+      toast({ title: 'Validation Error', description: 'Please select a Packaging / Unit Type.', type: 'error' });
+      return;
+    }
+
+    const parsedRetailPrice = Number(retailPrice) || 0;
+    if (parsedRetailPrice <= 0) {
+      toast({ title: 'Validation Error', description: 'Retail Price must be greater than zero.', type: 'error' });
+      return;
+    }
+
+    const parsedWholesalePrice = Number(wholesalePrice) || 0;
+    if (parsedWholesalePrice <= 0) {
+      toast({ title: 'Validation Error', description: 'Wholesale Price must be greater than zero.', type: 'error' });
+      return;
+    }
+
+    const parsedKhataPrice = Number(khataPrice) || 0;
+    if (parsedKhataPrice <= 0) {
+      toast({ title: 'Validation Error', description: 'Khata Sale Price must be greater than zero.', type: 'error' });
+      return;
+    }
+
+    const parsedInitialStock = Math.max(0, Number(initialStock) || 0);
+    const parsedMinStockAlert = Math.max(1, Number(minStockAlert) || 5);
 
     const finalSku = sku.trim() || generateSkuFromName(name, category);
 
@@ -136,31 +218,22 @@ export default function AddProductPage() {
       return;
     }
 
-    if (khataPrice <= 0) {
-      toast({
-        title: 'Validation Error',
-        description: 'Khata Sale Price must be greater than zero.',
-        type: 'error',
-      });
-      return;
-    }
-
     const newProduct = productsService.add({
       name,
       sku: finalSku,
       category,
-      seasonCategory,
+      seasonCategory: (seasonCategory as SeasonCategory) || 'Summer',
       subcategory: subcategory || `${category} Collection`,
-      unit,
-      retailPrice: Math.max(0, retailPrice),
-      wholesalePrice: Math.max(0, wholesalePrice),
-      khataPrice: Math.max(0, khataPrice),
-      retailDiscount: Math.max(0, retailDiscount),
-      wholesaleDiscount: Math.max(0, wholesaleDiscount),
-      khataDiscount: Math.max(0, khataDiscount),
-      taxRate: Math.max(0, taxRate),
-      stock: initialStock,
-      minStockAlert,
+      unit: (unit as UnitType) || '3-Piece Box (3PC)',
+      retailPrice: parsedRetailPrice,
+      wholesalePrice: parsedWholesalePrice,
+      khataPrice: parsedKhataPrice,
+      retailDiscount: Math.max(0, Number(retailDiscount) || 0),
+      wholesaleDiscount: Math.max(0, Number(wholesaleDiscount) || 0),
+      khataDiscount: Math.max(0, Number(khataDiscount) || 0),
+      taxRate: Math.max(0, Number(taxRate) || 0),
+      stock: parsedInitialStock,
+      minStockAlert: parsedMinStockAlert,
       supplier: supplier || 'Local Mill',
       description,
       barcode,
@@ -168,15 +241,15 @@ export default function AddProductPage() {
     });
 
     // Log initial stock movement
-    if (initialStock > 0) {
+    if (parsedInitialStock > 0) {
       inventoryService.recordMovement({
         productId: newProduct.id,
         productName: newProduct.name,
         sku: newProduct.sku,
         movementType: 'Initial',
-        quantityChange: initialStock,
+        quantityChange: parsedInitialStock,
         previousStock: 0,
-        newStock: initialStock,
+        newStock: parsedInitialStock,
         staffName: currentStaff?.name || 'Stock Manager',
         notes: 'Initial inventory intake for new article',
       });
@@ -230,7 +303,6 @@ export default function AddProductPage() {
                   <div className="sm:col-span-2">
                     <Input
                       label="Fabric / Article Name *"
-                      placeholder="e.g. Al-Karam Luxury Digital Printed Lawn 3-Piece"
                       value={name}
                       onChange={e => handleNameChange(e.target.value)}
                       required
@@ -240,7 +312,6 @@ export default function AddProductPage() {
                   <div>
                     <Input
                       label="SKU Code (Auto-generated from Name)"
-                      placeholder="e.g. AK-LAWN-3P-01"
                       value={sku}
                       onChange={e => {
                         setSku(e.target.value);
@@ -250,79 +321,271 @@ export default function AddProductPage() {
                   </div>
 
                   <div>
-                    <Input
-                      label="Subcategory / Style"
-                      placeholder="e.g. Swiss Voile or Luxury Digital"
-                      value={subcategory}
-                      onChange={e => setSubcategory(e.target.value)}
-                    />
-                  </div>
-
-                  <div>
                     <Select
                       label="Summer / Winter Category *"
                       value={seasonCategory}
                       onChange={e => setSeasonCategory(e.target.value as SeasonCategory)}
                     >
+                      <option value="">Select Season / Category...</option>
                       <option value="Summer">☀️ Summer</option>
                       <option value="Winter">❄️ Winter</option>
                     </Select>
                   </div>
 
-                  <div>
-                    <Select
-                      label="Fabric Category *"
-                      value={category}
-                      onChange={e => {
-                        const newCat = e.target.value as ProductCategory;
-                        setCategory(newCat);
-                        if (!skuManuallyEdited && name.trim()) {
-                          setSku(generateSkuFromName(name, newCat));
-                        }
-                      }}
-                    >
-                      <option value="Lawn">Lawn</option>
-                      <option value="Cotton">Cotton</option>
-                      <option value="Khaddar">Khaddar</option>
-                      <option value="Wash & Wear">Wash & Wear</option>
-                      <option value="Unstitched">Unstitched</option>
-                      <option value="Suit">Suit</option>
-                      <option value="Thaan">Thaan</option>
-                      <option value="Cut Piece">Cut Piece</option>
-                      <option value="Silk & Chiffon">Silk & Chiffon</option>
-                    </Select>
+                  {/* Fabric Category: Unified Combobox with Male & Female bold section headers */}
+                  <div ref={categoryWrapperRef}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                        Fabric Category *
+                      </label>
+                      <span className="text-[10px] text-slate-400">
+                        Type custom or pick from list
+                      </span>
+                    </div>
+
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={category}
+                        onChange={e => {
+                          handleCategoryChange(e.target.value);
+                          setIsCategoryDropdownOpen(true);
+                        }}
+                        onFocus={() => setIsCategoryDropdownOpen(true)}
+                        required
+                        className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-slate-900 pr-8"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setIsCategoryDropdownOpen(prev => !prev)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer"
+                        title="Toggle category list"
+                      >
+                        <ChevronDown className="w-4 h-4" />
+                      </button>
+
+                      {isCategoryDropdownOpen && (
+                        <div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-64 overflow-y-auto divide-y divide-slate-100">
+                          {/* Female Categories Group First */}
+                          {filteredFemaleCategories.length > 0 && (
+                            <div>
+                              <div className="sticky top-0 z-10 px-3 py-1.5 bg-rose-50/95 border-b border-rose-200/80 flex items-center justify-between text-rose-900">
+                                <span className="text-[11px] font-black uppercase tracking-wider flex items-center gap-1.5">
+                                  <span>👗</span>
+                                  <span>FEMALE (Women)</span>
+                                </span>
+                                <span className="text-[10px] font-bold text-rose-700 bg-rose-200/60 px-1.5 py-0.5 rounded-full">
+                                  {filteredFemaleCategories.length}
+                                </span>
+                              </div>
+                              <div className="py-1">
+                                {filteredFemaleCategories.map(cat => (
+                                  <button
+                                    key={`female-${cat}`}
+                                    type="button"
+                                    onClick={() => {
+                                      handleCategoryChange(cat);
+                                      setIsCategoryDropdownOpen(false);
+                                    }}
+                                    className={`w-full text-left px-3 py-2 text-xs hover:bg-rose-50 flex items-center justify-between transition-colors cursor-pointer ${
+                                      category === cat
+                                        ? 'bg-rose-50/80 font-bold text-rose-900'
+                                        : 'text-slate-800'
+                                    }`}
+                                  >
+                                    <span>{cat}</span>
+                                    {category === cat && <Check className="w-3.5 h-3.5 text-rose-600" />}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Male Categories Group Second */}
+                          {filteredMaleCategories.length > 0 && (
+                            <div>
+                              <div className="sticky top-0 z-10 px-3 py-1.5 bg-blue-50/95 border-t border-b border-blue-200/80 flex items-center justify-between text-blue-900">
+                                <span className="text-[11px] font-black uppercase tracking-wider flex items-center gap-1.5">
+                                  <span>👔</span>
+                                  <span>MALE (Men)</span>
+                                </span>
+                                <span className="text-[10px] font-bold text-blue-700 bg-blue-200/60 px-1.5 py-0.5 rounded-full">
+                                  {filteredMaleCategories.length}
+                                </span>
+                              </div>
+                              <div className="py-1">
+                                {filteredMaleCategories.map(cat => (
+                                  <button
+                                    key={`male-${cat}`}
+                                    type="button"
+                                    onClick={() => {
+                                      handleCategoryChange(cat);
+                                      setIsCategoryDropdownOpen(false);
+                                    }}
+                                    className={`w-full text-left px-3 py-2 text-xs hover:bg-blue-50 flex items-center justify-between transition-colors cursor-pointer ${
+                                      category === cat
+                                        ? 'bg-blue-50/80 font-bold text-blue-900'
+                                        : 'text-slate-800'
+                                    }`}
+                                  >
+                                    <span>{cat}</span>
+                                    {category === cat && <Check className="w-3.5 h-3.5 text-blue-600" />}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Custom Category fallback if typed */}
+                          {category.trim() &&
+                            !MALE_FABRIC_CATEGORIES.some(c => c.toLowerCase() === category.toLowerCase().trim()) &&
+                            !FEMALE_FABRIC_CATEGORIES.some(c => c.toLowerCase() === category.toLowerCase().trim()) && (
+                              <div className="p-2.5 text-xs text-slate-600 bg-slate-50 text-center border-t border-slate-200">
+                                Using custom category: <strong className="text-slate-900">&quot;{category}&quot;</strong>
+                              </div>
+                            )}
+
+                          {/* If filter didn't match any */}
+                          {filteredMaleCategories.length === 0 && filteredFemaleCategories.length === 0 && (
+                            <div className="p-3 text-xs text-slate-500 text-center">
+                              No predefined categories match &quot;{category}&quot;. You can use it as a custom category.
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <span className="text-[11px] text-slate-400 mt-1 block">
+                      Choose from Female / Male categories or type any custom fabric.
+                    </span>
                   </div>
 
-                  <div>
-                    <Select
-                      label="Packaging / Unit Type *"
-                      value={unit}
-                      onChange={e => setUnit(e.target.value as UnitType)}
-                    >
-                      <option value="Unstitched Box">Unstitched Box (3PC/2PC Box)</option>
-                      <option value="Suit Packet">Suit Packet (Standard 4.5m / 4.0m)</option>
-                      <option value="Thaan">Thaan (Roll: 30m to 40m)</option>
-                      <option value="Meter">Meter (Running Yardage)</option>
-                      <option value="Cut Piece">Cut Piece (Assorted remnant)</option>
-                    </Select>
-                  </div>
+                  {/* Packaging / Unit Type: Searchable Combobox with Female then Male bold sections (Drops DOWN) */}
+                  <div ref={unitWrapperRef}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                        Packaging / Unit Type *
+                      </label>
+                      <span className="text-[10px] text-slate-400">
+                        Type custom or pick from list
+                      </span>
+                    </div>
 
-                  <div>
-                    <Input
-                      label="Manufacturer / Supplier"
-                      placeholder="e.g. Gul Ahmed or Nishat Mills"
-                      value={supplier}
-                      onChange={e => setSupplier(e.target.value)}
-                    />
-                  </div>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={unit}
+                        onChange={e => {
+                          setUnit(e.target.value as UnitType);
+                          setIsUnitDropdownOpen(true);
+                        }}
+                        onFocus={() => setIsUnitDropdownOpen(true)}
+                        required
+                        className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-slate-900 pr-8"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setIsUnitDropdownOpen(prev => !prev)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer"
+                        title="Toggle packaging unit list"
+                      >
+                        <ChevronDown className="w-4 h-4" />
+                      </button>
 
-                  <div>
-                    <Input
-                      label="Detailed Fabric Description"
-                      placeholder="e.g. 100% Giza Cotton, 4.5 meters unstitched"
-                      value={description}
-                      onChange={e => setDescription(e.target.value)}
-                    />
+                      {isUnitDropdownOpen && (
+                        <div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-64 overflow-y-auto divide-y divide-slate-100">
+                          {/* Female Units Group First */}
+                          {filteredFemaleUnits.length > 0 && (
+                            <div>
+                              <div className="sticky top-0 z-10 px-3 py-1.5 bg-rose-50/95 border-b border-rose-200/80 flex items-center justify-between text-rose-900">
+                                <span className="text-[11px] font-black uppercase tracking-wider flex items-center gap-1.5">
+                                  <span>👗</span>
+                                  <span>FEMALE (Women) Units</span>
+                                </span>
+                                <span className="text-[10px] font-bold text-rose-700 bg-rose-200/60 px-1.5 py-0.5 rounded-full">
+                                  {filteredFemaleUnits.length}
+                                </span>
+                              </div>
+                              <div className="py-1">
+                                {filteredFemaleUnits.map(u => (
+                                  <button
+                                    key={`female-unit-${u}`}
+                                    type="button"
+                                    onClick={() => {
+                                      setUnit(u as UnitType);
+                                      setIsUnitDropdownOpen(false);
+                                    }}
+                                    className={`w-full text-left px-3 py-2 text-xs hover:bg-rose-50 flex items-center justify-between transition-colors cursor-pointer ${
+                                      unit === u
+                                        ? 'bg-rose-50/80 font-bold text-rose-900'
+                                        : 'text-slate-800'
+                                    }`}
+                                  >
+                                    <span>{u}</span>
+                                    {unit === u && <Check className="w-3.5 h-3.5 text-rose-600" />}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Male Units Group Second */}
+                          {filteredMaleUnits.length > 0 && (
+                            <div>
+                              <div className="sticky top-0 z-10 px-3 py-1.5 bg-blue-50/95 border-t border-blue-200/80 border-b flex items-center justify-between text-blue-900">
+                                <span className="text-[11px] font-black uppercase tracking-wider flex items-center gap-1.5">
+                                  <span>👔</span>
+                                  <span>MALE (Men) Units</span>
+                                </span>
+                                <span className="text-[10px] font-bold text-blue-700 bg-blue-200/60 px-1.5 py-0.5 rounded-full">
+                                  {filteredMaleUnits.length}
+                                </span>
+                              </div>
+                              <div className="py-1">
+                                {filteredMaleUnits.map(u => (
+                                  <button
+                                    key={`male-unit-${u}`}
+                                    type="button"
+                                    onClick={() => {
+                                      setUnit(u as UnitType);
+                                      setIsUnitDropdownOpen(false);
+                                    }}
+                                    className={`w-full text-left px-3 py-2 text-xs hover:bg-blue-50 flex items-center justify-between transition-colors cursor-pointer ${
+                                      unit === u
+                                        ? 'bg-blue-50/80 font-bold text-blue-900'
+                                        : 'text-slate-800'
+                                    }`}
+                                  >
+                                    <span>{u}</span>
+                                    {unit === u && <Check className="w-3.5 h-3.5 text-blue-600" />}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Custom Unit fallback if typed */}
+                          {unit.trim() &&
+                            !MALE_PACKAGING_UNITS.some(u => u.toLowerCase() === unit.toLowerCase().trim()) &&
+                            !FEMALE_PACKAGING_UNITS.some(u => u.toLowerCase() === unit.toLowerCase().trim()) && (
+                              <div className="p-2.5 text-xs text-slate-600 bg-slate-50 text-center border-t border-slate-200">
+                                Using custom unit: <strong className="text-slate-900">&quot;{unit}&quot;</strong>
+                              </div>
+                            )}
+
+                          {/* If filter didn't match any */}
+                          {filteredMaleUnits.length === 0 && filteredFemaleUnits.length === 0 && (
+                            <div className="p-3 text-xs text-slate-500 text-center">
+                              No predefined units match &quot;{unit}&quot;. You can use it as a custom unit.
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <span className="text-[11px] text-slate-400 mt-1 block">
+                      Choose packaging unit or type custom unit (e.g. Suit Packet, Box, Thaan, Meter).
+                    </span>
                   </div>
                 </div>
               </CardContent>
@@ -344,7 +607,7 @@ export default function AddProductPage() {
                         type="number"
                         min="0"
                         value={retailPrice}
-                        onChange={e => setRetailPrice(parseFloat(e.target.value) || 0)}
+                        onChange={e => setRetailPrice(e.target.value === '' ? '' : parseFloat(e.target.value))}
                         required
                       />
                       <Input
@@ -352,13 +615,13 @@ export default function AddProductPage() {
                         type="number"
                         min="0"
                         value={retailDiscount}
-                        onChange={e => setRetailDiscount(parseFloat(e.target.value) || 0)}
+                        onChange={e => setRetailDiscount(e.target.value === '' ? '' : parseFloat(e.target.value))}
                       />
                     </div>
                     <div className="flex justify-between items-center text-xs pt-1 border-t border-blue-200/50">
                       <span className="text-slate-600 font-medium">Final Retail:</span>
                       <span className="font-mono font-bold text-blue-700">
-                        Rs. {Math.max(0, retailPrice - retailDiscount).toLocaleString()}
+                        Rs. {Math.max(0, (Number(retailPrice) || 0) - (Number(retailDiscount) || 0)).toLocaleString()}
                       </span>
                     </div>
                   </div>
@@ -370,7 +633,7 @@ export default function AddProductPage() {
                         type="number"
                         min="0"
                         value={wholesalePrice}
-                        onChange={e => setWholesalePrice(parseFloat(e.target.value) || 0)}
+                        onChange={e => setWholesalePrice(e.target.value === '' ? '' : parseFloat(e.target.value))}
                         required
                       />
                       <Input
@@ -378,13 +641,13 @@ export default function AddProductPage() {
                         type="number"
                         min="0"
                         value={wholesaleDiscount}
-                        onChange={e => setWholesaleDiscount(parseFloat(e.target.value) || 0)}
+                        onChange={e => setWholesaleDiscount(e.target.value === '' ? '' : parseFloat(e.target.value))}
                       />
                     </div>
                     <div className="flex justify-between items-center text-xs pt-1 border-t border-cyan-200/50">
                       <span className="text-slate-600 font-medium">Final Wholesale:</span>
                       <span className="font-mono font-bold text-cyan-700">
-                        Rs. {Math.max(0, wholesalePrice - wholesaleDiscount).toLocaleString()}
+                        Rs. {Math.max(0, (Number(wholesalePrice) || 0) - (Number(wholesaleDiscount) || 0)).toLocaleString()}
                       </span>
                     </div>
                   </div>
@@ -396,7 +659,7 @@ export default function AddProductPage() {
                         type="number"
                         min="0"
                         value={khataPrice}
-                        onChange={e => setKhataPrice(parseFloat(e.target.value) || 0)}
+                        onChange={e => setKhataPrice(e.target.value === '' ? '' : parseFloat(e.target.value))}
                         required
                       />
                       <Input
@@ -404,13 +667,13 @@ export default function AddProductPage() {
                         type="number"
                         min="0"
                         value={khataDiscount}
-                        onChange={e => setKhataDiscount(parseFloat(e.target.value) || 0)}
+                        onChange={e => setKhataDiscount(e.target.value === '' ? '' : parseFloat(e.target.value))}
                       />
                     </div>
                     <div className="flex justify-between items-center text-xs pt-1 border-t border-amber-200/50">
                       <span className="text-slate-600 font-medium">Final Khata Rate:</span>
                       <span className="font-mono font-bold text-amber-800">
-                        Rs. {Math.max(0, khataPrice - khataDiscount).toLocaleString()}
+                        Rs. {Math.max(0, (Number(khataPrice) || 0) - (Number(khataDiscount) || 0)).toLocaleString()}
                       </span>
                     </div>
                   </div>
@@ -422,8 +685,7 @@ export default function AddProductPage() {
                       min="0"
                       max="100"
                       value={taxRate}
-                      onChange={e => setTaxRate(parseFloat(e.target.value) || 0)}
-                      placeholder="0 (Tax-free if 0%)"
+                      onChange={e => setTaxRate(e.target.value === '' ? '' : parseFloat(e.target.value))}
                     />
                     <p className="text-[11px] text-slate-500 mt-1">
                       If 0%, no tax is shown or charged at POS. When set (e.g. 5% or 18%), POS calculates tax automatically.
@@ -440,39 +702,39 @@ export default function AddProductPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <Input
-                    label={`Initial Stock Quantity (${unit}) *`}
+                    label={`Initial Stock Quantity ${unit ? `(${unit})` : ''} *`}
                     type="number"
                     min="0"
                     value={initialStock}
-                    onChange={e => setInitialStock(parseInt(e.target.value, 10) || 0)}
+                    onChange={e => setInitialStock(e.target.value === '' ? '' : parseInt(e.target.value, 10))}
                     required
                   />
 
                   <Input
-                    label={`Minimum Stock Warning Alert (${unit})`}
+                    label={`Minimum Stock Warning Alert ${unit ? `(${unit})` : ''}`}
                     type="number"
                     min="1"
                     value={minStockAlert}
-                    onChange={e => setMinStockAlert(parseInt(e.target.value, 10) || 1)}
+                    onChange={e => setMinStockAlert(e.target.value === '' ? '' : parseInt(e.target.value, 10))}
                   />
 
                   <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1.5">
                     <div className="flex justify-between text-slate-600">
                       <span>Total Initial Retail Valuation:</span>
                       <span className="font-bold text-slate-900">
-                        Rs. {(initialStock * retailPrice).toLocaleString()}
+                        Rs. {((Number(initialStock) || 0) * (Number(retailPrice) || 0)).toLocaleString()}
                       </span>
                     </div>
                     <div className="flex justify-between text-slate-600">
                       <span>Total Wholesale Valuation:</span>
                       <span className="font-bold text-cyan-700">
-                        Rs. {(initialStock * wholesalePrice).toLocaleString()}
+                        Rs. {((Number(initialStock) || 0) * (Number(wholesalePrice) || 0)).toLocaleString()}
                       </span>
                     </div>
                     <div className="flex justify-between text-slate-600 pt-1 border-t border-slate-200/60">
                       <span>Total Khata Valuation:</span>
                       <span className="font-bold text-amber-800">
-                        Rs. {(initialStock * (khataPrice || retailPrice)).toLocaleString()}
+                        Rs. {((Number(initialStock) || 0) * (Number(khataPrice) || Number(retailPrice) || 0)).toLocaleString()}
                       </span>
                     </div>
                   </div>

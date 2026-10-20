@@ -17,6 +17,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { reportsService } from '@/services/reportsService';
 import { salesService } from '@/services/salesService';
 import { inventoryService } from '@/services/inventoryService';
@@ -24,7 +25,27 @@ import { useAuth } from '@/context/AuthContext';
 import { Product } from '@/types';
 
 export default function DashboardPage() {
-  const { currentStaff, hasPermission } = useAuth();
+  const router = useRouter();
+  const { currentStaff, hasPermission, isLoading } = useAuth();
+
+  // Strictly enforce that Dashboard is ONLY accessible to Admin
+  useEffect(() => {
+    if (!isLoading && currentStaff && currentStaff.role !== 'Admin') {
+      if (currentStaff.role === 'Retail Cashier' || currentStaff.permissions.includes('pos_retail')) {
+        router.replace('/pos/retail');
+      } else if (currentStaff.role === 'Wholesale Cashier' || currentStaff.permissions.includes('pos_wholesale')) {
+        router.replace('/pos/wholesale');
+      } else if (currentStaff.role === 'Khata Staff' || currentStaff.permissions.includes('pos_khata')) {
+        router.replace('/pos/khata');
+      } else if (currentStaff.permissions.includes('stock_view')) {
+        router.replace('/products');
+      } else if (currentStaff.permissions.includes('payment_collection')) {
+        router.replace('/payments');
+      } else {
+        router.replace('/login');
+      }
+    }
+  }, [currentStaff, isLoading, router]);
 
   const [activeTimeframe, setActiveTimeframe] = useState<'today' | 'week' | 'month' | 'year'>('today');
   const [hoveredBar, setHoveredBar] = useState<number | null>(null);
@@ -206,7 +227,7 @@ const timeframeConfigs: Record<'today' | 'week' | 'month' | 'year', TimeframeCon
   const chartHeightPx = 180;
 
   return (
-    <ProtectedRoute permission="dashboard_view">
+    <ProtectedRoute permission="dashboard_view" adminOnly>
       <AppShell>
         <div className="space-y-6 max-w-[1600px] mx-auto pb-10">
           {/* Header Row: Greeting and Action Buttons */}

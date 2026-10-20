@@ -44,19 +44,19 @@ export default function AddStaffPage() {
       setSelectedPermissions(ALL_PERMISSIONS.map(p => p.key));
       setCounter('Executive Office');
     } else if (newRole === 'Retail Cashier') {
-      setSelectedPermissions(['dashboard_view', 'pos_retail', 'bills_view']);
+      setSelectedPermissions(['pos_retail', 'bills_view']);
       setCounter('Counter 01 (Retail)');
     } else if (newRole === 'Wholesale Cashier') {
-      setSelectedPermissions(['dashboard_view', 'pos_wholesale', 'bills_view', 'customers_view']);
+      setSelectedPermissions(['pos_wholesale', 'bills_view', 'customers_view']);
       setCounter('Counter 02 (Wholesale)');
     } else if (newRole === 'Khata Staff') {
-      setSelectedPermissions(['dashboard_view', 'pos_khata', 'customers_view', 'bills_view']);
+      setSelectedPermissions(['pos_khata', 'customers_view', 'bills_view']);
       setCounter('Accounts Desk');
     } else if (newRole === 'Stock Manager') {
-      setSelectedPermissions(['dashboard_view', 'stock_view', 'stock_add', 'barcode_view']);
+      setSelectedPermissions(['stock_view', 'stock_add', 'barcode_view']);
       setCounter('Warehouse Terminal');
     } else if (newRole === 'Payment Collection Staff') {
-      setSelectedPermissions(['dashboard_view', 'customers_view', 'payment_collection']);
+      setSelectedPermissions(['customers_view', 'payment_collection']);
       setCounter('Field Operations');
     }
   };

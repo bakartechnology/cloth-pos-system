@@ -394,23 +394,6 @@ export default function KhataPOSPage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [khataCart.length, selectedCustomer]);
 
-  // Categories list
-  const categoryTabs = useMemo(() => {
-    const base = [
-      'All fabrics',
-      'Lawn',
-      'Cotton',
-      'Khaddar',
-      'Wash & Wear',
-      'Silk & Chiffon',
-      'Unstitched',
-      'Thaan',
-      'Cut Piece',
-    ];
-    const fromProds = Array.from(new Set(products.map(p => p.category).filter(Boolean)));
-    return Array.from(new Set([...base, ...fromProds]));
-  }, [products]);
-
   // Filtered Products (matching Wholesale POS sorting & search)
   const filteredProducts = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
@@ -1379,27 +1362,6 @@ export default function KhataPOSPage() {
                 <span className="px-1.5 py-0.5 rounded bg-[#F0F4F2] text-[10px] text-[#8A9590] font-mono border border-[#DCE3E0]">
                   F2
                 </span>
-              </div>
-
-              {/* CATEGORY FILTER PILLS (Matching Wholesale POS rounded-full) */}
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none text-xs">
-                {categoryTabs.map(cat => {
-                  const isActive = selectedCategory === cat;
-                  return (
-                    <button
-                      key={cat}
-                      type="button"
-                      onClick={() => setSelectedCategory(cat)}
-                      className={`whitespace-nowrap px-3.5 py-1.5 rounded-full font-semibold transition-all cursor-pointer ${
-                        isActive
-                          ? 'bg-[#125E45] text-white shadow-2xs'
-                          : 'bg-white border border-[#DCE3E0] text-[#17211D] hover:bg-[#F0F4F2]'
-                      }`}
-                    >
-                      {cat}
-                    </button>
-                  );
-                })}
               </div>
 
               {/* PRODUCT CATALOG HEADER (Count + Sorting Dropdown matching Wholesale POS) */}

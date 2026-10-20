@@ -1,17 +1,18 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Badge } from '@/components/ui/Badge';
-import { Lock, Save } from 'lucide-react';
+import { Lock, Save, ChevronDown, Check } from 'lucide-react';
 import { productsService } from '@/services/productsService';
 import { inventoryService } from '@/services/inventoryService';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { Product, ProductCategory, UnitType, SeasonCategory } from '@/types';
+import { BOTH_FABRIC_CATEGORIES, BOTH_PACKAGING_UNITS } from '@/data/fabricCategories';
 
 interface EditProductModalProps {
   product: Product | null;
@@ -46,6 +47,19 @@ export function EditProductModal({
   const [minStockAlert, setMinStockAlert] = useState<number>(5);
   const [supplier, setSupplier] = useState('');
   const [description, setDescription] = useState('');
+
+  const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
+  const categoryWrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (categoryWrapperRef.current && !categoryWrapperRef.current.contains(event.target as Node)) {
+        setIsCategoryDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     if (!product) return;
@@ -236,35 +250,80 @@ export function EditProductModal({
             </Select>
           </div>
 
-          <div>
-            <Select
-              label="Fabric Material Category"
-              value={category}
-              onChange={e => setCategory(e.target.value as ProductCategory)}
-            >
-              <option value="Lawn">Lawn</option>
-              <option value="Cotton">Cotton</option>
-              <option value="Khaddar">Khaddar</option>
-              <option value="Wash & Wear">Wash & Wear</option>
-              <option value="Unstitched">Unstitched</option>
-              <option value="Suit">Suit</option>
-              <option value="Thaan">Thaan</option>
-              <option value="Cut Piece">Cut Piece</option>
-              <option value="Silk & Chiffon">Silk & Chiffon</option>
-            </Select>
+          {/* Fabric Material Category: Single Unified Combobox */}
+          <div className="relative" ref={categoryWrapperRef}>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Fabric Material Category *
+              </label>
+              <span className="text-[10px] text-slate-400">Type or pick from list</span>
+            </div>
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Category name..."
+                value={category}
+                onChange={e => {
+                  setCategory(e.target.value as ProductCategory);
+                  setIsCategoryDropdownOpen(true);
+                }}
+                onFocus={() => setIsCategoryDropdownOpen(true)}
+                required
+                className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-slate-900 pr-8"
+              />
+              <button
+                type="button"
+                onClick={() => setIsCategoryDropdownOpen(prev => !prev)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer"
+                title="Toggle category list"
+              >
+                <ChevronDown className="w-4 h-4" />
+              </button>
+            </div>
+
+            {isCategoryDropdownOpen && (
+              <div className="absolute z-30 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-52 overflow-y-auto divide-y divide-slate-100">
+                {BOTH_FABRIC_CATEGORIES
+                  .filter(cat =>
+                    !category.trim() || cat.toLowerCase().includes(category.toLowerCase().trim())
+                  )
+                  .map(cat => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => {
+                        setCategory(cat as ProductCategory);
+                        setIsCategoryDropdownOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 text-xs hover:bg-blue-50 flex items-center justify-between transition-colors cursor-pointer ${
+                        category === cat
+                          ? 'bg-blue-50/70 font-bold text-blue-900'
+                          : 'text-slate-800'
+                      }`}
+                    >
+                      <span>{cat}</span>
+                      {category === cat && <Check className="w-3.5 h-3.5 text-blue-600" />}
+                    </button>
+                  ))}
+              </div>
+            )}
           </div>
 
+          {/* Unit / Packaging Type: Single Standard Dropdown */}
           <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+              Unit / Packaging Type *
+            </label>
             <Select
-              label="Unit / Packaging Type"
               value={unit}
               onChange={e => setUnit(e.target.value as UnitType)}
+              required
             >
-              <option value="Unstitched Box">Unstitched Box (3PC/2PC Box)</option>
-              <option value="Suit Packet">Suit Packet</option>
-              <option value="Thaan">Thaan (Roll: 30m-40m)</option>
-              <option value="Meter">Meter (Running yardage)</option>
-              <option value="Cut Piece">Cut Piece</option>
+              {BOTH_PACKAGING_UNITS.map(u => (
+                <option key={u} value={u}>
+                  {u}
+                </option>
+              ))}
             </Select>
           </div>
         </div>

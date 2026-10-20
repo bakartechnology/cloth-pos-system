@@ -271,14 +271,6 @@ export default function RetailPOSPage() {
     return retailCart.reduce((acc, item) => acc + item.quantity, 0);
   }, [retailCart]);
 
-  // Dynamic Category List from real products + standard suits/fabrics
-  const categories = useMemo(() => {
-    const base = ['All', 'Lawn', 'Cotton', 'Khaddar', 'Wash & Wear', 'Unstitched', 'Thaan', 'Cut Piece', 'Silk & Chiffon'];
-    const fromProds = Array.from(new Set(products.map(p => p.category).filter(Boolean)));
-    const merged = Array.from(new Set([...base, ...fromProds]));
-    return merged;
-  }, [products]);
-
   // Filter Real Products
   const filteredProducts = useMemo(() => {
     let list = [...products];
@@ -851,28 +843,7 @@ export default function RetailPOSPage() {
                 </span>
               </div>
 
-              {/* Row 3: Category Filter Pills */}
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar text-xs">
-                {categories.map(cat => {
-                  const isActive = selectedCategory === cat;
-                  return (
-                    <button
-                      key={cat}
-                      type="button"
-                      onClick={() => setSelectedCategory(cat)}
-                      className={`whitespace-nowrap px-3.5 py-1.5 rounded-full font-semibold transition-all cursor-pointer ${
-                        isActive
-                          ? 'bg-[#125E45] text-white shadow-2xs'
-                          : 'bg-white border border-[#DCE3E0] text-[#17211D] hover:bg-[#F0F4F2]'
-                      }`}
-                    >
-                      {cat}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Row 4: Product Catalog Header */}
+              {/* Product Catalog Header */}
               <div className="flex items-center justify-between pt-1">
                 <div>
                   <h2 className="text-base font-bold text-[#17211D]">Product catalog</h2>

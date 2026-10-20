@@ -8,6 +8,7 @@ import { storageService } from '@/services/storageService';
 interface AuthContextType {
   currentStaff: Staff | null;
   isLoading: boolean;
+  isLoggingOut: boolean;
   isAdminSession: boolean;
   switchRole: (role: StaffRole) => boolean;
   setStaff: (staffId: string) => void;
@@ -22,6 +23,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [currentStaff, setCurrentStaff] = useState<Staff | null>(null);
   const [isAdminSession, setIsAdminSession] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const refreshStaff = () => {
     const staff = authService.getCurrentStaff();
@@ -53,15 +55,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const handleLogout = () => {
+    setIsLoggingOut(true);
     authService.logout();
-    refreshStaff();
+    setCurrentStaff(null);
+    setIsAdminSession(false);
     if (typeof window !== 'undefined') {
-      window.location.href = '/login';
+      window.location.replace('/login');
     }
   };
 
   const hasPermission = (permission: PermissionKey): boolean => {
     if (!currentStaff) return false;
+    // Strictly restrict dashboard_view to Admin only
+    if (permission === 'dashboard_view') {
+      return currentStaff.role === 'Admin';
+    }
     if (currentStaff.role === 'Admin') return true;
     return currentStaff.permissions.includes(permission);
   };
@@ -71,6 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         currentStaff,
         isLoading,
+        isLoggingOut,
         isAdminSession,
         switchRole: handleSwitchRole,
         setStaff: handleSetStaff,

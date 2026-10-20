@@ -4,12 +4,11 @@ import { storageService } from './storageService';
 const ADMIN_SESSION_KEY = 'anf_session_admin_active';
 
 export const authService = {
-  getCurrentStaff(): Staff {
+  getCurrentStaff(): Staff | null {
     const activeId = storageService.getActiveStaffId();
+    if (!activeId) return null;
     const staffList = storageService.getStaff();
-    const found = staffList.find(s => s.id === activeId);
-    if (found) return found;
-    return staffList[0];
+    return staffList.find(s => s.id === activeId) || null;
   },
 
   isAdminSession(): boolean {
@@ -23,6 +22,11 @@ export const authService = {
     const found = staffList.find(s => s.id === staffId);
     if (!found) return null;
     storageService.setActiveStaffId(staffId);
+    if (found.role === 'Admin') {
+      storageService.setItem(ADMIN_SESSION_KEY, true);
+    } else {
+      storageService.removeItem(ADMIN_SESSION_KEY);
+    }
     return found;
   },
 
@@ -47,6 +51,10 @@ export const authService = {
   hasPermission(permission: PermissionKey, staff?: Staff): boolean {
     const current = staff || this.getCurrentStaff();
     if (!current) return false;
+    // Strictly restrict dashboard_view to Admin only
+    if (permission === 'dashboard_view') {
+      return current.role === 'Admin';
+    }
     // Admin has universal access
     if (current.role === 'Admin') return true;
     return current.permissions.includes(permission);
@@ -82,11 +90,7 @@ export const authService = {
 
   logout(): void {
     storageService.removeItem(ADMIN_SESSION_KEY);
-    const staffList = storageService.getStaff();
-    const admin = staffList.find(s => s.role === 'Admin') || staffList[0];
-    if (admin) {
-      storageService.setActiveStaffId(admin.id);
-    }
+    storageService.clearActiveStaff();
   },
 };
 

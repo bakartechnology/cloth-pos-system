@@ -170,7 +170,7 @@ export const INITIAL_STAFF: Staff[] = [
     status: 'Active',
     counter: 'Counter 01 (Retail)',
     joinedDate: '2022-03-15',
-    permissions: ['dashboard_view', 'pos_retail', 'bills_view', 'barcode_view', 'retail_statement_view'],
+    permissions: ['pos_retail', 'bills_view', 'barcode_view', 'retail_statement_view'],
   },
   {
     id: 'stf-003',
@@ -182,7 +182,7 @@ export const INITIAL_STAFF: Staff[] = [
     status: 'Active',
     counter: 'Counter 02 (Wholesale)',
     joinedDate: '2022-06-20',
-    permissions: ['dashboard_view', 'pos_wholesale', 'bills_view', 'customers_view', 'wholesale_statement_view', 'pandi_view'],
+    permissions: ['pos_wholesale', 'bills_view', 'customers_view', 'wholesale_statement_view', 'pandi_view'],
   },
   {
     id: 'stf-004',
@@ -194,7 +194,7 @@ export const INITIAL_STAFF: Staff[] = [
     status: 'Active',
     counter: 'Accounts Desk',
     joinedDate: '2023-01-05',
-    permissions: ['dashboard_view', 'pos_khata', 'customers_view', 'bills_view', 'khata_ledger_view', 'payment_collection'],
+    permissions: ['pos_khata', 'customers_view', 'bills_view', 'khata_ledger_view', 'payment_collection'],
   },
   {
     id: 'stf-005',
@@ -206,7 +206,7 @@ export const INITIAL_STAFF: Staff[] = [
     status: 'Active',
     counter: 'Warehouse Terminal',
     joinedDate: '2022-08-12',
-    permissions: ['dashboard_view', 'stock_view', 'stock_add', 'stock_edit', 'barcode_view', 'catalog_view'],
+    permissions: ['stock_view', 'stock_add', 'stock_edit', 'barcode_view', 'catalog_view'],
   },
   {
     id: 'stf-006',
@@ -218,7 +218,7 @@ export const INITIAL_STAFF: Staff[] = [
     status: 'Active',
     counter: 'Field Operations',
     joinedDate: '2023-05-18',
-    permissions: ['dashboard_view', 'customers_view', 'payment_collection', 'wholesale_recovery'],
+    permissions: ['customers_view', 'payment_collection', 'wholesale_recovery'],
   },
   {
     id: 'stf-007',
@@ -229,7 +229,7 @@ export const INITIAL_STAFF: Staff[] = [
     status: 'Active',
     counter: 'Counter 03 (Retail)',
     joinedDate: '2023-11-01',
-    permissions: ['dashboard_view', 'pos_retail', 'bills_view'],
+    permissions: ['pos_retail', 'bills_view'],
   },
   {
     id: 'stf-008',
@@ -240,7 +240,7 @@ export const INITIAL_STAFF: Staff[] = [
     status: 'Active',
     counter: 'Counter 04 (Wholesale)',
     joinedDate: '2024-02-14',
-    permissions: ['dashboard_view', 'pos_wholesale', 'bills_view', 'customers_view'],
+    permissions: ['pos_wholesale', 'bills_view', 'customers_view'],
   },
   {
     id: 'stf-009',
@@ -251,7 +251,7 @@ export const INITIAL_STAFF: Staff[] = [
     status: 'Active',
     counter: 'Field Operations (Gujranwala Route)',
     joinedDate: '2024-04-01',
-    permissions: ['dashboard_view', 'customers_view', 'payment_collection'],
+    permissions: ['customers_view', 'payment_collection'],
   },
   {
     id: 'stf-010',
@@ -262,7 +262,7 @@ export const INITIAL_STAFF: Staff[] = [
     status: 'Active',
     counter: 'Basement Storage',
     joinedDate: '2024-07-20',
-    permissions: ['dashboard_view', 'stock_view', 'stock_add', 'barcode_view'],
+    permissions: ['stock_view', 'stock_add', 'barcode_view'],
   },
 ];
 

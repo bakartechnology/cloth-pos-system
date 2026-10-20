@@ -31,11 +31,11 @@ export default function DiscountManagementPage() {
   });
 
   // Form State
-  const [saleType, setSaleType] = useState<'Retail' | 'Wholesale' | 'Khata Sale'>('Retail');
+  const [saleType, setSaleType] = useState<'' | 'All' | 'Retail' | 'Wholesale' | 'Khata Sale'>('');
   const [category, setCategory] = useState<'All' | 'Summer' | 'Winter'>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [discountAmount, setDiscountAmount] = useState<number>(200);
+  const [discountAmount, setDiscountAmount] = useState<number | ''>('');
 
   const loadProducts = () => {
     setProducts(productsService.getAll());
@@ -88,7 +88,30 @@ export default function DiscountManagementPage() {
   const handleSaveDiscount = (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!saleType) {
+      toast({
+        title: 'Select Sale Type',
+        description: 'Please select a sale type (All, Retail, Wholesale, or Khata Sale) before saving.',
+        type: 'warning',
+      });
+      return;
+    }
+
+    if (discountAmount === '' || Number(discountAmount) < 0) {
+      toast({
+        title: 'Enter Discount Amount',
+        description: 'Please specify a discount amount in Rupees.',
+        type: 'warning',
+      });
+      return;
+    }
+
     const cleanAmount = Math.max(0, Number(discountAmount) || 0);
+
+    const saleTypeLabel =
+      saleType === 'All'
+        ? 'All Channels (Retail, Wholesale & Khata)'
+        : saleType;
 
     if (selectedProduct) {
       // 1. Specific product discount
@@ -102,7 +125,7 @@ export default function DiscountManagementPage() {
       loadProducts();
       toast({
         title: 'Product Discount Saved',
-        description: `Applied Rs. ${cleanAmount.toLocaleString()} ${saleType} Discount to "${selectedProduct.name}". (Barcode preserved)`,
+        description: `Applied Rs. ${cleanAmount.toLocaleString()} ${saleTypeLabel} Discount to "${selectedProduct.name}". (Barcode preserved)`,
         type: 'success',
       });
     } else {
@@ -116,7 +139,7 @@ export default function DiscountManagementPage() {
       loadProducts();
       toast({
         title: 'Bulk Discount Applied',
-        description: `Applied Rs. ${cleanAmount.toLocaleString()} ${saleType} Discount to ${result.count} ${category} product(s).`,
+        description: `Applied Rs. ${cleanAmount.toLocaleString()} ${saleTypeLabel} Discount to ${result.count} ${category} product(s).`,
         type: 'success',
       });
     }
@@ -229,18 +252,25 @@ export default function DiscountManagementPage() {
                       </label>
                       <Select
                         value={saleType}
-                        onChange={e => setSaleType(e.target.value as 'Retail' | 'Wholesale' | 'Khata Sale')}
+                        onChange={e => setSaleType(e.target.value as any)}
+                        required
                       >
+                        <option value="" disabled>-- Select Sale Type (Required) --</option>
+                        <option value="All">⚡ All (Retail + Wholesale + Khata Sale)</option>
                         <option value="Retail">Retail (Applies to Retail POS)</option>
                         <option value="Wholesale">Wholesale (Applies to Wholesale POS)</option>
                         <option value="Khata Sale">Khata Sale (Applies to Khata Credit POS)</option>
                       </Select>
                       <span className="text-[11px] text-slate-400 mt-1 block">
-                        {saleType === 'Retail'
+                        {saleType === 'All'
+                          ? 'Simultaneously updates Retail, Wholesale, and Khata Discounts.'
+                          : saleType === 'Retail'
                           ? 'Updates Retail Discount field only. Wholesale and Khata rates unaffected.'
                           : saleType === 'Wholesale'
                           ? 'Updates Wholesale Discount field only. Retail and Khata rates unaffected.'
-                          : 'Updates Khata Discount field only. Retail and Wholesale rates unaffected.'}
+                          : saleType === 'Khata Sale'
+                          ? 'Updates Khata Discount field only. Retail and Wholesale rates unaffected.'
+                          : 'Select which POS channel or All channels to apply the discount to.'}
                       </span>
                     </div>
 
@@ -329,7 +359,7 @@ export default function DiscountManagementPage() {
                                   </div>
                                 </div>
                                 <span className="font-mono text-slate-600 font-medium text-[11px]">
-                                  Rs. {saleType === 'Retail' ? p.retailPrice : p.wholesalePrice}
+                                  Rs. {saleType === 'Wholesale' ? p.wholesalePrice : p.retailPrice}
                                 </span>
                               </button>
                             ))
@@ -365,9 +395,12 @@ export default function DiscountManagementPage() {
                         type="number"
                         min="0"
                         step="10"
-                        placeholder="e.g. 300"
+                        placeholder="Enter discount Rs (e.g. 200)"
                         value={discountAmount}
-                        onChange={e => setDiscountAmount(parseFloat(e.target.value) || 0)}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setDiscountAmount(val === '' ? '' : Math.max(0, parseFloat(val) || 0));
+                        }}
                         required
                         className="font-mono text-base font-bold"
                       />
@@ -388,33 +421,6 @@ export default function DiscountManagementPage() {
                   </form>
                 </CardContent>
               </Card>
-
-              {/* Rules Reference Card */}
-              <div className="p-4 bg-white rounded-xl border border-slate-200 text-xs space-y-2">
-                <div className="font-bold text-slate-900 uppercase tracking-wider text-[11px]">
-                  Discount Application Rules:
-                </div>
-                <ul className="list-disc list-inside space-y-1 text-slate-600 text-[11px]">
-                  <li>
-                    <strong className="text-slate-800">Wholesale + Summer:</strong> Updates all Summer products&apos; Wholesale Discount.
-                  </li>
-                  <li>
-                    <strong className="text-slate-800">Wholesale + Winter:</strong> Updates all Winter products&apos; Wholesale Discount.
-                  </li>
-                  <li>
-                    <strong className="text-slate-800">Retail + Summer:</strong> Updates all Summer products&apos; Retail Discount.
-                  </li>
-                  <li>
-                    <strong className="text-slate-800">Retail + Winter:</strong> Updates all Winter products&apos; Retail Discount.
-                  </li>
-                  <li>
-                    <strong className="text-slate-800">Specific Product:</strong> Updates only the searched product, preserving others.
-                  </li>
-                  <li>
-                    <strong className="text-slate-800">Barcodes:</strong> Barcodes and IDs are never regenerated or modified.
-                  </li>
-                </ul>
-              </div>
             </div>
 
             {/* Right: Affected Products Live Preview Table */}
@@ -433,7 +439,7 @@ export default function DiscountManagementPage() {
                       </CardDescription>
                     </div>
                     <Badge variant="secondary" size="sm">
-                      {saleType} Discount: Rs. {discountAmount}
+                      {saleType ? (saleType === 'All' ? 'All Channels' : saleType) : 'Sale Type Pending'} Discount: Rs. {Number(discountAmount) || 0}
                     </Badge>
                   </div>
                 </CardHeader>
@@ -459,19 +465,24 @@ export default function DiscountManagementPage() {
                         ) : (
                           targetProducts.map(prod => {
                             const season = getProductSeason(prod);
+                            const isAllMode = saleType === 'All';
                             const originalRate =
                               saleType === 'Retail'
                                 ? prod.retailPrice
                                 : saleType === 'Wholesale'
                                 ? prod.wholesalePrice
-                                : (prod.khataPrice || 0);
+                                : saleType === 'Khata Sale'
+                                ? (prod.khataPrice || 0)
+                                : prod.retailPrice;
                             const currentDiscount =
                               saleType === 'Retail'
                                 ? prod.retailDiscount || 0
                                 : saleType === 'Wholesale'
                                 ? prod.wholesaleDiscount || 0
-                                : prod.khataDiscount || 0;
-                            const newDiscount = Math.max(0, discountAmount || 0);
+                                : saleType === 'Khata Sale'
+                                ? prod.khataDiscount || 0
+                                : Math.max(prod.retailDiscount || 0, prod.wholesaleDiscount || 0, prod.khataDiscount || 0);
+                            const newDiscount = Math.max(0, Number(discountAmount) || 0);
                             const projectedFinal = Math.max(0, originalRate - newDiscount);
 
                             return (
@@ -497,11 +508,25 @@ export default function DiscountManagementPage() {
                                 </td>
 
                                 <td className="py-2.5 px-3 text-right font-medium text-slate-600">
-                                  Rs. {originalRate.toLocaleString()}
+                                  {isAllMode ? (
+                                    <div className="space-y-0.5 text-[11px]">
+                                      <div><span className="text-slate-400 font-mono">R:</span> Rs. {prod.retailPrice.toLocaleString()}</div>
+                                      <div><span className="text-slate-400 font-mono">W:</span> Rs. {prod.wholesalePrice.toLocaleString()}</div>
+                                      <div><span className="text-slate-400 font-mono">K:</span> Rs. {(prod.khataPrice || 0).toLocaleString()}</div>
+                                    </div>
+                                  ) : (
+                                    `Rs. ${originalRate.toLocaleString()}`
+                                  )}
                                 </td>
 
                                 <td className="py-2.5 px-3 text-right">
-                                  {currentDiscount > 0 ? (
+                                  {isAllMode ? (
+                                    <div className="space-y-0.5 text-[11px]">
+                                      <div className={prod.retailDiscount ? "text-emerald-600 font-bold" : "text-slate-400"}><span className="text-slate-400 font-mono">R:</span> Rs. {(prod.retailDiscount || 0).toLocaleString()}</div>
+                                      <div className={prod.wholesaleDiscount ? "text-cyan-600 font-bold" : "text-slate-400"}><span className="text-slate-400 font-mono">W:</span> Rs. {(prod.wholesaleDiscount || 0).toLocaleString()}</div>
+                                      <div className={prod.khataDiscount ? "text-amber-600 font-bold" : "text-slate-400"}><span className="text-slate-400 font-mono">K:</span> Rs. {(prod.khataDiscount || 0).toLocaleString()}</div>
+                                    </div>
+                                  ) : currentDiscount > 0 ? (
                                     <span className="font-bold text-emerald-600">
                                       Rs. {currentDiscount.toLocaleString()}
                                     </span>
@@ -515,7 +540,15 @@ export default function DiscountManagementPage() {
                                 </td>
 
                                 <td className="py-2.5 px-3 text-right font-black text-slate-900 font-mono">
-                                  Rs. {projectedFinal.toLocaleString()}
+                                  {isAllMode ? (
+                                    <div className="space-y-0.5 text-[11px]">
+                                      <div><span className="text-slate-400 font-mono">R:</span> Rs. {Math.max(0, prod.retailPrice - newDiscount).toLocaleString()}</div>
+                                      <div><span className="text-slate-400 font-mono">W:</span> Rs. {Math.max(0, prod.wholesalePrice - newDiscount).toLocaleString()}</div>
+                                      <div><span className="text-slate-400 font-mono">K:</span> Rs. {Math.max(0, (prod.khataPrice || 0) - newDiscount).toLocaleString()}</div>
+                                    </div>
+                                  ) : (
+                                    `Rs. ${projectedFinal.toLocaleString()}`
+                                  )}
                                 </td>
                               </tr>
                             );

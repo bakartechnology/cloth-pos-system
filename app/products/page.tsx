@@ -24,6 +24,7 @@ import { productsService } from '@/services/productsService';
 import { useToast } from '@/context/ToastContext';
 import { EditProductModal } from '@/components/products/EditProductModal';
 import { Product, ProductCategory, UnitType } from '@/types';
+import { BOTH_FABRIC_CATEGORIES, BOTH_PACKAGING_UNITS } from '@/data/fabricCategories';
 
 export default function ProductsPage() {
   const { toast } = useToast();
@@ -56,24 +57,12 @@ export default function ProductsPage() {
 
   const categories: (string | ProductCategory)[] = [
     'All',
-    'Lawn',
-    'Cotton',
-    'Khaddar',
-    'Wash & Wear',
-    'Unstitched',
-    'Suit',
-    'Thaan',
-    'Cut Piece',
-    'Silk & Chiffon',
+    ...Array.from(new Set([...products.map(p => p.category), ...BOTH_FABRIC_CATEGORIES])).filter(Boolean),
   ];
 
   const units: (string | UnitType)[] = [
     'All',
-    'Unstitched Box',
-    'Suit Packet',
-    'Thaan',
-    'Meter',
-    'Cut Piece',
+    ...Array.from(new Set([...products.map(p => p.unit), ...BOTH_PACKAGING_UNITS])).filter(Boolean),
   ];
 
   const handleDeleteProduct = (id: string, name: string) => {

@@ -363,18 +363,17 @@ export function Header({ onOpenMobileMenu, onOpenSearch }: HeaderProps) {
               )}
 
               <div className="pt-2 border-t border-[#DCE3E0]">
-                <Link
-                  href="/login"
-                  prefetch={false}
+                <button
+                  type="button"
                   onClick={() => {
-                    logout();
                     setIsRoleMenuOpen(false);
+                    logout();
                   }}
-                  className="flex items-center gap-2 px-3 py-2 text-xs text-[#66726D] hover:text-[#17211D] rounded-xl hover:bg-[#F0F4F2] transition-colors"
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-[#66726D] hover:text-[#17211D] rounded-xl hover:bg-[#F0F4F2] transition-colors cursor-pointer"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                   <span>Switch Account / Sign In Screen</span>
-                </Link>
+                </button>
               </div>
             </div>
           )}

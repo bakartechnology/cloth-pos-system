@@ -85,7 +85,7 @@ export const productsService = {
   },
 
   applyBulkDiscount(params: {
-    saleType: 'Retail' | 'Wholesale' | 'Khata' | 'Khata Sale';
+    saleType: 'Retail' | 'Wholesale' | 'Khata' | 'Khata Sale' | 'All';
     category: 'All' | 'Summer' | 'Winter';
     discountAmount: number;
     productId?: string;
@@ -94,9 +94,10 @@ export const productsService = {
     const cleanDiscount = Math.max(0, params.discountAmount);
     let count = 0;
     const updatedProducts: Product[] = [];
-    const isKhata = params.saleType === 'Khata' || params.saleType === 'Khata Sale';
-    const isRetail = params.saleType === 'Retail';
-    const isWholesale = params.saleType === 'Wholesale';
+    const isAll = params.saleType === 'All';
+    const isKhata = isAll || params.saleType === 'Khata' || params.saleType === 'Khata Sale';
+    const isRetail = isAll || params.saleType === 'Retail';
+    const isWholesale = isAll || params.saleType === 'Wholesale';
 
     const updated = products.map(p => {
       // If productId is provided, only update that product

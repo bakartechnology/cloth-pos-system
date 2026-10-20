@@ -53,6 +53,7 @@ interface NavCategory {
   href: string;
   icon: React.ElementType;
   permission?: PermissionKey;
+  adminOnly?: boolean;
   subItems?: SubNavItem[];
 }
 
@@ -80,6 +81,7 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
       href: '/dashboard',
       icon: LayoutGrid,
       permission: 'dashboard_view',
+      adminOnly: true,
     },
     {
       id: 'retail-pos',
@@ -293,6 +295,9 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
   };
 
   const isCategoryAllowed = (item: NavCategory) => {
+    if (item.id === 'dashboard' || item.adminOnly) {
+      return currentStaff?.role === 'Admin';
+    }
     if (item.subItems && item.subItems.length > 0) {
       return item.subItems.some(sub => !sub.permission || hasPermission(sub.permission));
     }
@@ -304,6 +309,16 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
     const firstAllowed = item.subItems.find(sub => !sub.permission || hasPermission(sub.permission));
     return firstAllowed ? firstAllowed.href : item.href;
   };
+
+  const homeRoute = currentStaff?.role === 'Admin'
+    ? '/dashboard'
+    : currentStaff?.role === 'Retail Cashier' || currentStaff?.permissions.includes('pos_retail')
+    ? '/pos/retail'
+    : currentStaff?.role === 'Wholesale Cashier' || currentStaff?.permissions.includes('pos_wholesale')
+    ? '/pos/wholesale'
+    : currentStaff?.role === 'Khata Staff' || currentStaff?.permissions.includes('pos_khata')
+    ? '/pos/khata'
+    : '/login';
 
   const renderSidebarContent = (isMobileDrawer: boolean) => {
     const collapsed = isMobileDrawer ? false : isCollapsed;
@@ -345,7 +360,7 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
             /* Expanded state: Brand link and collapse button */
             <>
               <Link
-                href="/dashboard"
+                href={homeRoute}
                 prefetch={false}
                 onClick={() => {
                   if (isMobileDrawer) onMobileClose();
@@ -524,12 +539,7 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  logout();
-                  if (typeof window !== 'undefined') {
-                    window.location.href = '/login';
-                  }
-                }}
+                onClick={() => logout()}
                 className="p-1.5 text-[#C23D45] hover:bg-rose-50 rounded-lg transition-colors cursor-pointer shrink-0"
                 title="Log out of session"
               >
@@ -539,12 +549,7 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
           ) : (
             <button
               type="button"
-              onClick={() => {
-                logout();
-                if (typeof window !== 'undefined') {
-                  window.location.href = '/login';
-                }
-              }}
+              onClick={() => logout()}
               className="w-full flex justify-center py-2 text-[#C23D45] hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
               title={`Log out (${currentStaff?.name || 'Staff'})`}
             >

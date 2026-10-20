@@ -344,6 +344,30 @@ export default function SettingsPage() {
                       onChange={e => setSettings({ ...settings, lowStockThreshold: parseInt(e.target.value, 10) || 10 })}
                     />
                   </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                      Default Fabric Gender / Department (Add Fabric Default)
+                    </label>
+                    <Select
+                      value={settings.defaultFabricGender || ''}
+                      onChange={e => {
+                        const val = e.target.value as 'Male' | 'Female' | 'Both' | '';
+                        setSettings({
+                          ...settings,
+                          defaultFabricGender: val ? (val as 'Male' | 'Female' | 'Both') : undefined,
+                        });
+                      }}
+                    >
+                      <option value="">-- No Default Selected (Choose Male, Female or Both) --</option>
+                      <option value="Male">👔 Male (Default to Men&apos;s Fabrics & Packaging)</option>
+                      <option value="Female">👗 Female (Default to Women&apos;s Fabrics & Packaging)</option>
+                      <option value="Both">👥 Both / All (Show Both Male & Female Fabrics & Packaging)</option>
+                    </Select>
+                    <span className="text-[11px] text-slate-400 mt-1 block">
+                      Choose which gender/department Add Fabric should default to, then click &quot;Save Store Preferences&quot; below to keep it saved permanently.
+                    </span>
+                  </div>
                 </div>
               </CardContent>
             </Card>

@@ -24,18 +24,33 @@ export const MALE_FABRIC_CATEGORIES = [
   'Winter Wash & Wear',
 ];
 
-// Female Fabrics
+// Female Fabrics (Summer, Luxury, Formal & Winter)
 export const FEMALE_FABRIC_CATEGORIES = [
   'Lawn',
+  'Digital Printed Lawn',
+  'Embroidered Lawn',
   'Chiffon',
-  'Georgette',
+  'Pure Crinkle Chiffon',
   'Silk',
-  'Satin',
+  'Raw Silk',
+  'Shamooz Silk',
+  'Grip Silk',
   'Organza',
-  'Net',
-  'Cambric',
+  'Velvet',
+  'Micro Velvet 9000',
+  'Khaddar',
   'Marina',
+  'Linen',
+  'Karandi',
+  'Cotton',
+  'Cambric',
   'Jacquard',
+  'Banarsi / Brocade',
+  'Net',
+  'Tissue / Tissue Silk',
+  'Satin',
+  'Georgette',
+  'Pashmina / Woolen Shawl',
   'Embroidered Fabric',
   'Printed Fabric',
   'Plain Fabric',
@@ -59,19 +74,19 @@ export const BOTH_FABRIC_CATEGORIES = Array.from(
 export const MALE_PACKAGING_UNITS = [
   'Suit Packet (Standard 4.5m / 4.0m)',
   'Unstitched Box',
-  'Thaan',
+  'Thaan (Meter / Yard)',
   'Suit (4.5m)',
-  'Cut Piece',
 ];
 
 // Packaging / Unit Types for Female
 export const FEMALE_PACKAGING_UNITS = [
-  '3-Piece Box (3PC)',
+  '3-Piece Box (Dabba)',
+  '3-Piece Suit (3PC)',
+  '2-Piece Box (Dabba)',
   '2-Piece Suit (2PC)',
-  '1-Piece',
   'Stitched Suit',
-  'Thaan',
-  'Cut Piece',
+  '1-Piece',
+  'Thaan (Meter / Yard)',
 ];
 
 // Combined packaging / unit types

@@ -45,7 +45,7 @@ export default function SettingsPage() {
   const [accountNumber, setAccountNumber] = useState('');
   const [iban, setIban] = useState('');
   const [branchName, setBranchName] = useState('');
-  const [bankChannels, setBankChannels] = useState<POSChannel[]>(['Retail', 'Wholesale', 'Khata']);
+  const [bankChannels, setBankChannels] = useState<POSChannel[]>(['Retail', 'Wholesale']);
   const [bankIsActive, setBankIsActive] = useState(true);
 
   const openAddBankModal = () => {
@@ -55,7 +55,7 @@ export default function SettingsPage() {
     setAccountNumber('');
     setIban('');
     setBranchName('');
-    setBankChannels(['Retail', 'Wholesale', 'Khata']);
+    setBankChannels(['Retail', 'Wholesale']);
     setBankIsActive(true);
     setIsBankModalOpen(true);
   };
@@ -67,7 +67,7 @@ export default function SettingsPage() {
     setAccountNumber(bank.accountNumber);
     setIban(bank.iban || '');
     setBranchName(bank.branchName || '');
-    setBankChannels(bank.channels && bank.channels.length > 0 ? bank.channels : ['Retail', 'Wholesale', 'Khata']);
+    setBankChannels(bank.channels && bank.channels.length > 0 ? bank.channels.filter(c => c !== 'Khata') : ['Retail', 'Wholesale']);
     setBankIsActive(bank.isActive !== false);
     setIsBankModalOpen(true);
   };
@@ -86,7 +86,7 @@ export default function SettingsPage() {
     if (bankChannels.length === 0) {
       toast({
         title: 'Select At Least One Channel',
-        description: 'Please assign this bank account to Retail, Wholesale, or Khata POS.',
+        description: 'Please assign this bank account to Retail or Wholesale POS.',
         type: 'warning',
       });
       return;
@@ -345,27 +345,101 @@ export default function SettingsPage() {
                     />
                   </div>
 
+                  {/* Store Business Mode (Retail, Wholesale, or Both) */}
+                  <div className="sm:col-span-2 p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                    <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
+                      Store Operation & Channel Mode (System-wide Visibility) *
+                    </label>
+                    <p className="text-xs text-slate-500">
+                      Select your store model. Selecting &quot;Wholesale Only&quot; hides retail registers and rates across the system; selecting &quot;Retail Only&quot; hides wholesale channels; &quot;Both&quot; keeps full dual-channel features active.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setSettings({ ...settings, storeBusinessMode: 'Both' })}
+                        className={`p-3 rounded-xl border text-left flex flex-col justify-between transition-all cursor-pointer ${
+                          (settings.storeBusinessMode || 'Both') === 'Both'
+                            ? 'bg-[#125E45] text-white border-[#125E45] shadow-xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-base">🔄</span>
+                          {(settings.storeBusinessMode || 'Both') === 'Both' && <Check className="w-4 h-4 text-white" />}
+                        </div>
+                        <span className="font-bold text-xs">Both (Retail & Wholesale)</span>
+                        <span className={`text-[10px] mt-1 ${
+                          (settings.storeBusinessMode || 'Both') === 'Both' ? 'text-emerald-100' : 'text-slate-500'
+                        }`}>
+                          Full dual-channel access enabled
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setSettings({ ...settings, storeBusinessMode: 'Retail' })}
+                        className={`p-3 rounded-xl border text-left flex flex-col justify-between transition-all cursor-pointer ${
+                          settings.storeBusinessMode === 'Retail'
+                            ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-base">🛒</span>
+                          {settings.storeBusinessMode === 'Retail' && <Check className="w-4 h-4 text-white" />}
+                        </div>
+                        <span className="font-bold text-xs">Retail Store Only</span>
+                        <span className={`text-[10px] mt-1 ${
+                          settings.storeBusinessMode === 'Retail' ? 'text-blue-100' : 'text-slate-500'
+                        }`}>
+                          Wholesale channels & rates hidden
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setSettings({ ...settings, storeBusinessMode: 'Wholesale' })}
+                        className={`p-3 rounded-xl border text-left flex flex-col justify-between transition-all cursor-pointer ${
+                          settings.storeBusinessMode === 'Wholesale'
+                            ? 'bg-cyan-700 text-white border-cyan-700 shadow-xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-base">📦</span>
+                          {settings.storeBusinessMode === 'Wholesale' && <Check className="w-4 h-4 text-white" />}
+                        </div>
+                        <span className="font-bold text-xs">Wholesale Store Only</span>
+                        <span className={`text-[10px] mt-1 ${
+                          settings.storeBusinessMode === 'Wholesale' ? 'text-cyan-100' : 'text-slate-500'
+                        }`}>
+                          Retail counter POS & rates hidden
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Default Fabric Gender Department */}
                   <div className="sm:col-span-2">
                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                       Default Fabric Gender / Department (Add Fabric Default)
                     </label>
                     <Select
-                      value={settings.defaultFabricGender || ''}
+                      value={settings.defaultFabricGender || 'Both'}
                       onChange={e => {
-                        const val = e.target.value as 'Male' | 'Female' | 'Both' | '';
+                        const val = e.target.value as 'Male' | 'Female' | 'Both';
                         setSettings({
                           ...settings,
-                          defaultFabricGender: val ? (val as 'Male' | 'Female' | 'Both') : undefined,
+                          defaultFabricGender: val,
                         });
                       }}
                     >
-                      <option value="">-- No Default Selected (Choose Male, Female or Both) --</option>
-                      <option value="Male">👔 Male (Default to Men&apos;s Fabrics & Packaging)</option>
-                      <option value="Female">👗 Female (Default to Women&apos;s Fabrics & Packaging)</option>
                       <option value="Both">👥 Both / All (Show Both Male & Female Fabrics & Packaging)</option>
+                      <option value="Female">👗 Female (Default to Women&apos;s Fabrics & Packaging)</option>
+                      <option value="Male">👔 Male (Default to Men&apos;s Fabrics & Packaging)</option>
                     </Select>
                     <span className="text-[11px] text-slate-400 mt-1 block">
-                      Choose which gender/department Add Fabric should default to, then click &quot;Save Store Preferences&quot; below to keep it saved permanently.
+                      Choose which gender/department Add Fabric should default to. Click &quot;Save Store Preferences&quot; below to apply changes.
                     </span>
                   </div>
                 </div>
@@ -390,12 +464,12 @@ export default function SettingsPage() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* 1. Retail Card Terminal */}
+                {/* Retail Card Terminal */}
                 <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="w-2.5 h-2.5 rounded-full bg-[#125E45]" />
-                      <h4 className="text-xs font-bold text-slate-900">1. Retail POS Card Terminal</h4>
+                      <h4 className="text-xs font-bold text-slate-900">Retail POS Card Terminal</h4>
                     </div>
                     <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
                       <input
@@ -491,210 +565,8 @@ export default function SettingsPage() {
                   )}
                 </div>
 
-                {/* 2. Wholesale Card Terminal */}
-                <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full bg-blue-600" />
-                      <h4 className="text-xs font-bold text-slate-900">2. Wholesale POS Card Terminal</h4>
-                    </div>
-                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={settings.wholesaleCardTerminal?.enabled ?? false}
-                        onChange={e =>
-                          setSettings({
-                            ...settings,
-                            wholesaleCardTerminal: {
-                              ...settings.wholesaleCardTerminal,
-                              enabled: e.target.checked,
-                              terminalName: settings.wholesaleCardTerminal?.terminalName || 'Wholesale B2B Terminal',
-                              connectionType: settings.wholesaleCardTerminal?.connectionType || 'Wired (USB / Ethernet)',
-                              deviceModel: settings.wholesaleCardTerminal?.deviceModel || 'Ingenico Move 5000',
-                              ipOrPort: settings.wholesaleCardTerminal?.ipOrPort || 'COM3',
-                              merchantId: settings.wholesaleCardTerminal?.merchantId || 'MID-ALNOOR-WS01',
-                              autoPrintSlip: settings.wholesaleCardTerminal?.autoPrintSlip ?? true,
-                            },
-                          })
-                        }
-                        className="rounded text-blue-600 focus:ring-blue-500 accent-blue-600"
-                      />
-                      <span>Enable Wholesale Terminal</span>
-                    </label>
-                  </div>
-
-                  {settings.wholesaleCardTerminal?.enabled && (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                          Connection Interface
-                        </label>
-                        <select
-                          value={settings.wholesaleCardTerminal?.connectionType || 'Wired (USB / Ethernet)'}
-                          onChange={e =>
-                            setSettings({
-                              ...settings,
-                              wholesaleCardTerminal: {
-                                ...settings.wholesaleCardTerminal,
-                                connectionType: e.target.value as any,
-                              },
-                            })
-                          }
-                          className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-white"
-                        >
-                          <option value="Wired (USB / Ethernet)">Wired (USB / Ethernet)</option>
-                          <option value="Wireless (Wi-Fi / Bluetooth)">Wireless (Wi-Fi / Bluetooth)</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                          Terminal Model / Brand
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. Ingenico / Verifone"
-                          value={settings.wholesaleCardTerminal?.deviceModel || ''}
-                          onChange={e =>
-                            setSettings({
-                              ...settings,
-                              wholesaleCardTerminal: {
-                                ...settings.wholesaleCardTerminal,
-                                deviceModel: e.target.value,
-                              },
-                            })
-                          }
-                          className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-white"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                          IP Address / COM Port
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. COM3 or 192.168.1.122:8080"
-                          value={settings.wholesaleCardTerminal?.ipOrPort || ''}
-                          onChange={e =>
-                            setSettings({
-                              ...settings,
-                              wholesaleCardTerminal: {
-                                ...settings.wholesaleCardTerminal,
-                                ipOrPort: e.target.value,
-                              },
-                            })
-                          }
-                          className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-white"
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* 3. Khata Card Terminal */}
-                <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full bg-amber-600" />
-                      <h4 className="text-xs font-bold text-slate-900">3. Khata & Ledger Card Terminal</h4>
-                    </div>
-                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={settings.khataCardTerminal?.enabled ?? false}
-                        onChange={e =>
-                          setSettings({
-                            ...settings,
-                            khataCardTerminal: {
-                              ...settings.khataCardTerminal,
-                              enabled: e.target.checked,
-                              terminalName: settings.khataCardTerminal?.terminalName || 'Recovery & Khata Terminal',
-                              connectionType: settings.khataCardTerminal?.connectionType || 'Wireless (Wi-Fi / Bluetooth)',
-                              deviceModel: settings.khataCardTerminal?.deviceModel || 'PAX D210 Mobile POS',
-                              ipOrPort: settings.khataCardTerminal?.ipOrPort || '192.168.1.125:8080',
-                              merchantId: settings.khataCardTerminal?.merchantId || 'MID-ALNOOR-KH01',
-                              autoPrintSlip: settings.khataCardTerminal?.autoPrintSlip ?? true,
-                            },
-                          })
-                        }
-                        className="rounded text-amber-600 focus:ring-amber-500 accent-amber-600"
-                      />
-                      <span>Enable Khata Terminal</span>
-                    </label>
-                  </div>
-
-                  {settings.khataCardTerminal?.enabled && (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                          Connection Interface
-                        </label>
-                        <select
-                          value={settings.khataCardTerminal?.connectionType || 'Wireless (Wi-Fi / Bluetooth)'}
-                          onChange={e =>
-                            setSettings({
-                              ...settings,
-                              khataCardTerminal: {
-                                ...settings.khataCardTerminal,
-                                connectionType: e.target.value as any,
-                              },
-                            })
-                          }
-                          className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-white"
-                        >
-                          <option value="Wireless (Wi-Fi / Bluetooth)">Wireless (Wi-Fi / Bluetooth)</option>
-                          <option value="Wired (USB / Ethernet)">Wired (USB / Ethernet)</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                          Terminal Model / Brand
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. PAX D210 Mobile POS"
-                          value={settings.khataCardTerminal?.deviceModel || ''}
-                          onChange={e =>
-                            setSettings({
-                              ...settings,
-                              khataCardTerminal: {
-                                ...settings.khataCardTerminal,
-                                deviceModel: e.target.value,
-                              },
-                            })
-                          }
-                          className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-white"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                          IP Address / COM Port
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. 192.168.1.125:8080"
-                          value={settings.khataCardTerminal?.ipOrPort || ''}
-                          onChange={e =>
-                            setSettings({
-                              ...settings,
-                              khataCardTerminal: {
-                                ...settings.khataCardTerminal,
-                                ipOrPort: e.target.value,
-                              },
-                            })
-                          }
-                          className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-white"
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-
                 <div className="text-[11px] text-slate-500 bg-slate-100/70 p-3 rounded-lg leading-relaxed">
-                  💡 <strong>Card Payment Workflow:</strong> When initiating Card checkout, total payable amount is dispatched to the active terminal. The customer taps (NFC Contactless) or inserts EMV chip card, enters secret PIN, and the terminal prints authorized transaction slips automatically for Retail POS, Wholesale POS, or Khata settlements.
+                  💡 <strong>Card Payment Workflow:</strong> When initiating Card checkout, total payable amount is dispatched to the active terminal. The customer taps (NFC Contactless) or inserts EMV chip card, enters secret PIN, and the terminal prints authorized transaction slips automatically for Retail POS.
                 </div>
               </CardContent>
             </Card>
@@ -708,7 +580,7 @@ export default function SettingsPage() {
                       <Building className="w-4 h-4 text-emerald-600" /> Bank Accounts & POS Channel Assignment
                     </CardTitle>
                     <CardDescription>
-                      Configure bank receiving accounts for online/IBFT transfers and assign them to Retail, Wholesale, or Khata POS counters.
+                      Configure bank receiving accounts for online/IBFT transfers and assign them to Retail or Wholesale POS counters.
                     </CardDescription>
                   </div>
                   <Button
@@ -734,7 +606,7 @@ export default function SettingsPage() {
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {settings.bankAccounts.map(b => {
-                      const channels = b.channels && b.channels.length > 0 ? b.channels : ['Retail', 'Wholesale', 'Khata'];
+                      const channels = b.channels && b.channels.length > 0 ? b.channels.filter(c => c !== 'Khata') : ['Retail', 'Wholesale'];
                       return (
                         <div
                           key={b.id}
@@ -798,11 +670,6 @@ export default function SettingsPage() {
                               {channels.includes('Wholesale') && (
                                 <span className="bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full border border-emerald-200/60">
                                   Wholesale POS
-                                </span>
-                              )}
-                              {channels.includes('Khata') && (
-                                <span className="bg-amber-50 text-amber-700 font-bold px-2 py-0.5 rounded-full border border-amber-200/60">
-                                  Khata POS
                                 </span>
                               )}
                             </div>
@@ -972,10 +839,17 @@ export default function SettingsPage() {
                   <div className="flex items-center gap-1">
                     <button
                       type="button"
-                      onClick={() => setBankChannels(['Retail', 'Wholesale', 'Khata'])}
+                      onClick={() => setBankChannels(['Retail', 'Wholesale'])}
                       className="text-[10px] bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 px-2 py-1 rounded font-semibold transition-colors"
                     >
-                      All 3 Channels
+                      Both Channels
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBankChannels(['Retail'])}
+                      className="text-[10px] bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 px-2 py-1 rounded font-semibold transition-colors"
+                    >
+                      Retail Only
                     </button>
                     <button
                       type="button"
@@ -984,20 +858,13 @@ export default function SettingsPage() {
                     >
                       Wholesale Only
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setBankChannels(['Khata'])}
-                      className="text-[10px] bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 px-2 py-1 rounded font-semibold transition-colors"
-                    >
-                      Khata Only
-                    </button>
                   </div>
                 </div>
                 <p className="text-[11px] text-slate-500 leading-normal">
-                  Chunain ke yeh bank account Retail POS finalize mein aaye, Wholesale finalize mein aaye, ya Khata POS finalize mein aaye (ya teeno ya koi bhi 2 combination):
+                  Chunain ke yeh bank account Retail POS finalize modal mein aaye, Wholesale POS finalize modal mein aaye, ya dono mein aaye:
                 </p>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
                   <label
                     className={`flex items-center gap-2.5 p-3 rounded-lg border cursor-pointer transition-all ${
                       bankChannels.includes('Retail')
@@ -1044,32 +911,7 @@ export default function SettingsPage() {
                     />
                     <div className="text-left">
                       <div className="text-xs font-bold">Wholesale POS</div>
-                      <div className="text-[10px] text-slate-500">Tax Invoice Modal</div>
-                    </div>
-                  </label>
-
-                  <label
-                    className={`flex items-center gap-2.5 p-3 rounded-lg border cursor-pointer transition-all ${
-                      bankChannels.includes('Khata')
-                        ? 'bg-amber-50 border-amber-300 text-amber-900 shadow-sm'
-                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100/60'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={bankChannels.includes('Khata')}
-                      onChange={e => {
-                        if (e.target.checked) {
-                          setBankChannels(prev => [...prev, 'Khata']);
-                        } else {
-                          setBankChannels(prev => prev.filter(c => c !== 'Khata'));
-                        }
-                      }}
-                      className="rounded text-amber-600 focus:ring-amber-500 w-4 h-4"
-                    />
-                    <div className="text-left">
-                      <div className="text-xs font-bold">Khata POS</div>
-                      <div className="text-[10px] text-slate-500">Credit Bill Modal</div>
+                      <div className="text-[10px] text-slate-500">Wholesale Invoice Modal</div>
                     </div>
                   </label>
                 </div>

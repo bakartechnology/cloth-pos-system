@@ -138,6 +138,7 @@ export const salesService = {
       productName: item.product.name,
       sku: item.product.sku,
       unit: item.product.unit,
+      selectedUnit: item.selectedUnit,
       quantity: item.quantity,
       price: item.price,
       discountPerUnit: item.discountPerUnit || 0,
@@ -203,21 +204,25 @@ export const salesService = {
     params.cartItems.forEach(item => {
       const prod = productsService.getById(item.product.id);
       const prevStock = prod ? prod.stock : 0;
-      const newStock = Math.max(0, prevStock - item.quantity);
 
-      productsService.updateStock(item.product.id, -item.quantity);
+      const isBox = prod?.packagingConfig?.type === 'box' || item.product.packagingConfig?.type === 'box';
+      const suitsPerBox = prod?.packagingConfig?.suitsPerBox || item.product.packagingConfig?.suitsPerBox || 1;
+      const deduction = (isBox && item.selectedUnit === 'Box') ? item.quantity * suitsPerBox : item.quantity;
+      const newStock = Math.max(0, prevStock - deduction);
+
+      productsService.updateStock(item.product.id, -deduction);
 
       inventoryService.recordMovement({
         productId: item.product.id,
         productName: item.product.name,
         sku: item.product.sku,
         movementType: 'Sale',
-        quantityChange: -item.quantity,
+        quantityChange: -deduction,
         previousStock: prevStock,
         newStock,
         staffName: params.staffName,
         referenceId: invoiceNumber,
-        notes: `${params.saleType} sale invoice #${invoiceNumber}`,
+        notes: `${params.saleType} sale invoice #${invoiceNumber}${isBox ? ` (${item.quantity} ${item.selectedUnit || 'unit'}${item.selectedUnit === 'Box' ? ` = ${deduction} suits` : ''})` : ''}`,
       });
     });
 

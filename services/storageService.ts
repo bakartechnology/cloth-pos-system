@@ -1,4 +1,4 @@
-import { Product, Pandi } from '@/types';
+import { Product, Pandi, StoreSettings } from '@/types';
 import {
   INITIAL_PRODUCTS,
   INITIAL_CUSTOMERS,
@@ -153,12 +153,20 @@ class StorageService {
     this.setItem(KEYS.MOVEMENTS, data);
   }
 
-  getSettings() {
-    return this.getItem(KEYS.SETTINGS, INITIAL_SETTINGS);
+  getSettings(): StoreSettings {
+    const s = this.getItem<StoreSettings>(KEYS.SETTINGS, INITIAL_SETTINGS);
+    return {
+      ...s,
+      defaultFabricGender: s.defaultFabricGender || 'Both',
+      storeBusinessMode: s.storeBusinessMode || 'Both',
+    };
   }
 
-  setSettings(data: typeof INITIAL_SETTINGS) {
+  setSettings(data: StoreSettings) {
     this.setItem(KEYS.SETTINGS, data);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('anf_settings_updated'));
+    }
   }
 
   getPandis(): Pandi[] {

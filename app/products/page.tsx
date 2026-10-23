@@ -220,8 +220,8 @@ export default function ProductsPage() {
                         <th className="py-3 px-4">Unit</th>
                         <th className="py-3 px-4 text-right">Retail Rate</th>
                         <th className="py-3 px-4 text-right">Wholesale Rate</th>
-                        <th className="py-3 px-4 text-right">Khata Rate</th>
-                        <th className="py-3 px-4 text-center">Available Stock</th>
+                        <th className="py-3 px-4 text-center text-cyan-900">Wholesale Stock</th>
+                        <th className="py-3 px-4 text-center text-blue-900">Retail Stock</th>
                         <th className="py-3 px-4 text-center">Status</th>
                         <th className="py-3 px-4 text-right">Actions</th>
                       </tr>
@@ -231,6 +231,8 @@ export default function ProductsPage() {
                         const isLow = prod.stock <= prod.minStockAlert;
                         const isOut = prod.stock <= 0;
                         const season = prod.seasonCategory || (['Khaddar', 'Wash & Wear'].includes(prod.category) ? 'Winter' : 'Summer');
+                        const wholesaleRate = prod.wholesalePrice || prod.khataPrice || 0;
+                        const wholesaleDisc = prod.wholesaleDiscount || prod.khataDiscount || 0;
 
                         return (
                           <tr key={prod.id} className="hover:bg-slate-50/60 transition-colors">
@@ -248,6 +250,19 @@ export default function ProductsPage() {
                                 >
                                   {season === 'Winter' ? '❄️ Winter' : '☀️ Summer'}
                                 </span>
+                                {prod.channel === 'Wholesale' ? (
+                                  <span className="inline-flex items-center text-[9px] font-extrabold px-1.5 py-0.5 rounded-md bg-cyan-100 text-cyan-900 border border-cyan-200">
+                                    Wholesale Only
+                                  </span>
+                                ) : prod.channel === 'Retail' ? (
+                                  <span className="inline-flex items-center text-[9px] font-extrabold px-1.5 py-0.5 rounded-md bg-blue-100 text-blue-900 border border-blue-200">
+                                    Retail Only
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center text-[9px] font-extrabold px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                    Both POS
+                                  </span>
+                                )}
                               </div>
                               <div className="text-[11px] text-slate-500 mt-0.5">
                                 {prod.supplier}
@@ -265,52 +280,123 @@ export default function ProductsPage() {
                               </Badge>
                             </td>
 
-                            <td className="py-3 px-4 text-slate-600">{prod.unit}</td>
+                             <td className="py-3 px-4 text-slate-600">
+                               {prod.packagingConfig?.type === 'thaan'
+                                 ? (prod.packagingConfig.thaanType === 'Sets' ? 'Sets' : prod.packagingConfig.thaanMeasurement || 'Meter')
+                                 : prod.unit}
+                             </td>
 
-                            <td className="py-3 px-4 text-right">
-                              <div className="font-black text-slate-900">
-                                Rs. {prod.retailPrice.toLocaleString()}
-                              </div>
-                              {(prod.retailDiscount || 0) > 0 && (
-                                <div className="text-[10px] text-emerald-600 font-semibold">
-                                  -Rs. {(prod.retailDiscount || 0).toLocaleString()} (Net: Rs. {(prod.retailPrice - (prod.retailDiscount || 0)).toLocaleString()})
-                                </div>
-                              )}
-                            </td>
+                             <td className="py-3 px-4 text-right">
+                               {prod.retailPrice > 0 ? (
+                                 <>
+                                   <div className="font-black text-slate-900">
+                                     Rs. {prod.retailPrice.toLocaleString()}
+                                   </div>
+                                   {(prod.retailDiscount || 0) > 0 && (
+                                     <div className="text-[10px] text-emerald-600 font-semibold">
+                                       -Rs. {(prod.retailDiscount || 0).toLocaleString()} (Net: Rs. {(prod.retailPrice - (prod.retailDiscount || 0)).toLocaleString()})
+                                     </div>
+                                   )}
+                                 </>
+                               ) : (
+                                 <span className="text-slate-400 font-mono text-[11px] italic">-</span>
+                               )}
+                             </td>
 
-                            <td className="py-3 px-4 text-right">
-                              <div className="font-bold text-cyan-700">
-                                Rs. {prod.wholesalePrice.toLocaleString()}
-                              </div>
-                              {(prod.wholesaleDiscount || 0) > 0 && (
-                                <div className="text-[10px] text-emerald-600 font-semibold">
-                                  -Rs. {(prod.wholesaleDiscount || 0).toLocaleString()} (Net: Rs. {(prod.wholesalePrice - (prod.wholesaleDiscount || 0)).toLocaleString()})
-                                </div>
-                              )}
-                            </td>
+                             <td className="py-3 px-4 text-right">
+                               {wholesaleRate > 0 ? (
+                                 <>
+                                   <div className="font-bold text-cyan-700">
+                                     Rs. {wholesaleRate.toLocaleString()}
+                                   </div>
+                                   {wholesaleDisc > 0 && (
+                                     <div className="text-[10px] text-emerald-600 font-semibold">
+                                       -Rs. {wholesaleDisc.toLocaleString()} (Net: Rs. {(wholesaleRate - wholesaleDisc).toLocaleString()})
+                                     </div>
+                                   )}
+                                 </>
+                               ) : (
+                                 <span className="text-slate-400 font-mono text-[11px] italic">-</span>
+                               )}
+                             </td>
 
-                            <td className="py-3 px-4 text-right">
-                              {prod.khataPrice ? (
-                                <>
-                                  <div className="font-bold text-amber-800">
-                                    Rs. {prod.khataPrice.toLocaleString()}
-                                  </div>
-                                  {(prod.khataDiscount || 0) > 0 && (
-                                    <div className="text-[10px] text-emerald-600 font-semibold">
-                                      -Rs. {(prod.khataDiscount || 0).toLocaleString()} (Net: Rs. {(prod.khataPrice - (prod.khataDiscount || 0)).toLocaleString()})
-                                    </div>
-                                  )}
-                                </>
-                              ) : (
-                                <span className="text-[11px] text-slate-400 italic">Not Set</span>
-                              )}
-                            </td>
+                             {/* Wholesale Stock */}
+                             <td className="py-3 px-4 text-center whitespace-nowrap">
+                               {prod.channel === 'Retail' ? (
+                                 <span className="text-slate-400 font-mono text-xs italic">-</span>
+                               ) : prod.packagingConfig?.type === 'box' && prod.packagingConfig?.wholesaleBoxes !== undefined ? (
+                                 <div>
+                                   <span className={`font-mono font-bold text-xs ${
+                                     prod.packagingConfig.wholesaleBoxes <= 0
+                                       ? 'text-rose-600'
+                                       : prod.packagingConfig.wholesaleBoxes <= (prod.packagingConfig.wholesaleMinStockAlert || prod.minStockAlert)
+                                       ? 'text-amber-600'
+                                       : 'text-cyan-950'
+                                   }`}>
+                                     {prod.packagingConfig.wholesaleBoxes} Boxes
+                                   </span>
+                                   <span className="text-[10px] text-slate-500 block">
+                                     ({prod.packagingConfig.wholesaleBoxes * (prod.packagingConfig.suitsPerBox || 1)} Suits)
+                                   </span>
+                                 </div>
+                               ) : prod.packagingConfig?.type === 'thaan' ? (
+                                 <div>
+                                   <span className="font-mono font-bold text-xs text-cyan-950">
+                                     {prod.packagingConfig.thaanType === 'Sets'
+                                       ? `${prod.stock} Sets`
+                                       : `${prod.stock} ${prod.packagingConfig.thaanMeasurement || 'Meter'}`}
+                                   </span>
+                                   {prod.packagingConfig.totalRolls && prod.packagingConfig.totalRolls > 0 && prod.packagingConfig.thaanType !== 'Sets' ? (
+                                     <span className="text-[10px] text-slate-500 block">
+                                       ({prod.packagingConfig.totalRolls} {prod.packagingConfig.thaanType === '3Thaan' ? 'Bundles' : 'Thaans'})
+                                     </span>
+                                   ) : null}
+                                 </div>
+                               ) : (
+                                 <span className="font-mono font-bold text-slate-800">
+                                   {prod.stock} {prod.unit}
+                                 </span>
+                               )}
+                             </td>
 
-                            <td className="py-3 px-4 text-center font-bold">
-                              <span className={isOut ? 'text-rose-600' : isLow ? 'text-amber-600' : 'text-slate-800'}>
-                                {prod.stock}
-                              </span>
-                            </td>
+                             {/* Retail Stock */}
+                             <td className="py-3 px-4 text-center whitespace-nowrap">
+                               {prod.channel === 'Wholesale' ? (
+                                 <span className="text-slate-400 font-mono text-xs italic">-</span>
+                               ) : prod.packagingConfig?.type === 'box' && prod.packagingConfig?.retailBoxes !== undefined ? (
+                                 <div>
+                                   <span className={`font-mono font-bold text-xs ${
+                                     prod.packagingConfig.retailBoxes <= 0
+                                       ? 'text-rose-600'
+                                       : prod.packagingConfig.retailBoxes <= (prod.packagingConfig.retailMinStockAlert || prod.minStockAlert)
+                                       ? 'text-amber-600'
+                                       : 'text-blue-950'
+                                   }`}>
+                                     {prod.packagingConfig.retailBoxes} Boxes
+                                   </span>
+                                   <span className="text-[10px] text-slate-500 block">
+                                     ({prod.packagingConfig.retailBoxes * (prod.packagingConfig.retailSuitsPerBox || prod.packagingConfig.suitsPerBox || 1)} Suits)
+                                   </span>
+                                 </div>
+                               ) : prod.packagingConfig?.type === 'thaan' ? (
+                                 <div>
+                                   <span className="font-mono font-bold text-xs text-blue-950">
+                                     {prod.packagingConfig.thaanType === 'Sets'
+                                       ? `${prod.stock} Sets`
+                                       : `${prod.stock} ${prod.packagingConfig.thaanMeasurement || 'Meter'}`}
+                                   </span>
+                                   {prod.packagingConfig.totalRolls && prod.packagingConfig.totalRolls > 0 && prod.packagingConfig.thaanType !== 'Sets' ? (
+                                     <span className="text-[10px] text-slate-500 block">
+                                       ({prod.packagingConfig.totalRolls} {prod.packagingConfig.thaanType === '3Thaan' ? 'Bundles' : 'Thaans'})
+                                     </span>
+                                   ) : null}
+                                 </div>
+                               ) : (
+                                 <span className="font-mono font-bold text-slate-800">
+                                   {prod.stock} {prod.unit}
+                                 </span>
+                               )}
+                             </td>
 
                             <td className="py-3 px-4 text-center">
                               {isOut ? (

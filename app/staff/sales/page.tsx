@@ -65,9 +65,8 @@ export default function StaffSalesTrackingPage() {
                     <tr className="border-b border-slate-200 bg-slate-50/75 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
                       <th className="py-3 px-4">Staff Member</th>
                       <th className="py-3 px-4">Role & Station</th>
-                      <th className="py-3 px-4 text-right">Retail Sales</th>
-                      <th className="py-3 px-4 text-right">Wholesale Sales</th>
-                      <th className="py-3 px-4 text-right">Khata Sales</th>
+                      <th className="py-3 px-4 text-right">Retail POS Sales</th>
+                      <th className="py-3 px-4 text-right">Wholesale POS Sales</th>
                       <th className="py-3 px-4 text-right">Collections Recovered</th>
                       <th className="py-3 px-4 text-center">Invoices</th>
                       <th className="py-3 px-4 text-right">Average Bill</th>
@@ -85,10 +84,7 @@ export default function StaffSalesTrackingPage() {
                           Rs. {s.retailSales.toLocaleString()}
                         </td>
                         <td className="py-3 px-4 text-right font-semibold text-cyan-700">
-                          Rs. {s.wholesaleSales.toLocaleString()}
-                        </td>
-                        <td className="py-3 px-4 text-right font-semibold text-amber-700">
-                          Rs. {s.khataSales.toLocaleString()}
+                          Rs. {((s.wholesaleSales || 0) + (s.khataSales || 0)).toLocaleString()}
                         </td>
                         <td className="py-3 px-4 text-right font-black text-emerald-700">
                           Rs. {s.collectionsTotal.toLocaleString()}

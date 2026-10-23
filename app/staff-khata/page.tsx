@@ -211,7 +211,7 @@ export default function StaffKhataPage() {
       });
 
       toast({
-        title: 'Staff Khata Record Updated',
+        title: 'Staff Credit Record Updated',
         description: `Voucher #${savedRecord?.recordNumber}: Updated with Grand Total Rs. ${grandTotal.toLocaleString()}.`,
         type: 'success',
       });
@@ -227,7 +227,7 @@ export default function StaffKhataPage() {
       });
 
       toast({
-        title: 'Staff Khata Record Saved',
+        title: 'Staff Credit Record Saved',
         description: `Voucher #${savedRecord.recordNumber}: Recorded with Grand Total Rs. ${grandTotal.toLocaleString()}.`,
         type: 'success',
       });
@@ -287,7 +287,7 @@ export default function StaffKhataPage() {
                   <span className="text-xs text-slate-500 font-medium">Intercity Travel & Cash/Cheque Audit</span>
                 </div>
                 <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
-                  Staff Khata & Outstation Recovery
+                  Staff Credit & Outstation Recovery
                 </h1>
                 <p className="text-xs text-slate-500">
                   Records for staff members sent to other cities to collect or deliver money, cheques, and fabrics on behalf of the business.
@@ -300,7 +300,7 @@ export default function StaffKhataPage() {
                 onClick={handleOpenAddModal}
                 className="gap-2 font-bold bg-blue-600 hover:bg-blue-700 shadow-sm"
               >
-                <Plus className="w-4 h-4" /> Add Staff Khata
+                <Plus className="w-4 h-4" /> Add Staff Credit
               </Button>
             </div>
 
@@ -337,11 +337,11 @@ export default function StaffKhataPage() {
               </Card>
             </div>
 
-            {/* Saved Staff Khata Records Table */}
+            {/* Saved Staff Credit Records Table */}
             <Card className="overflow-hidden">
               <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <CardTitle className="text-sm font-bold">Staff Khata Outstation Vouchers</CardTitle>
+                  <CardTitle className="text-sm font-bold">Staff Credit Outstation Vouchers</CardTitle>
                   <CardDescription>
                     Audited field collection trips, cities visited, cash receipts, and cheques.
                   </CardDescription>
@@ -378,7 +378,7 @@ export default function StaffKhataPage() {
                       {filteredRecords.length === 0 ? (
                         <tr>
                           <td colSpan={8} className="py-12 text-center text-slate-400">
-                            No Staff Khata records found matching your search.
+                            No Staff Credit records found matching your search.
                           </td>
                         </tr>
                       ) : (
@@ -477,11 +477,11 @@ export default function StaffKhataPage() {
           </div>
         )}
 
-        {/* Modal: Add / Edit Staff Khata Form */}
+        {/* Modal: Add / Edit Staff Credit Form */}
         <Modal
           isOpen={isFormModalOpen}
           onClose={() => setIsFormModalOpen(false)}
-          title={editingRecordId ? 'Edit Staff Khata Record' : 'Record Staff Khata & Outstation Recovery'}
+          title={editingRecordId ? 'Edit Staff Credit Record' : 'Record Staff Credit & Outstation Recovery'}
           description="Enter details of cities visited by staff, collected cash, individual cheques, and calculate totals."
           maxWidth="xl"
         >
@@ -779,7 +779,7 @@ export default function StaffKhataPage() {
         <Modal
           isOpen={!!viewRecord}
           onClose={() => setViewRecord(null)}
-          title="Staff Khata Outstation Voucher Details"
+          title="Staff Credit Outstation Voucher Details"
           maxWidth="lg"
         >
           {viewRecord && (
@@ -885,7 +885,7 @@ export default function StaffKhataPage() {
         <Modal
           isOpen={!!deletingRecord}
           onClose={() => setDeletingRecord(null)}
-          title="Delete Staff Khata Record?"
+          title="Delete Staff Credit Record?"
           maxWidth="sm"
         >
           {deletingRecord && (

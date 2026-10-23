@@ -65,7 +65,7 @@ export default function ReportsHubPage() {
           </div>
 
           {/* Sub-report Quick Links */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <Link href="/reports/retail" prefetch={false}>
               <div className="p-3 bg-white rounded-xl border border-slate-200 hover:border-blue-400 hover:shadow-xs transition-all text-center">
                 <ShoppingBag className="w-5 h-5 text-blue-600 mx-auto mb-1" />
@@ -77,14 +77,7 @@ export default function ReportsHubPage() {
               <div className="p-3 bg-white rounded-xl border border-slate-200 hover:border-cyan-400 hover:shadow-xs transition-all text-center">
                 <Truck className="w-5 h-5 text-cyan-600 mx-auto mb-1" />
                 <span className="text-xs font-bold text-slate-900 block">Wholesale Reports</span>
-                <span className="text-[10px] text-slate-400">B2B volume</span>
-              </div>
-            </Link>
-            <Link href="/reports/khata" prefetch={false}>
-              <div className="p-3 bg-white rounded-xl border border-slate-200 hover:border-amber-400 hover:shadow-xs transition-all text-center">
-                <BookOpen className="w-5 h-5 text-amber-600 mx-auto mb-1" />
-                <span className="text-xs font-bold text-slate-900 block">Khata Reports</span>
-                <span className="text-[10px] text-slate-400">Aging & recovery</span>
+                <span className="text-[10px] text-slate-400">Receivables & Aging</span>
               </div>
             </Link>
             <Link href="/reports/stock" prefetch={false}>

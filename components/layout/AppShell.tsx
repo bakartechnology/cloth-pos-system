@@ -47,31 +47,16 @@ export function AppShell({ children }: AppShellProps) {
       }
 
       // F5 => Wholesale & Bulk POS (CRITICAL: prevent browser page reload)
-      if (e.key === 'F5') {
+      // F5 / F6 => Wholesale / Credit POS
+      if (e.key === 'F5' || e.key === 'F6') {
         e.preventDefault();
         e.stopPropagation();
-        if (hasPermission('pos_wholesale')) {
+        if (hasPermission('pos_wholesale') || hasPermission('pos_khata')) {
           router.push('/pos/wholesale');
         } else {
           toast({
             title: 'Access Restricted',
-            description: 'Your account does not have permission to access Wholesale POS (F5).',
-            type: 'error',
-          });
-        }
-        return;
-      }
-
-      // F6 => Khata Credit POS
-      if (e.key === 'F6') {
-        e.preventDefault();
-        e.stopPropagation();
-        if (hasPermission('pos_khata')) {
-          router.push('/pos/khata');
-        } else {
-          toast({
-            title: 'Access Restricted',
-            description: 'Your account does not have permission to access Khata Credit POS (F6).',
+            description: 'Your account does not have permission to access Wholesale / Credit POS (F5).',
             type: 'error',
           });
         }

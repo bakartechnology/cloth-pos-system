@@ -20,7 +20,7 @@ export function StaffKhataPrint({ record, onClose }: StaffKhataPrintProps) {
       {/* Top Action Bar (hidden during print) */}
       <div className="flex items-center justify-between w-full mb-4 no-print bg-slate-100 p-3 rounded-xl border border-slate-200">
         <Button variant="outline" size="sm" onClick={onClose} className="gap-1.5">
-          <ArrowLeft className="w-4 h-4" /> Back to Staff Khata
+          <ArrowLeft className="w-4 h-4" /> Back to Staff Credit
         </Button>
         <div className="flex items-center gap-2">
           <Button variant="primary" size="sm" onClick={handlePrint} className="gap-2 bg-blue-600 hover:bg-blue-700">
@@ -193,7 +193,7 @@ export function StaffKhataPrint({ record, onClose }: StaffKhataPrintProps) {
         </div>
 
         <div className="text-center text-[10px] text-slate-400 mt-8">
-          System generated Staff Khata audit voucher. Al-Noor Fabrics Enterprise POS System.
+          System generated Staff Credit audit voucher. Al-Noor Fabrics Enterprise POS System.
         </div>
       </div>
     </div>

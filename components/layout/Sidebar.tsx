@@ -33,7 +33,8 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { PermissionKey } from '@/types';
+import { PermissionKey, StoreBusinessMode } from '@/types';
+import { storageService } from '@/services/storageService';
 
 interface SidebarProps {
   isMobileOpen: boolean;
@@ -74,6 +75,19 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
   // Track expanded dropdown menus
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
 
+  // Reactive store business mode
+  const [storeBusinessMode, setStoreBusinessMode] = useState<StoreBusinessMode>(() => {
+    return storageService.getSettings()?.storeBusinessMode || 'Both';
+  });
+
+  useEffect(() => {
+    function handleSettingsUpdate() {
+      setStoreBusinessMode(storageService.getSettings()?.storeBusinessMode || 'Both');
+    }
+    window.addEventListener('anf_settings_updated', handleSettingsUpdate);
+    return () => window.removeEventListener('anf_settings_updated', handleSettingsUpdate);
+  }, []);
+
   const navigation: NavCategory[] = [
     {
       id: 'dashboard',
@@ -92,17 +106,10 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
     },
     {
       id: 'wholesale-pos',
-      label: 'Wholesale POS',
+      label: 'Wholesale / Credit POS',
       href: '/pos/wholesale',
-      icon: Package,
-      permission: 'pos_wholesale',
-    },
-    {
-      id: 'khata-pos',
-      label: 'Khata/Credit POS',
-      href: '/pos/khata',
       icon: BookOpen,
-      permission: 'pos_khata',
+      permission: 'pos_wholesale',
     },
     {
       id: 'products',
@@ -140,10 +147,9 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
       href: '/payments',
       icon: Banknote,
       subItems: [
-        { label: 'Field Recovery', href: '/payments', icon: Banknote, permission: 'payment_collection' },
-        { label: 'Wholesale Recovery', href: '/payments/wholesale', icon: Receipt, permission: 'wholesale_recovery' },
+        { label: 'Wholesale Recovery', href: '/payments', icon: Banknote, permission: 'payment_collection' },
         { label: 'Pending Cheques', href: '/payments/cheques', icon: CheckCircle2, permission: 'wholesale_recovery' },
-        { label: 'Staff Khata', href: '/staff-khata', icon: Briefcase, permission: 'staff_khata' },
+        { label: 'Staff Credit', href: '/staff-khata', icon: Briefcase, permission: 'staff_khata' },
       ],
     },
     {
@@ -163,8 +169,7 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
       icon: FileText,
       subItems: [
         { label: 'Retail Statement', href: '/statements/retail', icon: FileText, permission: 'retail_statement_view' },
-        { label: 'Wholesale Statement', href: '/statements/wholesale', icon: Receipt, permission: 'wholesale_statement_view' },
-        { label: 'Khata Ledgers (5-Yr)', href: '/customers/khata', icon: BookOpen, permission: 'khata_ledger_view' },
+        { label: 'Wholesale / Credit Ledger', href: '/customers/khata', icon: BookOpen, permission: 'khata_ledger_view' },
       ],
     },
     {
@@ -295,13 +300,41 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
   };
 
   const isCategoryAllowed = (item: NavCategory) => {
+    // Check Store Business Mode
+    if (storeBusinessMode === 'Wholesale' && item.id === 'retail-pos') {
+      return false;
+    }
+    if (storeBusinessMode === 'Retail') {
+      if (item.id === 'wholesale-pos' || item.id === 'pandi') {
+        return false;
+      }
+    }
+
     if (item.id === 'dashboard' || item.adminOnly) {
       return currentStaff?.role === 'Admin';
     }
     if (item.subItems && item.subItems.length > 0) {
-      return item.subItems.some(sub => !sub.permission || hasPermission(sub.permission));
+      return item.subItems.some(sub => isSubItemAllowed(sub));
     }
     return !item.permission || hasPermission(item.permission);
+  };
+
+  const isSubItemAllowed = (sub: SubNavItem) => {
+    if (storeBusinessMode === 'Wholesale' && sub.href.includes('/statements/retail')) {
+      return false;
+    }
+    if (storeBusinessMode === 'Retail') {
+      if (sub.href.includes('/payments') && sub.label.includes('Wholesale Recovery')) {
+        return false;
+      }
+      if (sub.href.includes('/customers/khata')) {
+        return false;
+      }
+      if (sub.href.includes('/pandi')) {
+        return false;
+      }
+    }
+    return !sub.permission || hasPermission(sub.permission);
   };
 
   const getCategoryHref = (item: NavCategory) => {
@@ -427,7 +460,7 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
             const categoryHref = getCategoryHref(item);
             const Icon = item.icon;
             const isActive = isCategoryActive(item);
-            const visibleSubItems = item.subItems?.filter(sub => !sub.permission || hasPermission(sub.permission)) || [];
+            const visibleSubItems = item.subItems?.filter(sub => isSubItemAllowed(sub)) || [];
             const hasChildren = visibleSubItems.length > 0;
             const isExpanded = !!expandedCategories[item.id];
 

@@ -3,60 +3,52 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
-import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
+import { Button } from '@/components/ui/Button';
 import { WholesaleInvoicePrint } from '@/components/print/WholesaleInvoicePrint';
 import { PrintableWholesaleReturn } from '@/components/print/PrintableWholesaleReturn';
 import { PrintableWholesaleExchange } from '@/components/print/PrintableWholesaleExchange';
-import { WholesaleCustomerInput } from '@/components/wholesale-pos/WholesaleCustomerInput';
-import { WholesaleClientSearch } from '@/components/wholesale-pos/WholesaleClientSearch';
-import { WholesaleHardwareStatus } from '@/components/wholesale-pos/WholesaleHardwareStatus';
+import { KhataStatementPrint } from '@/components/print/KhataStatementPrint';
 import { WholesaleBillSearchModal } from '@/components/wholesale-pos/WholesaleBillSearchModal';
 import { WholesaleReturnModal } from '@/components/wholesale-pos/WholesaleReturnModal';
 import { WholesaleExchangeModal } from '@/components/wholesale-pos/WholesaleExchangeModal';
-import { WholesaleKeyboardShortcutsModal } from '@/components/wholesale-pos/WholesaleKeyboardShortcutsModal';
 import {
+  BookOpen,
   Search,
   Plus,
   Minus,
   Trash2,
-  CheckCircle2,
-  Building,
-  User,
-  CreditCard,
-  Banknote,
-  BookOpen,
   ArrowRight,
-  ChevronDown,
-  Barcode as BarcodeIcon,
-  RotateCcw,
-  ArrowLeftRight,
-  FileText,
+  Printer,
   Clock,
   Sparkles,
   Check,
+  History,
+  AlertTriangle,
+  ChevronDown,
+  User,
+  SlidersHorizontal,
+  X,
+  CreditCard,
+  Banknote,
+  Building,
+  CheckCircle2,
   Scan,
-  Keyboard,
-  ShieldCheck,
+  Barcode as BarcodeIcon,
   ShoppingBag,
   Layers,
-  AlertCircle,
-  Calendar,
-  DollarSign,
   Copy,
-  ExternalLink,
+  FileText,
+  Calendar,
+  AlertCircle,
 } from 'lucide-react';
-import Link from 'next/link';
 import { productsService } from '@/services/productsService';
 import { customersService } from '@/services/customersService';
 import { salesService } from '@/services/salesService';
 import { storageService } from '@/services/storageService';
-import { wholesaleSessionService } from '@/services/wholesaleSessionService';
-import { paymentsService } from '@/services/paymentsService';
+import { khataSessionService } from '@/services/khataSessionService';
 import { barcodeScannerService } from '@/services/hardware/barcodeScannerService';
-import { cashDrawerService } from '@/services/hardware/cashDrawerService';
-import { cardTerminalService, CardPaymentState, CardPaymentResponse } from '@/services/hardware/cardTerminalService';
-import { CardTerminalModal } from '@/components/retail-pos/CardTerminalModal';
+import { cardTerminalService, CardPaymentState } from '@/services/hardware/cardTerminalService';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import { useToast } from '@/context/ToastContext';
@@ -68,74 +60,109 @@ import {
   BankAccount,
   ReturnTransaction,
   ExchangeTransaction,
-  WholesaleSessionDraft,
+  KhataSessionDraft,
   Pandi,
   SplitMode,
 } from '@/types';
 import { PandiSelectInput } from '@/components/pandi/PandiSelectInput';
 
-export default function WholesalePOSPage() {
+export default function KhataPOSPage() {
   const { currentStaff } = useAuth();
   const { toast } = useToast();
   const {
-    wholesaleCart,
-    addToWholesaleCart,
-    removeFromWholesaleCart,
-    updateWholesaleQuantity,
-    updateWholesaleDiscount,
-    updateWholesaleExtraDiscount,
-    clearWholesaleCart,
-    restoreWholesaleCart,
-    wholesaleSubtotal,
-    wholesaleDiscountTotal,
-    wholesaleGrandTotal,
+    khataCart,
+    addToKhataCart,
+    removeFromKhataCart,
+    updateKhataQuantity,
+    updateKhataDiscount,
+    updateKhataExtraDiscount,
+    clearKhataCart,
+    restoreKhataCart,
+    khataSubtotal,
+    khataDiscountTotal,
+    khataGrandTotal,
     syncWithLatestProducts,
   } = useCart();
 
-  // Products & Client Data (Clean defaults: NO pre-filled Ahmed Raza)
-  const [products, setProducts] = useState<Product[]>([]);
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null); // Wholesale Client
-  const [customerName, setCustomerName] = useState(''); // Clean empty by default
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('All fabrics');
-  const [sortOption, setSortOption] = useState<'inStock' | 'recent' | 'priceAsc' | 'priceDesc'>('inStock');
-  const [barcodeInput, setBarcodeInput] = useState('');
-  const [visibleCount, setVisibleCount] = useState<number>(9);
-  const [nextInvoiceNumber, setNextInvoiceNumber] = useState('WB-026184');
-  const [currentTime, setCurrentTime] = useState('');
+  // Products & Client Data
+  const [products, setProducts] = useState<Product[]>(() => {
+    if (typeof window !== 'undefined') {
+      return productsService.getAll();
+    }
+    return [];
+  });
 
-  // Work Session Resume State (Across reboots/shutdowns)
-  const [availableDraft, setAvailableDraft] = useState<WholesaleSessionDraft | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [customerName, setCustomerName] = useState<string>('');
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('');
+  const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
+  const [isAccountDropdownOpen, setIsAccountDropdownOpen] = useState(false);
+  const [accountSearchQuery, setAccountSearchQuery] = useState('');
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [barcodeInput, setBarcodeInput] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('All fabrics');
+  const [sortOption, setSortOption] = useState<'inStock' | 'recent' | 'priceAsc' | 'priceDesc'>('inStock');
+  const [visibleCount, setVisibleCount] = useState(9);
+
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const [currentTime, setCurrentTime] = useState<string>('');
+
+  const [nextInvoiceNumber, setNextInvoiceNumber] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return salesService.peekNextInvoiceNumber('Khata');
+    }
+    return 'KHT-2026-000001';
+  });
+
+  // Work Session Resume State
+  const [availableDraft, setAvailableDraft] = useState<KhataSessionDraft | null>(null);
   const [hasCheckedDraft, setHasCheckedDraft] = useState(false);
 
-  // Wholesale Checkout State
+  // Khata Checkout State
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Cash');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Credit/Khata');
   const [cashReceived, setCashReceived] = useState<number>(0);
-  const [amountPaidNow, setAmountPaidNow] = useState<number>(0);
   const [notes, setNotes] = useState('');
   const [pandiName, setPandiName] = useState('');
   const [selectedPandi, setSelectedPandi] = useState<Pandi | null>(null);
 
   // Bank Transfer Payment States
-  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
-  const [selectedBank, setSelectedBank] = useState<BankAccount | null>(null);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>(() => {
+    if (typeof window !== 'undefined') {
+      const allBanks = storageService.getSettings().bankAccounts || [];
+      return allBanks.filter((b: BankAccount) => b.isActive !== false && (!b.channels || b.channels.length === 0 || b.channels.includes('Khata')));
+    }
+    return [];
+  });
+  const [selectedBank, setSelectedBank] = useState<BankAccount | null>(() => {
+    if (typeof window !== 'undefined') {
+      const allBanks = storageService.getSettings().bankAccounts || [];
+      const banks = allBanks.filter((b: BankAccount) => b.isActive !== false && (!b.channels || b.channels.length === 0 || b.channels.includes('Khata')));
+      return banks.length > 0 ? banks[0] : null;
+    }
+    return null;
+  });
   const [isBankPaymentConfirmed, setIsBankPaymentConfirmed] = useState(false);
 
   // Card Terminal Payment States
   const [cardPaymentState, setCardPaymentState] = useState<CardPaymentState>('idle');
   const [cardStatusMessage, setCardStatusMessage] = useState('');
   const [cardTransactionId, setCardTransactionId] = useState<string | undefined>(undefined);
-  const [isWholesaleTerminalEnabled, setIsWholesaleTerminalEnabled] = useState<boolean>(false);
+  const [isKhataTerminalEnabled, setIsKhataTerminalEnabled] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return Boolean(storageService.getSettings().khataCardTerminal?.enabled);
+    }
+    return false;
+  });
 
-  // Split / Mixed Payment States (Retail Mirror + Cash/Bank + Cheque + 3-Way Split)
-  const [splitMode, setSplitMode] = useState<SplitMode>('CashCard');
+  // Split / Mixed Payment States (Khata POS: Cash + Bank, Cash + Cheque, Bank + Cheque, Cash + Bank + Cheque - NO CARD)
+  const [splitMode, setSplitMode] = useState<Exclude<SplitMode, 'CashCard'>>('CashBank');
   const [splitCashInput, setSplitCashInput] = useState<string>('');
   const [splitBankInput, setSplitBankInput] = useState<string>('');
   const [splitSecondaryInput, setSplitSecondaryInput] = useState<string>('');
-  const [splitCardAuth, setSplitCardAuth] = useState<CardPaymentResponse | null>(null);
-  const [splitManualCardRef, setSplitManualCardRef] = useState<string>('');
-  const [splitCardVerified, setSplitCardVerified] = useState(false);
   const [splitBankSlipVerified, setSplitBankSlipVerified] = useState(false);
   const [splitChequeVerified, setSplitChequeVerified] = useState(false);
   const [splitReference, setSplitReference] = useState('');
@@ -146,7 +173,7 @@ export default function WholesalePOSPage() {
     d.setDate(d.getDate() + 7);
     return d.toISOString().split('T')[0];
   });
-  // Multiple Cheques State for Wholesale Finalize
+  // Multiple Cheques State for Khata Finalize
   const [chequeEntries, setChequeEntries] = useState<Array<{
     id: string;
     bankName: string;
@@ -155,7 +182,7 @@ export default function WholesalePOSPage() {
     clearingDate: string;
   }>>([
     {
-      id: 'chq-init-1',
+      id: 'khata-chq-init-1',
       bankName: 'Meezan Bank',
       chequeNumber: '',
       amount: '',
@@ -166,25 +193,17 @@ export default function WholesalePOSPage() {
       })(),
     },
   ]);
-  const [isSplitCardTerminalModalOpen, setIsSplitCardTerminalModalOpen] = useState(false);
   const [copiedBankId, setCopiedBankId] = useState<string | null>(null);
 
-  // Pending Wholesale Cheques Modal State
-  const [isPendingChequesModalOpen, setIsPendingChequesModalOpen] = useState(false);
-  const [pendingCheques, setPendingCheques] = useState<ReturnType<typeof paymentsService.getWholesalePendingCheques>>([]);
-  const [pendingChequesSearch, setPendingChequesSearch] = useState('');
-  const [pendingOriginFilter, setPendingOriginFilter] = useState<'All' | 'Wholesale' | 'Khata'>('All');
-
-  // Cash Drawer State
-  const [isCashDrawerOpen, setIsCashDrawerOpen] = useState(false);
+  // Statement Print Modal
+  const [isStatementModalOpen, setIsStatementModalOpen] = useState(false);
 
   // Completed Invoices & Modals
   const [completedBill, setCompletedBill] = useState<Bill | null>(null);
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
 
-  // Search Past Bills, Shortcuts, and Return/Exchange Modals
+  // Bill Searches & Return/Exchange Modals
   const [isBillSearchOpen, setIsBillSearchOpen] = useState(false);
-  const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false);
   const [billForAction, setBillForAction] = useState<Bill | null>(null);
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
   const [isExchangeModalOpen, setIsExchangeModalOpen] = useState(false);
@@ -193,118 +212,110 @@ export default function WholesalePOSPage() {
   const [completedExchange, setCompletedExchange] = useState<ExchangeTransaction | null>(null);
   const [isExchangePrintOpen, setIsExchangePrintOpen] = useState(false);
 
-  const barcodeInputRef = useRef<HTMLInputElement>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
+  const customerDropdownRef = useRef<HTMLDivElement>(null);
+  const accountDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Initial Data Load, Sequence Peek, and live focus/storage sync
+  // Live Clock
+  useEffect(() => {
+    const updateClock = () => {
+      const now = new Date();
+      setCurrentTime(
+        now.toLocaleDateString('en-PK', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        }) +
+          ' • ' +
+          now.toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+          })
+      );
+    };
+    updateClock();
+    const interval = setInterval(updateClock, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Close dropdowns on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (customerDropdownRef.current && !customerDropdownRef.current.contains(e.target as Node)) {
+        setIsCustomerDropdownOpen(false);
+      }
+      if (accountDropdownRef.current && !accountDropdownRef.current.contains(e.target as Node)) {
+        setIsAccountDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Focus and storage sync
   useEffect(() => {
     const refreshData = () => {
       setProducts(productsService.getAll());
-      const nextInv = salesService.peekNextInvoiceNumber('Wholesale');
-      setNextInvoiceNumber(nextInv ? `#${nextInv}` : '#WB-026184');
+      setNextInvoiceNumber(salesService.peekNextInvoiceNumber('Khata'));
       const settings = storageService.getSettings();
-      setIsWholesaleTerminalEnabled(Boolean(settings.wholesaleCardTerminal?.enabled));
       const banks = (settings.bankAccounts || []).filter(
-        b => b.isActive !== false && (!b.channels || b.channels.length === 0 || b.channels.includes('Wholesale'))
+        (b: BankAccount) => b.isActive !== false && (!b.channels || b.channels.length === 0 || b.channels.includes('Khata'))
       );
       setBankAccounts(banks);
       if (banks.length > 0) {
-        setSelectedBank(prev => (prev && banks.some(b => b.id === prev.id)) ? prev : banks[0]);
+        setSelectedBank(prev => (prev && banks.some((b: BankAccount) => b.id === prev.id)) ? prev : banks[0]);
       } else {
         setSelectedBank(null);
       }
       syncWithLatestProducts();
     };
 
-    refreshData();
-
-    // Live clock update
-    const updateClock = () => {
-      const now = new Date();
-      setCurrentTime(
-        now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
-      );
-    };
-    updateClock();
-    const clockTimer = setInterval(updateClock, 1000);
-
     window.addEventListener('focus', refreshData);
     window.addEventListener('storage', refreshData);
 
     return () => {
-      clearInterval(clockTimer);
       window.removeEventListener('focus', refreshData);
       window.removeEventListener('storage', refreshData);
     };
-  }, []);
+  }, [syncWithLatestProducts]);
 
-  // Keyboard Shortcuts (F1: Barcode, F2: Search, F3: Bills, F8: Checkout)
+  // Staff-specific draft detection on mount / staff switch
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'F1') {
-        e.preventDefault();
-        barcodeInputRef.current?.focus();
-        barcodeInputRef.current?.select();
-      } else if (e.key === 'F2') {
-        e.preventDefault();
-        searchInputRef.current?.focus();
-        searchInputRef.current?.select();
-      } else if (e.key === 'F3') {
-        e.preventDefault();
-        setIsBillSearchOpen(true);
-      } else if (e.key === 'F8') {
-        e.preventDefault();
-        handleOpenCheckout();
-      }
-    };
+    if (!currentStaff?.id || hasCheckedDraft) return;
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  });
-
-  // Reset visible count to 9 when filter or search changes
-  useEffect(() => {
-    setVisibleCount(9);
-  }, [selectedCategory, searchQuery, sortOption]);
-
-  // Staff-specific draft detection on mount: ONLY prompt if draft has real cart items!
-  useEffect(() => {
-    if (currentStaff?.id && !hasCheckedDraft) {
-      const draft = wholesaleSessionService.getDraft(currentStaff.id);
-      if (draft && draft.cartItems && draft.cartItems.length > 0) {
+    const timer = setTimeout(() => {
+      const draft = khataSessionService.getDraft(currentStaff.id);
+      if (draft) {
         setAvailableDraft(draft);
-      } else if (draft) {
-        wholesaleSessionService.clearDraft(currentStaff.id);
       }
       setHasCheckedDraft(true);
-    }
+    }, 0);
+
+    return () => clearTimeout(timer);
   }, [currentStaff?.id, hasCheckedDraft]);
 
-  // Auto-save active wholesale draft ONLY when there are products in the cart!
+  // Auto-save active khata draft to persistent storage
   useEffect(() => {
     if (!currentStaff?.id || !hasCheckedDraft) return;
 
-    if (wholesaleCart.length > 0) {
-      wholesaleSessionService.saveDraft(currentStaff.id, {
+    if (khataCart.length > 0) {
+      khataSessionService.saveDraft(currentStaff.id, {
         customerName: customerName.trim() || undefined,
         selectedClient: selectedCustomer,
-        cartItems: wholesaleCart,
+        cartItems: khataCart,
         paymentMethod,
         amountReceived: cashReceived,
         selectedBankId: selectedBank?.id,
         bankPaymentConfirmed: isBankPaymentConfirmed,
         notes: notes.trim() || undefined,
-        subtotal: wholesaleSubtotal,
-        grandTotal: wholesaleGrandTotal,
+        subtotal: khataSubtotal,
+        grandTotal: khataGrandTotal,
       });
-    } else {
-      // Clean up draft when cart is empty so refresh does not prompt "resume work"
-      wholesaleSessionService.clearDraft(currentStaff.id);
     }
   }, [
     currentStaff?.id,
     hasCheckedDraft,
-    wholesaleCart,
+    khataCart,
     customerName,
     selectedCustomer,
     paymentMethod,
@@ -312,8 +323,8 @@ export default function WholesalePOSPage() {
     selectedBank,
     isBankPaymentConfirmed,
     notes,
-    wholesaleSubtotal,
-    wholesaleGrandTotal,
+    khataSubtotal,
+    khataGrandTotal,
   ]);
 
   // Resume Draft Handler
@@ -328,7 +339,7 @@ export default function WholesalePOSPage() {
     }
 
     if (availableDraft.cartItems && availableDraft.cartItems.length > 0) {
-      restoreWholesaleCart(availableDraft.cartItems);
+      restoreKhataCart(availableDraft.cartItems);
     }
 
     if (availableDraft.paymentMethod) {
@@ -351,40 +362,73 @@ export default function WholesalePOSPage() {
   // Discard Draft Handler
   const handleDiscardDraft = () => {
     if (currentStaff?.id) {
-      wholesaleSessionService.clearDraft(currentStaff.id);
+      khataSessionService.discardDraft(currentStaff.id);
     }
     setAvailableDraft(null);
-    clearWholesaleCart();
-    setCustomerName('');
+    clearKhataCart();
     setSelectedCustomer(null);
+    setCustomerName('');
     setNotes('');
     setCashReceived(0);
   };
 
-  // Product Filter & Sorting (Real Data)
+  // Keyboard Shortcuts (F1: Barcode, F2: Search, F8: Charge)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F1') {
+        e.preventDefault();
+        barcodeInputRef.current?.focus();
+        barcodeInputRef.current?.select();
+      } else if (e.key === 'F2') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      } else if (e.key === 'F8') {
+        e.preventDefault();
+        if (khataCart.length > 0 && selectedCustomer) {
+          handleDirectChargeKhata();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [khataCart.length, selectedCustomer]);
+
+  // Filtered Products (matching Wholesale POS sorting & search)
   const filteredProducts = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
     let list = products.filter(p => {
-      const matchesQuery =
+      const matchesSearch =
         !q ||
         p.name.toLowerCase().includes(q) ||
         p.sku.toLowerCase().includes(q) ||
-        p.wholesaleBarcode.includes(q) ||
+        p.barcode?.includes(q) ||
+        p.wholesaleBarcode?.includes(q) ||
         p.category.toLowerCase().includes(q) ||
-        (p.subcategory && p.subcategory.toLowerCase().includes(q));
+        (p.subcategory && p.subcategory.toLowerCase().includes(q)) ||
+        (p.description && p.description.toLowerCase().includes(q));
 
-      const matchesCategory =
+      const matchesCat =
         selectedCategory === 'All fabrics' ||
         selectedCategory === 'All' ||
-        p.category.toLowerCase() === selectedCategory.toLowerCase();
+        p.category.toLowerCase() === selectedCategory.toLowerCase() ||
+        (selectedCategory === 'Silk & Chiffon' &&
+          (p.category.toLowerCase().includes('silk') || p.category.toLowerCase().includes('chiffon')));
 
-      return matchesQuery && matchesCategory;
+      const matchesChannel =
+        p.channel !== 'Retail' &&
+        (p.channel === 'Wholesale' ||
+          p.channel === 'Both' ||
+          (p.wholesalePrice || p.khataPrice || 0) > 0 ||
+          (p.packagingConfig?.type === 'box' && (p.packagingConfig?.wholesaleBoxes ?? 0) > 0));
+
+      return matchesSearch && matchesCat && matchesChannel;
     });
 
     if (sortOption === 'priceAsc') {
-      list.sort((a, b) => a.wholesalePrice - b.wholesalePrice);
+      list.sort((a, b) => (a.khataPrice || a.wholesalePrice) - (b.khataPrice || b.wholesalePrice));
     } else if (sortOption === 'priceDesc') {
-      list.sort((a, b) => b.wholesalePrice - a.wholesalePrice);
+      list.sort((a, b) => (b.khataPrice || b.wholesalePrice) - (a.khataPrice || a.wholesalePrice));
     } else if (sortOption === 'recent') {
       list.sort((a, b) => {
         const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -399,39 +443,10 @@ export default function WholesalePOSPage() {
     return list;
   }, [products, searchQuery, selectedCategory, sortOption]);
 
-  // Paginated list showing 9 products initially, +9 on each "Load more" click
+  // Paginated displayed products
   const displayedProducts = useMemo(() => {
     return filteredProducts.slice(0, visibleCount);
   }, [filteredProducts, visibleCount]);
-
-  // Total metres / units in cart
-  const totalCartMetres = useMemo(() => {
-    return wholesaleCart.reduce((acc, item) => acc + item.quantity, 0);
-  }, [wholesaleCart]);
-
-  // Dynamic tax calculation: only when taxRate is set in stock/products or store settings
-  const { wholesaleTaxAmount, wholesaleTaxRate } = useMemo(() => {
-    const storeTaxRate = storageService.getSettings()?.defaultTaxRate || 0;
-    let taxSum = 0;
-    let taxableBase = 0;
-    wholesaleCart.forEach(item => {
-      const rate =
-        item.product.taxRate !== undefined && item.product.taxRate !== null && item.product.taxRate > 0
-          ? item.product.taxRate
-          : storeTaxRate;
-      if (rate > 0) {
-        taxSum += (item.lineTotal * rate) / 100;
-        taxableBase += item.lineTotal;
-      }
-    });
-    const avgRate = taxableBase > 0 ? Math.round((taxSum / taxableBase) * 100) : storeTaxRate;
-    return {
-      wholesaleTaxAmount: Math.round(taxSum),
-      wholesaleTaxRate: avgRate,
-    };
-  }, [wholesaleCart]);
-
-  const finalWholesaleGrandTotal = wholesaleSubtotal - wholesaleDiscountTotal + wholesaleTaxAmount;
 
   // Barcode Scanner Handler
   const handleBarcodeSubmit = (e?: React.FormEvent) => {
@@ -449,6 +464,16 @@ export default function WholesalePOSPage() {
       );
 
     if (matched) {
+      if (matched.channel === 'Retail') {
+        barcodeScannerService.playErrorBeep();
+        toast({
+          title: 'Retail Only Product',
+          description: `"${matched.name}" is designated for Retail POS only and cannot be added to Wholesale invoice.`,
+          type: 'error',
+        });
+        return;
+      }
+
       if (matched.stock <= 0) {
         barcodeScannerService.playErrorBeep();
         toast({
@@ -457,8 +482,13 @@ export default function WholesalePOSPage() {
           type: 'error',
         });
       } else {
-        addToWholesaleCart(matched);
+        addToKhataCart(matched);
         barcodeScannerService.playSuccessBeep();
+        toast({
+          title: `Added: ${matched.name}`,
+          description: `Wholesale Rate: PKR ${(matched.wholesalePrice || matched.khataPrice || 0).toLocaleString()}`,
+          type: 'success',
+        });
       }
     } else {
       barcodeScannerService.playErrorBeep();
@@ -473,39 +503,78 @@ export default function WholesalePOSPage() {
     barcodeInputRef.current?.focus();
   };
 
-  // Load pending cheques for wholesale
-  const loadPendingCheques = () => {
-    const list = paymentsService.getWholesalePendingCheques();
-    setPendingCheques(list);
-  };
+  // Filtered Khata Customers for dropdowns
+  const allCustomers = useMemo(() => customersService.getAll(), []);
 
-  useEffect(() => {
-    loadPendingCheques();
-  }, []);
+  const khataAccountsList = useMemo(() => {
+    const q = accountSearchQuery.toLowerCase().trim();
+    return allCustomers.filter(c => {
+      const isKhata = c.type === 'Khata' || (c.creditLimit && c.creditLimit > 0);
+      if (!isKhata) return false;
+      if (!q) return true;
+      return (
+        c.name.toLowerCase().includes(q) ||
+        (c.businessName && c.businessName.toLowerCase().includes(q)) ||
+        c.phone.includes(q) ||
+        c.id.toLowerCase().includes(q)
+      );
+    });
+  }, [allCustomers, accountSearchQuery]);
 
-  const dueTodayCount = useMemo(() => {
-    return pendingCheques.filter(p => p.isDueToday || p.isOverdue).length;
-  }, [pendingCheques]);
+  const shopperSuggestions = useMemo(() => {
+    const q = customerSearchQuery.toLowerCase().trim();
+    if (!q) return allCustomers.slice(0, 8);
+    return allCustomers
+      .filter(c => c.name.toLowerCase().includes(q) || c.phone.includes(q) || (c.businessName && c.businessName.toLowerCase().includes(q)))
+      .slice(0, 8);
+  }, [allCustomers, customerSearchQuery]);
 
-  const handlePassCheque = (collectionId: string, chequeId: string) => {
-    const res = paymentsService.passCheque(
-      collectionId,
-      chequeId,
-      currentStaff?.id,
-      currentStaff?.name
-    );
-    if (res.success) {
-      loadPendingCheques();
+  // Dynamic Tax Calculation
+  const { khataTaxAmount, khataTaxRate } = useMemo(() => {
+    const storeTaxRate = storageService.getSettings()?.defaultTaxRate || 0;
+    let taxSum = 0;
+    let taxableBase = 0;
+    khataCart.forEach(item => {
+      const rate =
+        item.product.taxRate !== undefined && item.product.taxRate !== null && item.product.taxRate > 0
+          ? item.product.taxRate
+          : storeTaxRate;
+      if (rate > 0) {
+        taxSum += (item.lineTotal * rate) / 100;
+        taxableBase += item.lineTotal;
+      }
+    });
+    const avgRate = taxableBase > 0 ? Math.round((taxSum / taxableBase) * 100) : storeTaxRate;
+    return {
+      khataTaxAmount: Math.round(taxSum),
+      khataTaxRate: avgRate,
+    };
+  }, [khataCart]);
+
+  const finalKhataGrandTotal = khataSubtotal - khataDiscountTotal + khataTaxAmount;
+
+  // Credit Limit Calculations
+  const currentBalance = selectedCustomer?.currentBalance ?? selectedCustomer?.balance ?? 0;
+  const creditLimit = selectedCustomer?.creditLimit || 0;
+  const newProjectedBalance = currentBalance + finalKhataGrandTotal;
+  const availableCredit = Math.max(0, creditLimit - currentBalance);
+  const availableCreditAfterCharge = Math.max(0, creditLimit - newProjectedBalance);
+  const isLimitExceeded = creditLimit > 0 && newProjectedBalance > creditLimit;
+  const excessAmount = isLimitExceeded ? newProjectedBalance - creditLimit : 0;
+
+  const totalMetres = useMemo(() => {
+    return khataCart.reduce((sum, item) => sum + item.quantity, 0);
+  }, [khataCart]);
+
+  const handleCopyAccount = (accNo: string, bankId: string) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(accNo);
+      setCopiedBankId(bankId);
+      setTimeout(() => setCopiedBankId(null), 2000);
       toast({
-        title: 'Cheque Passed & Settled (OK)',
-        description: `Rs. ${res.amount?.toLocaleString()} deducted from ${res.customerName}'s account on today's statement (${new Date().toLocaleDateString()}).`,
-        type: 'success',
-      });
-    } else {
-      toast({
-        title: 'Action Failed',
-        description: res.message,
-        type: 'error',
+        title: 'Account Number Copied',
+        description: `${accNo} copied to clipboard.`,
+        type: 'info',
       });
     }
   };
@@ -521,7 +590,7 @@ export default function WholesalePOSPage() {
       setSplitSecondaryInput('');
       return;
     }
-    const remaining = Math.max(0, Math.round((finalWholesaleGrandTotal - num) * 100) / 100);
+    const remaining = Math.max(0, Math.round((finalKhataGrandTotal - num) * 100) / 100);
     setSplitSecondaryInput(String(remaining));
   };
 
@@ -536,7 +605,7 @@ export default function WholesalePOSPage() {
       setSplitCashInput('');
       return;
     }
-    const remaining = Math.max(0, Math.round((finalWholesaleGrandTotal - num) * 100) / 100);
+    const remaining = Math.max(0, Math.round((finalKhataGrandTotal - num) * 100) / 100);
     setSplitCashInput(String(remaining));
   };
 
@@ -546,7 +615,7 @@ export default function WholesalePOSPage() {
       if (val === '') return;
       const c = parseFloat(val) || 0;
       const b = parseFloat(splitBankInput) || 0;
-      const rem = Math.max(0, Math.round((finalWholesaleGrandTotal - c - b) * 100) / 100);
+      const rem = Math.max(0, Math.round((finalKhataGrandTotal - c - b) * 100) / 100);
       setSplitSecondaryInput(String(rem));
       if (chequeEntries.length === 1) {
         setChequeEntries([{ ...chequeEntries[0], amount: rem > 0 ? String(rem) : '' }]);
@@ -556,7 +625,7 @@ export default function WholesalePOSPage() {
       if (val === '') return;
       const b = parseFloat(val) || 0;
       const c = parseFloat(splitCashInput) || 0;
-      const rem = Math.max(0, Math.round((finalWholesaleGrandTotal - c - b) * 100) / 100);
+      const rem = Math.max(0, Math.round((finalKhataGrandTotal - c - b) * 100) / 100);
       setSplitSecondaryInput(String(rem));
       if (chequeEntries.length === 1) {
         setChequeEntries([{ ...chequeEntries[0], amount: rem > 0 ? String(rem) : '' }]);
@@ -569,7 +638,7 @@ export default function WholesalePOSPage() {
       if (val === '') return;
       const chq = parseFloat(val) || 0;
       const c = parseFloat(splitCashInput) || 0;
-      const rem = Math.max(0, Math.round((finalWholesaleGrandTotal - c - chq) * 100) / 100);
+      const rem = Math.max(0, Math.round((finalKhataGrandTotal - c - chq) * 100) / 100);
       setSplitBankInput(String(rem));
     }
   };
@@ -577,7 +646,7 @@ export default function WholesalePOSPage() {
   const handleAddCheque = () => {
     const primary = (parseFloat(splitCashInput) || 0) + (splitMode === 'CashBankCheque' ? (parseFloat(splitBankInput) || 0) : 0);
     const existingChequesSum = chequeEntries.reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0);
-    const remaining = Math.max(0, Math.round((finalWholesaleGrandTotal - primary - existingChequesSum) * 100) / 100);
+    const remaining = Math.max(0, Math.round((finalKhataGrandTotal - primary - existingChequesSum) * 100) / 100);
 
     const prevDate = chequeEntries[chequeEntries.length - 1]?.clearingDate || (() => {
       const d = new Date();
@@ -587,7 +656,7 @@ export default function WholesalePOSPage() {
     const prevBank = chequeEntries[chequeEntries.length - 1]?.bankName || 'Meezan Bank';
 
     const newCheque = {
-      id: `chq-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      id: `khata-chq-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       bankName: prevBank,
       chequeNumber: '',
       amount: remaining > 0 ? String(remaining) : '',
@@ -615,64 +684,54 @@ export default function WholesalePOSPage() {
       const totalCheques = updated.reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0);
       setSplitSecondaryInput(totalCheques > 0 ? String(totalCheques) : '');
       if (splitMode === 'CashCheque' || splitMode === 'BankCheque') {
-        const remaining = Math.max(0, Math.round((finalWholesaleGrandTotal - totalCheques) * 100) / 100);
+        const remaining = Math.max(0, Math.round((finalKhataGrandTotal - totalCheques) * 100) / 100);
         setSplitCashInput(remaining > 0 ? String(remaining) : '');
       } else if (splitMode === 'CashBankCheque') {
         const c = parseFloat(splitCashInput) || 0;
-        const remaining = Math.max(0, Math.round((finalWholesaleGrandTotal - c - totalCheques) * 100) / 100);
+        const remaining = Math.max(0, Math.round((finalKhataGrandTotal - c - totalCheques) * 100) / 100);
         setSplitBankInput(remaining > 0 ? String(remaining) : '');
       }
     }
   };
 
-  const handleCopyAccount = (accNo: string, bankId: string) => {
-    if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      navigator.clipboard.writeText(accNo);
-      setCopiedBankId(bankId);
-      setTimeout(() => setCopiedBankId(null), 2000);
-      toast({
-        title: 'Account Number Copied',
-        description: `${accNo} copied to clipboard.`,
-        type: 'info',
-      });
-    }
-  };
-
   // Open Checkout Modal
   const handleOpenCheckout = () => {
-    if (wholesaleCart.length === 0) {
+    if (khataCart.length === 0) {
       toast({
         title: 'Cart is empty',
-        description: 'Please add products at wholesale rates before proceeding.',
+        description: 'Please add fabrics to the bill before charging to Khata.',
         type: 'warning',
       });
       return;
     }
-    if (!customerName.trim() && !selectedCustomer) {
+    if (!selectedCustomer) {
       toast({
-        title: 'Customer Name Required',
-        description: 'Please enter a Customer Name or select a Wholesale Client.',
+        title: 'Khata Account Required',
+        description: 'Please select a registered Khata customer / credit account first.',
         type: 'error',
       });
       return;
     }
 
-    setCashReceived(Math.round(finalWholesaleGrandTotal));
-    setAmountPaidNow(paymentMethod === 'Credit/Khata' ? 0 : Math.round(finalWholesaleGrandTotal));
+    setPaymentMethod('Credit/Khata');
+    setCashReceived(khataGrandTotal);
     setIsBankPaymentConfirmed(false);
     setCardPaymentState('idle');
     setCardTransactionId(undefined);
 
-    // Start split mode on Cash + Card and amounts blank
-    setSplitMode('CashCard');
+    // Reset Split states
+    setSplitMode('CashBank');
     setSplitCashInput('');
     setSplitBankInput('');
     setSplitSecondaryInput('');
+    setSplitBankSlipVerified(false);
+    setSplitChequeVerified(false);
+    setSplitReference('');
     const d = new Date();
     d.setDate(d.getDate() + 7);
     setChequeEntries([
       {
-        id: `chq-${Date.now()}`,
+        id: `khata-chq-${Date.now()}`,
         bankName: 'Meezan Bank',
         chequeNumber: '',
         amount: '',
@@ -682,13 +741,35 @@ export default function WholesalePOSPage() {
     setIsCheckoutOpen(true);
   };
 
+  // Direct Charge to Khata Account (Instant 1-Click action as in design)
+  const handleDirectChargeKhata = () => {
+    if (khataCart.length === 0) {
+      toast({
+        title: 'Cart is empty',
+        description: 'Please add products with Khata Sale Prices before proceeding.',
+        type: 'warning',
+      });
+      return;
+    }
+    if (!selectedCustomer) {
+      toast({
+        title: 'Khata Account Required',
+        description: 'Please select a customer / Khata account to charge.',
+        type: 'error',
+      });
+      return;
+    }
+
+    setPaymentMethod('Credit/Khata');
+    handleFinalizeSale('Credit/Khata');
+  };
+
   // Trigger Card Payment
   const handleStartCardPayment = async () => {
-    const isEnabled = Boolean(storageService.getSettings().wholesaleCardTerminal?.enabled);
-    if (!isEnabled) {
+    if (!isKhataTerminalEnabled) {
       toast({
-        title: 'Card Terminal Access Disabled',
-        description: 'Wholesale Card Terminal is disabled in Store Settings.',
+        title: 'Card Terminal Disabled',
+        description: 'Khata Card Terminal is disabled in Store Settings.',
         type: 'error',
       });
       return;
@@ -696,7 +777,7 @@ export default function WholesalePOSPage() {
 
     setCardPaymentState('waiting_card');
     setCardStatusMessage('Waiting for customer card tap/insert on terminal...');
-    const result = await cardTerminalService.startCardPayment(wholesaleGrandTotal, (state, msg) => {
+    const result = await cardTerminalService.startCardPayment(finalKhataGrandTotal, (state, msg) => {
       setCardPaymentState(state);
       setCardStatusMessage(msg);
     });
@@ -720,101 +801,81 @@ export default function WholesalePOSPage() {
     }
   };
 
-  // Complete Wholesale Sale & Save Invoice
-  const handleCompleteWholesaleSale = () => {
+  // Complete Khata Credit Sale & Save Invoice
+  const handleFinalizeSale = (method: PaymentMethod = paymentMethod) => {
     if (!currentStaff) return;
-    if (!customerName.trim() && !selectedCustomer) return;
+    if (!selectedCustomer) {
+      toast({
+        title: 'Khata Account Required',
+        description: 'Please select a customer / Khata account to finalize.',
+        type: 'warning',
+      });
+      return;
+    }
 
-    if (paymentMethod === 'Cash') {
-      if (Math.round(cashReceived) < Math.round(finalWholesaleGrandTotal)) {
+    // Validation per payment method
+    if (method === 'Cash') {
+      if (cashReceived < finalKhataGrandTotal) {
         toast({
           title: 'Insufficient Cash Tendered',
-          description: `Received PKR ${cashReceived.toLocaleString()} is less than total payable PKR ${finalWholesaleGrandTotal.toLocaleString()}.`,
+          description: 'Cannot finalize invoice with insufficient cash received.',
           type: 'error',
         });
         return;
       }
-    } else if (paymentMethod === 'Card') {
-      const isEnabled = Boolean(storageService.getSettings().wholesaleCardTerminal?.enabled);
-      if (!isEnabled) {
+    } else if (method === 'Card') {
+      if (!isKhataTerminalEnabled) {
         toast({
-          title: 'Card Payment Blocked',
-          description: 'Wholesale Card Terminal is disabled in Store Settings.',
+          title: 'Card Terminal Disabled',
+          description: 'Khata Card Terminal is disabled in Store Settings.',
           type: 'error',
         });
         return;
       }
-
       if (cardPaymentState !== 'authorized' || !cardTransactionId) {
         toast({
           title: 'Card Payment Incomplete',
-          description: 'Please start card terminal payment and wait for approval before finalizing.',
+          description: 'Please wait for the card terminal payment to be approved.',
           type: 'error',
         });
         return;
       }
-    } else if (paymentMethod === 'Bank Transfer') {
+    } else if (method === 'Bank Transfer') {
       if (!isBankPaymentConfirmed || !selectedBank) {
         toast({
           title: 'Payment Verification Required',
-          description: 'Please select a bank account and confirm the transfer slip received.',
+          description: 'Please verify the bank transfer slip and click "Confirm Slip Received" before completing.',
           type: 'error',
         });
         return;
       }
-    } else if (paymentMethod === 'Credit/Khata') {
-      if (!selectedCustomer) {
-        toast({
-          title: 'Registered Client Required',
-          description: 'Credit/Khata ledger charging requires selecting a registered Client.',
-          type: 'error',
-        });
-        return;
-      }
-    } else if (paymentMethod === 'Split') {
+    } else if (method === 'Split') {
       const primaryAmt = parseFloat(splitCashInput) || 0;
       const bankAmt = parseFloat(splitBankInput) || 0;
       const secondaryAmt = parseFloat(splitSecondaryInput) || 0;
       const totalSplit = splitMode === 'CashBankCheque' ? (primaryAmt + bankAmt + secondaryAmt) : (primaryAmt + secondaryAmt);
 
-      if (Math.round(totalSplit) < Math.round(finalWholesaleGrandTotal)) {
+      if (Math.round(totalSplit) < Math.round(finalKhataGrandTotal)) {
         toast({
           title: 'Incomplete Split Payment',
-          description: `Total split payment (Rs. ${totalSplit.toLocaleString()}) is less than net payable (Rs. ${finalWholesaleGrandTotal.toLocaleString()}).`,
+          description: `Total split payment (Rs. ${totalSplit.toLocaleString()}) is less than net payable (Rs. ${finalKhataGrandTotal.toLocaleString()}).`,
           type: 'error',
         });
         return;
       }
 
-      if (splitMode === 'CashCard') {
-        if (!splitCardVerified && !splitCardAuth && !splitManualCardRef.trim()) {
-          toast({
-            title: 'Card Payment Not Confirmed',
-            description: 'Please authorize card terminal or enter manual authorization reference & confirm checkbox.',
-            type: 'warning',
-          });
-          return;
-        }
-      } else if (splitMode === 'CashBank') {
+      if (splitMode === 'CashBank' || splitMode === 'BankCheque' || splitMode === 'CashBankCheque') {
         if (!splitBankSlipVerified) {
           toast({
-            title: 'Transfer Slip Required',
-            description: 'Please confirm that the bank transfer slip has been verified.',
+            title: 'Bank Transfer Slip Required',
+            description: 'Please verify the bank transfer portion slip and confirm checkbox.',
             type: 'warning',
           });
           return;
         }
-      } else if (splitMode === 'CashCheque' || splitMode === 'BankCheque' || splitMode === 'CashBankCheque') {
-        if (splitMode === 'BankCheque' || splitMode === 'CashBankCheque') {
-          if (!splitBankSlipVerified) {
-            toast({
-              title: 'Bank Transfer Slip Required',
-              description: 'Please verify the bank transfer portion slip and confirm checkbox.',
-              type: 'warning',
-            });
-            return;
-          }
-        }
+      }
+
+      if (splitMode === 'CashCheque' || splitMode === 'BankCheque' || splitMode === 'CashBankCheque') {
         for (let i = 0; i < chequeEntries.length; i++) {
           const chq = chequeEntries[i];
           if (!chq.bankName.trim()) {
@@ -853,47 +914,45 @@ export default function WholesalePOSPage() {
       }
     }
 
-    const effectiveCustomerName = customerName.trim() || selectedCustomer?.name || 'Walk-in Wholesale Customer';
-    const effectivePhone = selectedCustomer?.phone || '';
-
-    // Only attach billCustomer if an existing client was selected; do not create permanent client for one-time wholesale customerName
-    const billCustomer = selectedCustomer || undefined;
+    if (selectedCustomer && selectedCustomer.type !== 'Khata') {
+      customersService.update(selectedCustomer.id, { type: 'Khata' });
+    }
 
     const primaryAmt = parseFloat(splitCashInput) || 0;
     const bankAmt = parseFloat(splitBankInput) || 0;
     const secondaryAmt = parseFloat(splitSecondaryInput) || 0;
 
     const bill = salesService.completeSale({
-      saleType: 'Wholesale',
-      cartItems: wholesaleCart,
-      paymentMethod,
+      saleType: 'Khata',
+      cartItems: khataCart,
+      paymentMethod: method,
       amountReceived:
-        paymentMethod === 'Credit/Khata'
+        method === 'Credit/Khata'
           ? 0
-          : paymentMethod === 'Cash'
+          : method === 'Cash'
           ? cashReceived
-          : paymentMethod === 'Split'
+          : method === 'Split'
           ? (splitMode === 'CashBankCheque'
               ? (primaryAmt + bankAmt)
               : (splitMode === 'CashCheque' || splitMode === 'BankCheque'
                   ? primaryAmt
-                  : finalWholesaleGrandTotal))
-          : finalWholesaleGrandTotal,
-      discountTotal: wholesaleDiscountTotal,
-      taxTotal: wholesaleTaxAmount,
+                  : finalKhataGrandTotal))
+          : finalKhataGrandTotal,
+      discountTotal: khataDiscountTotal,
+      taxTotal: khataTaxAmount,
       staffId: currentStaff.id,
       staffName: currentStaff.name,
       counter: currentStaff.counter,
-      customer: billCustomer || undefined,
-      customerName: effectiveCustomerName,
-      customerPhone: effectivePhone,
-      clientId: selectedCustomer?.id,
-      clientName: selectedCustomer ? (selectedCustomer.businessName || selectedCustomer.name) : undefined,
-      cardTransactionId: paymentMethod === 'Card' ? cardTransactionId : undefined,
+      customer: selectedCustomer,
+      customerName: customerName.trim() || undefined,
+      customerPhone: selectedCustomer.phone,
+      clientId: selectedCustomer.id,
+      clientName: selectedCustomer.businessName || selectedCustomer.name,
+      cardTransactionId: method === 'Card' ? cardTransactionId : undefined,
       pandiId: selectedPandi?.id,
       pandiName: pandiName.trim() || undefined,
       bankDetails:
-        paymentMethod === 'Bank Transfer' && selectedBank
+        (method === 'Bank Transfer' || (method === 'Split' && (splitMode === 'CashBank' || splitMode === 'BankCheque' || splitMode === 'CashBankCheque'))) && selectedBank
           ? {
               bankId: selectedBank.id,
               bankName: selectedBank.bankName,
@@ -906,7 +965,7 @@ export default function WholesalePOSPage() {
             }
           : undefined,
       splitPayment:
-        paymentMethod === 'Split'
+        method === 'Split'
           ? {
               mode: splitMode,
               cashAmount: splitMode === 'BankCheque' ? 0 : primaryAmt,
@@ -925,13 +984,10 @@ export default function WholesalePOSPage() {
               primaryMethod: splitMode === 'BankCheque' ? 'Bank Transfer' : 'Cash',
               primaryAmount: splitMode === 'CashBankCheque' ? (primaryAmt + bankAmt) : primaryAmt,
               secondaryMethod:
-                splitMode === 'CashCard'
-                  ? 'Card'
-                  : splitMode === 'CashBank'
+                splitMode === 'CashBank'
                   ? 'Bank Transfer'
                   : 'Cheque',
               secondaryAmount: secondaryAmt,
-              cardTransactionId: splitCardAuth?.transactionId || splitManualCardRef.trim() || undefined,
               bankDetails:
                 (splitMode === 'CashBank' || splitMode === 'BankCheque' || splitMode === 'CashBankCheque') && selectedBank
                   ? {
@@ -965,12 +1021,15 @@ export default function WholesalePOSPage() {
       notes,
     });
 
-    wholesaleSessionService.clearDraft(currentStaff.id);
+    khataSessionService.clearDraft(currentStaff.id);
+
+    const updatedCustomer = customersService.getById(selectedCustomer.id);
+    if (updatedCustomer) {
+      setSelectedCustomer(updatedCustomer);
+    }
 
     setCompletedBill(bill);
-    clearWholesaleCart();
-    setCustomerName('');
-    setSelectedCustomer(null);
+    clearKhataCart();
     setCashReceived(0);
     setNotes('');
     setPandiName('');
@@ -978,75 +1037,67 @@ export default function WholesalePOSPage() {
     setSplitCashInput('');
     setSplitBankInput('');
     setSplitSecondaryInput('');
-    setSplitCardAuth(null);
-    setSplitManualCardRef('');
-    setSplitCardVerified(false);
+    setSplitReference('');
     setSplitBankSlipVerified(false);
     setSplitChequeVerified(false);
-    setSplitChequeNumber('');
-    setSplitReference('');
     const dReset = new Date();
     dReset.setDate(dReset.getDate() + 7);
     setChequeEntries([
       {
-        id: `chq-${Date.now()}`,
+        id: `khata-chq-${Date.now()}`,
         bankName: 'Meezan Bank',
         chequeNumber: '',
         amount: '',
         clearingDate: dReset.toISOString().split('T')[0],
       },
     ]);
-    loadPendingCheques();
-    setIsCashDrawerOpen(false);
     setIsCheckoutOpen(false);
     setIsInvoiceModalOpen(true);
     setProducts(productsService.getAll());
-    const nextInv = salesService.peekNextInvoiceNumber('Wholesale');
-    setNextInvoiceNumber(nextInv ? `#${nextInv}` : '#WB-026184');
+    setNextInvoiceNumber(salesService.peekNextInvoiceNumber('Khata'));
 
     toast({
-      title: 'Wholesale Invoice Finalized',
-      description: `Invoice #${bill.invoiceNumber} recorded successfully.`,
+      title: 'Khata Credit Sale Recorded',
+      description: `Invoice #${bill.invoiceNumber} recorded and debited to ${selectedCustomer.name}'s Khata ledger.`,
       type: 'success',
     });
   };
 
-  const calculatedChange = Math.max(0, cashReceived - finalWholesaleGrandTotal);
-  const isCashInsufficient = paymentMethod === 'Cash' && cashReceived < finalWholesaleGrandTotal;
+  const calculatedChange = Math.max(0, cashReceived - finalKhataGrandTotal);
+  const isCashInsufficient = paymentMethod === 'Cash' && cashReceived < finalKhataGrandTotal;
 
   return (
     <ProtectedRoute permission="pos_wholesale">
       <AppShell>
-        <div className="space-y-4 max-w-[1700px] mx-auto select-none pb-12">
+        <div className="space-y-4 max-w-[1750px] mx-auto select-none pb-12 font-sans text-[#17211D]">
           {/* ============================================================== */}
-          {/* 1. TOP HEADER / NAVBAR (Exact sequence matching Retail POS) */}
+          {/* 1. TOP HEADER / NAVBAR (Exact sequence matching Image 1) */}
           {/* ============================================================== */}
           <div className="bg-white rounded-2xl border border-[#DCE3E0] px-4 py-2.5 shadow-2xs flex items-center justify-between gap-4 flex-wrap xl:flex-nowrap">
             {/* Left: Logo & Title + Metadata */}
             <div className="flex items-center gap-6 flex-wrap sm:flex-nowrap">
-              {/* Logo & Title */}
               <div className="flex items-center gap-2.5 shrink-0">
                 <div className="w-8 h-8 rounded-lg bg-[#197A5A] flex items-center justify-center text-white shrink-0 shadow-2xs">
                   <Scan className="w-4 h-4" />
                 </div>
                 <div>
                   <h1 className="text-sm font-bold text-[#17211D] leading-none">
-                    Wholesale POS
+                    Wholesale / Credit POS
                   </h1>
                   <p className="text-[11px] text-[#66726D] mt-0.5">
-                    Main Store Register
+                    Main Store • {currentStaff?.counter || 'Counter 03'}
                   </p>
                 </div>
               </div>
 
-              {/* Metadata Columns on Same Line */}
+              {/* Metadata Columns */}
               <div className="flex items-center gap-6 text-left pl-4 sm:border-l sm:border-[#DCE3E0]">
                 <div>
                   <span className="text-[9px] font-bold text-[#8A9590] uppercase tracking-wider block">
                     INVOICE
                   </span>
                   <span className="text-xs font-bold text-[#17211D] font-mono">
-                    {nextInvoiceNumber}
+                    #{nextInvoiceNumber}
                   </span>
                 </div>
 
@@ -1055,7 +1106,7 @@ export default function WholesalePOSPage() {
                     CASHIER
                   </span>
                   <span className="text-xs font-bold text-[#17211D]">
-                    {currentStaff?.name || 'Haji Abdul Rehman'}
+                    {currentStaff?.name || 'Ayesha Khan'}
                   </span>
                 </div>
 
@@ -1064,146 +1115,68 @@ export default function WholesalePOSPage() {
                     COUNTER
                   </span>
                   <span className="text-xs font-bold text-[#17211D]">
-                    {currentStaff?.counter || 'Counter 02'}
+                    {currentStaff?.counter || 'Counter 03'}
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* Right: Pending Cheques -> Search Past Bills -> Shortcuts -> Hardware Dot -> Time */}
+            {/* Right: Search Bills/Returns + Time */}
             <div className="flex items-center gap-3 shrink-0 ml-auto">
-              {/* Pending Cheques Button */}
-              <button
-                type="button"
-                onClick={() => {
-                  loadPendingCheques();
-                  setIsPendingChequesModalOpen(true);
-                }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors shadow-2xs cursor-pointer ${
-                  dueTodayCount > 0
-                    ? 'bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100 ring-1 ring-amber-400'
-                    : pendingCheques.length > 0
-                    ? 'bg-[#DCEDE6] border-[#125E45]/40 text-[#125E45] hover:bg-[#cde4db]'
-                    : 'bg-white border-[#DCE3E0] hover:bg-[#F0F4F2] text-[#17211D]'
-                }`}
-                title="Wholesale Uncleared / Pending Cheques"
-              >
-                <Layers className="w-3.5 h-3.5 text-current" />
-                <span>Pending Cheques</span>
-                {pendingCheques.length > 0 && (
-                  <span
-                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                      dueTodayCount > 0 ? 'bg-amber-600 text-white animate-pulse' : 'bg-[#125E45] text-white'
-                    }`}
-                  >
-                    {pendingCheques.length}
-                  </span>
-                )}
-              </button>
-
-              {/* Search Past Bills/Returns Button */}
               <button
                 type="button"
                 onClick={() => setIsBillSearchOpen(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#DCE3E0] bg-white hover:bg-[#F0F4F2] text-xs font-semibold text-[#17211D] transition-colors shadow-2xs cursor-pointer"
-                title="Search past bills by customer or invoice (F3)"
+                title="Search past bills or process returns"
               >
-                <FileText className="w-3.5 h-3.5 text-[#66726D]" />
-                <span>Search Bills</span>
+                <BookOpen className="w-3.5 h-3.5 text-[#197A5A]" />
+                <span>Search Bills/Returns</span>
               </button>
 
-              {/* Shortcuts Button */}
-              <button
-                type="button"
-                onClick={() => setIsShortcutsModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#DCE3E0] bg-white hover:bg-[#F0F4F2] text-xs font-semibold text-[#17211D] transition-colors shadow-2xs cursor-pointer"
-                title="View Keyboard Shortcuts"
-              >
-                <Keyboard className="w-3.5 h-3.5 text-[#66726D]" />
-                <span>Shortcuts</span>
-              </button>
-
-              {/* Hardware Status Popover Button */}
-              <WholesaleHardwareStatus />
-
-              {/* Clock & Status */}
               <div className="text-right pl-3 border-l border-[#DCE3E0]">
                 <div className="font-bold text-xs text-[#17211D] font-mono leading-tight">
-                  {currentTime || '09:02 PM'}
-                </div>
-                <div className="text-[10px] text-[#66726D] flex items-center justify-end gap-1.5 mt-0.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#16835B] animate-pulse" />
-                  <span>Online · Scanner ready</span>
+                  {currentTime || '17 Oct 2026 • 10:42 AM'}
                 </div>
               </div>
             </div>
           </div>
 
-          {/* CHEQUE DUE TODAY NOTIFICATION BANNER */}
-          {dueTodayCount > 0 && (
-            <div className="p-3 rounded-2xl bg-[#F7EEDC] border border-[#9A6A16]/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+          {/* ============================================================== */}
+          {/* PERSISTENT WORK SESSION RESUME BANNER */}
+          {/* ============================================================== */}
+          {availableDraft && (
+            <div className="p-3 rounded-2xl bg-[#DCEDE6] border border-[#197A5A]/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs animate-in fade-in duration-200">
               <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-[#9A6A16] text-white flex items-center justify-center font-bold shrink-0">
-                  <Clock className="w-4 h-4 animate-spin" />
-                </div>
-                <div>
-                  <div className="font-bold text-[#17211D] flex items-center gap-2">
-                    <span>{dueTodayCount} Wholesale Cheque(s) Due for Clearance Today</span>
-                    <span className="text-[10px] bg-[#9A6A16]/20 text-[#9A6A16] px-1.5 py-0.2 rounded font-bold uppercase">
-                      Action Required
-                    </span>
-                  </div>
-                  <div className="text-[11px] text-[#66726D]">
-                    Cheques are scheduled for clearance. Click &quot;Pass Cheque (OK)&quot; to clear and deduct from client accounts.
-                  </div>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  loadPendingCheques();
-                  setIsPendingChequesModalOpen(true);
-                }}
-                className="px-3 py-1.5 bg-[#9A6A16] hover:bg-[#835911] text-white text-xs font-bold rounded-xl transition-colors cursor-pointer shadow-2xs shrink-0 flex items-center gap-1.5"
-              >
-                <Check className="w-3.5 h-3.5" />
-                <span>View & Pass Cheques</span>
-              </button>
-            </div>
-          )}
-
-
-          {/* DRAFT NOTIFICATION BANNER (ONLY shown when there were real items saved) */}
-          {availableDraft && availableDraft.cartItems && availableDraft.cartItems.length > 0 && (
-            <div className="p-3 rounded-2xl bg-[#F7EEDC] border border-[#9A6A16]/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
-              <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-[#9A6A16] text-white flex items-center justify-center font-bold shrink-0">
+                <div className="w-7 h-7 rounded-xl bg-[#125E45] text-white flex items-center justify-center font-bold shrink-0">
                   <Clock className="w-4 h-4" />
                 </div>
                 <div>
-                  <div className="font-bold text-[#17211D] flex items-center gap-2">
-                    <span>Unfinished Wholesale Work Session Detected</span>
-                    <span className="text-[10px] bg-[#9A6A16]/20 text-[#9A6A16] px-1.5 py-0.2 rounded font-mono font-bold">
+                  <div className="font-bold text-[#125E45] flex items-center gap-2">
+                    <span>Unfinished Khata Session Detected</span>
+                    <span className="text-[10px] bg-white text-[#125E45] px-1.5 py-0.2 rounded font-mono font-semibold">
                       {new Date(availableDraft.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
                   <div className="text-[11px] text-[#66726D]">
-                    {availableDraft.cartItems.length} item(s) • Total: Rs {availableDraft.grandTotal?.toLocaleString() || 0}
+                    {availableDraft.cartItems?.length || 0} fabric(s) • Total: PKR{' '}
+                    {availableDraft.grandTotal?.toLocaleString() || 0}
+                    {availableDraft.selectedClient ? ` • Account: ${availableDraft.selectedClient.businessName || availableDraft.selectedClient.name}` : ''}
                   </div>
                 </div>
               </div>
+
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={handleDiscardDraft}
-                  className="px-2.5 py-1 text-[#66726D] hover:text-[#C23D45] font-semibold transition-colors cursor-pointer"
+                  className="px-2.5 py-1 text-[#C23D45] hover:bg-[#C23D45]/10 font-semibold rounded-lg transition-colors cursor-pointer"
                 >
                   Discard Draft
                 </button>
                 <button
                   type="button"
                   onClick={handleResumeDraft}
-                  className="px-3 py-1 bg-[#125E45] hover:bg-[#197A5A] text-white font-bold rounded-lg shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                  className="px-3 py-1 bg-[#125E45] hover:bg-[#197A5A] text-white font-bold rounded-lg shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
                   <span>Resume Work</span>
@@ -1213,19 +1186,18 @@ export default function WholesalePOSPage() {
           )}
 
           {/* ============================================================== */}
-          {/* 3. MAIN TWO-COLUMN BODY */}
+          {/* 2. MAIN WORKSPACE GRID: CATALOG (LEFT) vs CURRENT BILL (RIGHT) */}
           {/* ============================================================== */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-            {/* ------------------------------------------------------------ */}
-            {/* LEFT COLUMN: Customer Card + Barcode/Search + Catalog */}
-            {/* ------------------------------------------------------------ */}
+            {/* LEFT COLUMN: Customer Card + Search + Catalog (8 of 12) */}
             <div className="lg:col-span-8 space-y-4">
-              {/* CUSTOMER & WHOLESALE ACCOUNT BOX */}
-              <div className="bg-white rounded-2xl border border-[#DCE3E0] p-4 shadow-2xs space-y-3">
+              {/* Card 1: Customer & Khata Account */}
+              <div className="bg-white rounded-2xl border border-[#DCE3E0] p-4 sm:p-5 shadow-2xs space-y-4">
+                {/* Header Row */}
                 <div className="flex items-center justify-between flex-wrap gap-2">
-                  <h3 className="text-sm font-bold text-[#17211D]">
-                    Customer & wholesale account
-                  </h3>
+                  <h2 className="text-sm sm:text-base font-bold text-[#17211D]">
+                    Customer & Khata account
+                  </h2>
                   <div className="flex items-center gap-2">
                     {(customerName.trim() || selectedCustomer) && (
                       <button
@@ -1235,7 +1207,6 @@ export default function WholesalePOSPage() {
                           setSelectedCustomer(null);
                         }}
                         className="text-xs font-semibold text-[#C23D45] hover:underline cursor-pointer ml-1"
-                        title="Clear and switch wholesale account"
                       >
                         Switch Account
                       </button>
@@ -1243,57 +1214,147 @@ export default function WholesalePOSPage() {
                   </div>
                 </div>
 
-                {/* Two dropdown fields: Customer Name & Wholesale Client */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <WholesaleCustomerInput
-                    value={customerName}
-                    onChange={name => {
-                      setCustomerName(name);
-                    }}
-                  />
-
-                  <WholesaleClientSearch
-                    selectedClient={selectedCustomer}
-                    onSelectClient={client => {
-                      setSelectedCustomer(client);
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* BARCODE SCANNER INPUT + SCAN BUTTON */}
-              <div className="flex items-center gap-3">
-                <form
-                  onSubmit={handleBarcodeSubmit}
-                  className="flex-1 flex items-center justify-between border-2 border-[#197A5A] rounded-xl bg-white px-3.5 py-2.5 shadow-2xs"
-                >
-                  <div className="flex items-center gap-2.5 flex-1 mr-2">
-                    <BarcodeIcon className="w-4 h-4 text-[#66726D] shrink-0" />
-                    <input
-                      ref={barcodeInputRef}
-                      type="text"
-                      placeholder="Scan or enter barcode / SKU"
-                      value={barcodeInput}
-                      onChange={e => setBarcodeInput(e.target.value)}
-                      className="w-full text-xs font-mono text-[#17211D] placeholder:text-[#8A9590] bg-transparent focus:outline-none"
-                    />
+                {/* Dual Input Fields (Side by Side) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  {/* Field 1: Customer Name (Person visiting / taking fabric) */}
+                  <div>
+                    <label className="block text-xs font-semibold text-[#17211D] mb-1.5">
+                      Customer Name
+                    </label>
+                    <div className="relative">
+                      <User className="w-4 h-4 text-[#8A9590] absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        placeholder="Enter person / visitor name..."
+                        value={customerName}
+                        onChange={e => setCustomerName(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2.5 bg-white border border-[#DCE3E0] hover:border-[#197A5A] focus:border-[#197A5A] rounded-xl text-xs font-semibold text-[#17211D] placeholder:text-[#8A9590] placeholder:font-normal focus:outline-none transition-colors"
+                      />
+                    </div>
                   </div>
-                  <span className="px-1.5 py-0.5 rounded bg-[#F0F4F2] text-[10px] text-[#8A9590] font-mono border border-[#DCE3E0]">
-                    F1
-                  </span>
-                </form>
 
-                <button
-                  type="button"
-                  onClick={handleBarcodeSubmit}
-                  className="bg-[#125E45] hover:bg-[#197A5A] text-white px-6 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-colors shadow-2xs cursor-pointer h-[42px]"
-                >
-                  <Scan className="w-4 h-4" />
-                  <span>Scan</span>
-                </button>
+                  {/* Field 2: Khata Account */}
+                  <div className="relative" ref={accountDropdownRef}>
+                    <label className="block text-xs font-semibold text-[#17211D] mb-1.5">
+                      Khata Account
+                    </label>
+                    {selectedCustomer ? (
+                      <div className="w-full flex items-center justify-between px-3.5 py-2 bg-[#DCEDE6] border border-[#197A5A]/50 rounded-xl text-xs font-semibold text-[#125E45]">
+                        <div className="flex items-center gap-2 truncate">
+                          <Building className="w-4 h-4 text-[#125E45] shrink-0" />
+                          <span className="truncate">
+                            {selectedCustomer.businessName || selectedCustomer.name} · {selectedCustomer.id}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedCustomer(null);
+                            setAccountSearchQuery('');
+                          }}
+                          className="text-xs font-bold text-[#C23D45] hover:underline cursor-pointer ml-2 shrink-0"
+                        >
+                          Change
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <Search className="w-4 h-4 text-[#8A9590] absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          placeholder="Type or search Khata account (e.g. Raza Fabrics)..."
+                          value={accountSearchQuery}
+                          onChange={e => {
+                            setAccountSearchQuery(e.target.value);
+                            setIsAccountDropdownOpen(true);
+                          }}
+                          onFocus={() => setIsAccountDropdownOpen(true)}
+                          className="w-full pl-9 pr-3 py-2.5 bg-white border border-[#DCE3E0] hover:border-[#197A5A] focus:border-[#197A5A] rounded-xl text-xs text-[#17211D] placeholder:text-[#8A9590] focus:outline-none transition-colors"
+                        />
+                        {isAccountDropdownOpen && (
+                          <div className="absolute left-0 right-0 top-full mt-1.5 bg-white rounded-2xl border border-[#DCE3E0] shadow-xl p-2 z-40 max-h-56 overflow-y-auto">
+                            {khataAccountsList.length === 0 ? (
+                              <div className="p-3 text-xs text-center text-[#8A9590]">
+                                No matching Khata account found
+                              </div>
+                            ) : (
+                              khataAccountsList.map(acc => (
+                                <button
+                                  key={acc.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedCustomer(acc);
+                                    setIsAccountDropdownOpen(false);
+                                    setAccountSearchQuery('');
+                                  }}
+                                  className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-left hover:bg-[#E9F3EF] text-xs transition-colors cursor-pointer"
+                                >
+                                  <div>
+                                    <div className="font-bold text-[#17211D]">
+                                      {acc.businessName ? `${acc.businessName} (${acc.name})` : acc.name}
+                                    </div>
+                                    <div className="text-[11px] text-[#66726D] font-mono">
+                                      ID: {acc.id} • {acc.phone}
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="text-[10px] text-[#66726D]">Balance:</div>
+                                    <div className="font-bold font-mono text-[#125E45] text-xs">
+                                      PKR {(acc.currentBalance ?? acc.balance ?? 0).toLocaleString()}
+                                    </div>
+                                  </div>
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Account Balance & Credit Stats Banner */}
+                <div className="bg-[#F0F4F2] border border-[#DCE3E0] rounded-xl p-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <span className="text-[11px] font-semibold text-[#66726D] block">
+                      Current balance owed
+                    </span>
+                    <span className="text-sm font-bold text-[#17211D] font-mono mt-0.5 block">
+                      PKR {currentBalance.toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-[11px] font-semibold text-[#66726D] block">
+                      Available credit
+                    </span>
+                    <span className="text-sm font-bold text-[#197A5A] font-mono mt-0.5 block">
+                      PKR {availableCredit.toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-[11px] font-semibold text-[#66726D] block">
+                      Credit limit
+                    </span>
+                    <span className="text-sm font-bold text-[#17211D] font-mono mt-0.5 block">
+                      PKR {creditLimit.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Credit Limit Alert Banner */}
+                {isLimitExceeded && (
+                  <div className="p-2.5 rounded-xl bg-[#FDE8E9] border border-[#C23D45] flex items-center gap-2 text-xs text-[#C23D45] font-semibold">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-[#C23D45]" />
+                    <span>
+                      Alert: This sale will exceed {selectedCustomer?.name}&apos;s credit limit (PKR {creditLimit.toLocaleString()}) by PKR {excessAmount.toLocaleString()}!
+                    </span>
+                  </div>
+                )}
               </div>
 
-              {/* SEARCH FABRIC NAME, SKU OR TYPE */}
+              {/* SEARCH FABRIC NAME, SKU OR TYPE (Matching Wholesale POS) */}
               <div className="flex items-center justify-between border border-[#DCE3E0] rounded-xl bg-white px-3.5 py-2.5 shadow-2xs">
                 <div className="flex items-center gap-2.5 flex-1 mr-2">
                   <Search className="w-4 h-4 text-[#8A9590] shrink-0" />
@@ -1306,12 +1367,21 @@ export default function WholesalePOSPage() {
                     className="w-full text-xs font-medium text-[#17211D] placeholder:text-[#8A9590] bg-transparent focus:outline-none"
                   />
                 </div>
+                {searchQuery ? (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="text-[#8A9590] hover:text-[#17211D] mr-2"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                ) : null}
                 <span className="px-1.5 py-0.5 rounded bg-[#F0F4F2] text-[10px] text-[#8A9590] font-mono border border-[#DCE3E0]">
                   F2
                 </span>
               </div>
 
-              {/* PRODUCT CATALOG HEADER (Count + Sorting Dropdown) */}
+              {/* PRODUCT CATALOG HEADER (Count + Sorting Dropdown matching Wholesale POS) */}
               <div className="flex items-center justify-between pt-1">
                 <div>
                   <h2 className="text-base font-bold text-[#17211D]">Product catalog</h2>
@@ -1335,15 +1405,20 @@ export default function WholesalePOSPage() {
                 </div>
               </div>
 
-              {/* PRODUCT CARDS GRID (3 Columns) */}
+              {/* PRODUCT CARDS GRID (Exact Wholesale POS Card UI/UX) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
                 {displayedProducts.map(prod => {
-                  const isOutOfStock = prod.stock <= 0;
+                  const isBox = prod.packagingConfig?.type === 'box';
+                  const wholesaleStockAvailable = isBox && prod.packagingConfig?.wholesaleBoxes !== undefined
+                    ? prod.packagingConfig.wholesaleBoxes * (prod.packagingConfig.suitsPerBox || 1)
+                    : prod.stock;
+                  const isOutOfStock = wholesaleStockAvailable <= 0;
                   const seasonTag = prod.seasonCategory
                     ? `${prod.seasonCategory} '26`
                     : prod.subcategory || 'Summer \'26';
 
-                  const inCart = wholesaleCart.find(i => i.product.id === prod.id);
+                  const inCart = khataCart.find(i => i.product.id === prod.id);
+                  const itemPrice = prod.wholesalePrice || prod.khataPrice || 0;
 
                   return (
                     <div
@@ -1366,7 +1441,11 @@ export default function WholesalePOSPage() {
                                 isOutOfStock ? 'bg-rose-500' : 'bg-[#16835B]'
                               }`}
                             />
-                            {prod.stock > 0 ? `${prod.stock} available` : 'Out of stock'}
+                            {wholesaleStockAvailable > 0
+                              ? isBox && prod.packagingConfig?.wholesaleBoxes !== undefined
+                                ? `${wholesaleStockAvailable} available (${prod.packagingConfig.wholesaleBoxes} bxs)`
+                                : `${wholesaleStockAvailable} available`
+                              : 'Out of stock'}
                           </span>
                         </div>
 
@@ -1377,7 +1456,7 @@ export default function WholesalePOSPage() {
 
                         {/* Category & Width Specs */}
                         <p className="text-xs text-[#66726D] mt-0.5">
-                          {prod.category} · {prod.subcategory || '58-inch width'}
+                          {prod.category} · {prod.subcategory || prod.description || '58-inch width'}
                         </p>
 
                         {/* Collection Tag */}
@@ -1392,7 +1471,7 @@ export default function WholesalePOSPage() {
                       <div className="flex items-center justify-between mt-4 pt-3 border-t border-[#DCE3E0]/60">
                         <div>
                           <div className="text-base font-bold text-[#17211D]">
-                            Rs {prod.wholesalePrice.toLocaleString()}
+                            PKR {itemPrice.toLocaleString()}
                           </div>
                           {inCart && (
                             <div className="text-[10px] text-[#197A5A] font-semibold mt-0.5">
@@ -1403,10 +1482,10 @@ export default function WholesalePOSPage() {
 
                         <button
                           type="button"
-                          onClick={() => !isOutOfStock && addToWholesaleCart(prod)}
+                          onClick={() => !isOutOfStock && addToKhataCart(prod)}
                           disabled={isOutOfStock}
                           className="w-8 h-8 rounded-lg bg-[#125E45] hover:bg-[#197A5A] disabled:bg-slate-300 text-white flex items-center justify-center font-bold text-lg transition-colors shadow-2xs cursor-pointer active:scale-95 disabled:cursor-not-allowed"
-                          title={`Add ${prod.name} to wholesale invoice`}
+                          title={`Add ${prod.name} to Wholesale / Credit invoice`}
                         >
                           <Plus className="w-4 h-4" />
                         </button>
@@ -1434,30 +1513,30 @@ export default function WholesalePOSPage() {
               )}
             </div>
 
-            {/* ------------------------------------------------------------ */}
-            {/* RIGHT COLUMN: Current Cart Panel (4 Columns) - STICKY FIXED IN VIEW */}
-            {/* ------------------------------------------------------------ */}
+            {/* ============================================================== */}
+            {/* RIGHT COLUMN: CURRENT BILL PANEL (Exact Wholesale POS UX/UI) */}
+            {/* ============================================================== */}
             <div className="lg:col-span-4 bg-white rounded-2xl border border-[#DCE3E0] p-4 shadow-2xs flex flex-col justify-between sticky top-4 min-h-[580px] max-h-[calc(100vh-8.5rem)] overflow-hidden">
               <div className="shrink-0 space-y-3">
                 {/* Cart Header */}
                 <div className="flex items-center justify-between pb-2 border-b border-[#DCE3E0]/70">
                   <div className="flex items-center gap-2">
-                    <h2 className="font-bold text-base text-[#17211D]">Current Cart</h2>
+                    <h2 className="font-bold text-base text-[#17211D]">Current Bill</h2>
                     <span className="bg-[#DCEDE6] text-[#125E45] text-xs font-semibold px-2 py-0.5 rounded-full">
-                      {totalCartMetres} items
+                      {khataCart.length} {khataCart.length === 1 ? 'item' : 'items'}
                     </span>
                   </div>
 
-                  {wholesaleCart.length > 0 && (
+                  {khataCart.length > 0 && (
                     <button
                       type="button"
                       onClick={() => {
-                        if (confirm('Clear active wholesale invoice?')) {
-                          clearWholesaleCart();
+                        if (confirm('Clear active Wholesale / Credit bill?')) {
+                          clearKhataCart();
                         }
                       }}
-                      className="p-1.5 rounded-lg border border-[#DCE3E0] text-[#8A9590] hover:text-[#17211D] hover:bg-[#F0F4F2] transition-colors cursor-pointer"
-                      title="Clear Cart"
+                      className="p-1.5 rounded-lg border border-[#DCE3E0] text-[#8A9590] hover:text-[#C23D45] hover:bg-[#F0F4F2] transition-colors cursor-pointer"
+                      title="Clear Bill"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -1467,48 +1546,43 @@ export default function WholesalePOSPage() {
                 {/* Customer Section */}
                 <div className="space-y-1">
                   <label className="text-xs font-semibold text-[#17211D] block">
-                    Customer & Wholesale Client
+                    Customer & Wholesale / Credit Account
                   </label>
                   <div className="border border-[#DCE3E0] rounded-xl px-3 py-2 text-xs text-[#17211D] bg-[#F0F4F2] flex items-center justify-between">
                     <span className="font-semibold truncate">
-                      {selectedCustomer ? (selectedCustomer.businessName || selectedCustomer.name) : customerName.trim() || 'Walk-in Customer'}
+                      {selectedCustomer ? (selectedCustomer.businessName || selectedCustomer.name) : 'Select Wholesale / Credit Account'}
                     </span>
-                    {(selectedCustomer || customerName.trim()) && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedCustomer(null);
-                          setCustomerName('');
-                        }}
-                        className="text-xs font-semibold text-[#125E45] hover:underline cursor-pointer ml-2 shrink-0"
-                      >
-                        Change
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => setIsAccountDropdownOpen(true)}
+                      className="text-xs font-semibold text-[#125E45] hover:underline cursor-pointer ml-2 shrink-0"
+                    >
+                      Change
+                    </button>
                   </div>
                   <div className="flex items-center justify-between text-xs pt-0.5">
                     <span className="text-[#66726D] truncate">
-                      {customerName.trim() ? customerName : 'No customer specified'} {selectedCustomer ? `· WC-${selectedCustomer.id.slice(0, 4)}` : ''}
+                      {customerName.trim() ? `Customer: ${customerName.trim()}` : 'No customer name entered'} {selectedCustomer ? `· ID: ${selectedCustomer.id}` : ''}
                     </span>
                     <span className="text-[#8A9590] font-mono text-[10px]">
-                      {nextInvoiceNumber}
+                      #{nextInvoiceNumber}
                     </span>
                   </div>
                 </div>
               </div>
 
-              {/* Cart Items List - Internally Scrollable with comfortable height */}
+              {/* Cart Items List - Internally Scrollable matching Wholesale POS */}
               <div className="flex-1 overflow-y-auto pr-1 space-y-2.5 my-2 min-h-[200px] max-h-[340px]">
-                {wholesaleCart.length === 0 ? (
+                {khataCart.length === 0 ? (
                   <div className="py-6 text-center text-[#8A9590] text-xs space-y-1.5">
                     <ShoppingBag className="w-7 h-7 text-[#C7D2CD] mx-auto" />
-                    <p className="font-semibold text-[#17211D]">Cart is empty</p>
+                    <p className="font-semibold text-[#17211D]">Bill is empty</p>
                     <p className="text-[11px] text-[#66726D]">
-                      Scan fabric barcode or click [+] on a fabric to add to wholesale invoice.
+                      Scan fabric barcode or click [+] on a fabric to add to Khata bill.
                     </p>
                   </div>
                 ) : (
-                  wholesaleCart.map(item => {
+                  khataCart.map(item => {
                     const unitPrice = Math.max(
                       0,
                       item.price - (item.discountPerUnit || 0) - (item.extraDiscountRupees || 0)
@@ -1526,7 +1600,7 @@ export default function WholesalePOSPage() {
                           </h4>
                           <button
                             type="button"
-                            onClick={() => removeFromWholesaleCart(item.product.id)}
+                            onClick={() => removeFromKhataCart(item.product.id)}
                             className="text-[#C23D45] hover:opacity-80 p-0.5 cursor-pointer shrink-0 transition-opacity"
                             title="Remove item"
                           >
@@ -1537,10 +1611,10 @@ export default function WholesalePOSPage() {
                         {/* Line 2: Spec / SKU & Unit Rate */}
                         <div className="flex items-center justify-between text-[11px] text-[#66726D]">
                           <span>
-                            {item.product.sku} · {item.quantity} {item.product.unit || 'm'}
+                            {item.product.sku} · Qty: {item.quantity}
                           </span>
                           <span className="text-[#8A9590] text-[10px]">
-                            Rs {unitPrice.toLocaleString()}
+                            PKR {unitPrice.toLocaleString()}
                           </span>
                         </div>
 
@@ -1550,7 +1624,7 @@ export default function WholesalePOSPage() {
                             <div className="border border-[#DCE3E0] rounded-lg flex items-center gap-1.5 px-2 h-7 text-xs text-[#17211D] bg-white shadow-2xs">
                               <button
                                 type="button"
-                                onClick={() => updateWholesaleQuantity(item.product.id, Math.max(1, item.quantity - 1))}
+                                onClick={() => updateKhataQuantity(item.product.id, Math.max(1, item.quantity - 1))}
                                 disabled={item.quantity <= 1}
                                 className="text-[#66726D] hover:text-[#17211D] font-bold text-sm cursor-pointer disabled:opacity-30 px-0.5"
                               >
@@ -1567,14 +1641,14 @@ export default function WholesalePOSPage() {
                                   const num = parseInt(raw, 10);
                                   if (!isNaN(num)) {
                                     const clamped = Math.max(1, Math.min(item.product.stock, num));
-                                    updateWholesaleQuantity(item.product.id, clamped);
+                                    updateKhataQuantity(item.product.id, clamped);
                                   }
                                 }}
                                 className="font-bold min-w-[20px] max-w-[34px] text-center text-xs text-[#17211D] bg-transparent focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                               />
                               <button
                                 type="button"
-                                onClick={() => updateWholesaleQuantity(item.product.id, Math.min(item.product.stock, item.quantity + 1))}
+                                onClick={() => updateKhataQuantity(item.product.id, Math.min(item.product.stock, item.quantity + 1))}
                                 disabled={item.quantity >= item.product.stock}
                                 className="text-[#66726D] hover:text-[#17211D] font-bold text-sm cursor-pointer disabled:opacity-30 px-0.5"
                               >
@@ -1593,7 +1667,7 @@ export default function WholesalePOSPage() {
                                 value={item.extraDiscountRupees || ''}
                                 onChange={e => {
                                   const val = parseFloat(e.target.value) || 0;
-                                  updateWholesaleExtraDiscount(item.product.id, val);
+                                  updateKhataExtraDiscount(item.product.id, val);
                                 }}
                                 className="w-14 px-2 text-xs font-bold font-mono text-center text-[#16835B] bg-transparent focus:outline-none placeholder:text-[#8A9590] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                               />
@@ -1601,7 +1675,7 @@ export default function WholesalePOSPage() {
                           </div>
 
                           <div className="font-bold text-sm text-[#17211D] shrink-0">
-                            Rs {item.lineTotal.toLocaleString()}
+                            PKR {item.lineTotal.toLocaleString()}
                           </div>
                         </div>
                       </div>
@@ -1610,38 +1684,54 @@ export default function WholesalePOSPage() {
                 )}
               </div>
 
-              {/* Bottom Financial Totals & Checkout Button (Compact Fixed matching Retail) */}
+              {/* Bottom Financial Totals & Khata Impact Box */}
               <div className="shrink-0 pt-2 border-t border-[#DCE3E0] space-y-2 bg-white">
                 <div className="space-y-1 text-xs">
                   <div className="flex items-center justify-between text-[#66726D]">
                     <span>Subtotal</span>
                     <span className="font-medium text-[#17211D]">
-                      Rs {wholesaleSubtotal.toLocaleString()}
+                      PKR {khataSubtotal.toLocaleString()}
                     </span>
                   </div>
 
-                  {wholesaleDiscountTotal > 0 && (
+                  {khataDiscountTotal > 0 && (
                     <div className="flex items-center justify-between text-[#66726D]">
                       <span>Discount</span>
                       <span className="font-semibold text-[#16835B]">
-                        − Rs {wholesaleDiscountTotal.toLocaleString()}
+                        − PKR {khataDiscountTotal.toLocaleString()}
                       </span>
                     </div>
                   )}
 
-                  {wholesaleTaxAmount > 0 && (
+                  {khataTaxAmount > 0 && (
                     <div className="flex items-center justify-between text-[#66726D]">
-                      <span>Tax ({wholesaleTaxRate}%)</span>
+                      <span>Tax ({khataTaxRate}%)</span>
                       <span className="font-semibold text-[#17211D]">
-                        Rs {wholesaleTaxAmount.toLocaleString()}
+                        PKR {khataTaxAmount.toLocaleString()}
                       </span>
                     </div>
                   )}
 
                   <div className="border-t border-[#DCE3E0] pt-1.5 mt-1 flex items-center justify-between">
-                    <span className="font-semibold text-sm text-[#17211D]">Total</span>
+                    <span className="font-semibold text-sm text-[#17211D]">Total to charge</span>
                     <span className="font-black text-xl text-[#17211D]">
-                      Rs {finalWholesaleGrandTotal.toLocaleString()}
+                      PKR {finalKhataGrandTotal.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Balance Impact Preview Box */}
+                <div className="p-2.5 bg-[#F0F4F2] rounded-xl border border-[#DCE3E0] space-y-1 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-[#66726D]">Balance after charge:</span>
+                    <span className="font-bold text-[#17211D]">
+                      PKR {newProjectedBalance.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#66726D]">Credit remaining:</span>
+                    <span className={`font-bold ${isLimitExceeded ? 'text-[#C23D45]' : 'text-[#197A5A]'}`}>
+                      PKR {availableCreditAfterCharge.toLocaleString()}
                     </span>
                   </div>
                 </div>
@@ -1650,7 +1740,7 @@ export default function WholesalePOSPage() {
                 <button
                   type="button"
                   onClick={handleOpenCheckout}
-                  disabled={wholesaleCart.length === 0}
+                  disabled={khataCart.length === 0 || !selectedCustomer}
                   className="w-full bg-[#125E45] hover:bg-[#197A5A] disabled:bg-slate-300 text-white py-2.5 px-3.5 rounded-xl font-bold text-xs flex items-center justify-between transition-colors shadow-2xs cursor-pointer active:scale-[0.99] disabled:cursor-not-allowed"
                 >
                   <div className="flex items-center gap-2">
@@ -1663,828 +1753,557 @@ export default function WholesalePOSPage() {
                 </button>
 
                 <p className="text-[10px] text-[#8A9590] text-center">
-                  Cash, card, bank transfer, or credit / khata settlement
+                  Credit / Khata settlement, cash, or bank transfer
                 </p>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* ============================================================== */}
-        {/* 4. MODALS & WORKFLOWS */}
-        {/* ============================================================== */}
-
-        {/* MODAL: Wholesale Settlement & Payment Modes */}
-        <Modal
-          isOpen={isCheckoutOpen}
-          onClose={() => setIsCheckoutOpen(false)}
-          title="Finalize Wholesale Tax Invoice"
-          description="Confirm billing details, payment method, and settlement status."
-          maxWidth="2xl"
-        >
-          <div className="space-y-4 text-xs select-none">
-            {/* Net Due Header */}
-            <div className="p-3.5 sm:p-4 bg-[#F0F4F2] rounded-2xl border border-[#DCE3E0] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-              <div>
-                <span className="text-[11px] sm:text-xs text-[#66726D]">Net Amount Due:</span>
-                <div className="text-xl sm:text-2xl font-black text-[#17211D]">
-                  Rs. {finalWholesaleGrandTotal.toLocaleString()}
-                </div>
-              </div>
-              <div className="text-left sm:text-right">
-                <span className="bg-[#DCEDE6] text-[#125E45] text-[10px] sm:text-xs font-semibold px-2.5 py-1 rounded-full inline-block mb-1">
-                  Wholesale Counter
-                </span>
-                <div className="text-[11px] text-[#66726D] truncate max-w-full sm:max-w-xs">
-                  {selectedCustomer ? (selectedCustomer.businessName || selectedCustomer.name) : customerName.trim() || 'Walk-in Customer'}
-                </div>
-              </div>
-            </div>
-
-            {/* Payment Method Selector */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-[#17211D] block">
-                Settlement Method
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-1.5 sm:gap-2">
-                {(['Cash', 'Bank Transfer', 'Card', 'Credit/Khata', 'Split'] as PaymentMethod[]).map(pm => {
-                  const isCardDisabled = pm === 'Card' && !isWholesaleTerminalEnabled;
-                  const isSelected = paymentMethod === pm;
-                  return (
-                    <button
-                      key={pm}
-                      type="button"
-                      onClick={() => {
-                        setPaymentMethod(pm);
-                        if (isCardDisabled) {
-                          toast({
-                            title: 'Card Terminal Disabled',
-                            description: 'Wholesale Card Terminal is disabled in Store Settings.',
-                            type: 'warning',
-                          });
-                        }
-                        if (pm === 'Credit/Khata') {
-                          setAmountPaidNow(0);
-                        } else {
-                          setAmountPaidNow(Math.round(finalWholesaleGrandTotal));
-                        }
-                        if (pm === 'Cash') {
-                          setCashReceived(Math.round(finalWholesaleGrandTotal));
-                        }
-                        if (pm === 'Split') {
-                          setSplitMode('CashCard');
-                          setSplitCashInput('');
-                          setSplitSecondaryInput('');
-                        }
-                      }}
-                      className={`p-2 sm:p-3 rounded-xl border flex flex-col items-center justify-center gap-1 sm:gap-1.5 text-[11px] sm:text-xs font-bold text-center transition-all cursor-pointer ${
-                        isSelected
-                          ? isCardDisabled
-                            ? 'bg-rose-50 text-rose-800 border-rose-300'
-                            : 'bg-[#DCEDE6] text-[#125E45] border-[#125E45]'
-                          : 'bg-white border-[#DCE3E0] text-[#66726D] hover:bg-[#F0F4F2]'
-                      }`}
-                    >
-                      {pm === 'Cash' && <Banknote className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />}
-                      {pm === 'Bank Transfer' && <Building className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />}
-                      {pm === 'Card' && <CreditCard className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />}
-                      {pm === 'Credit/Khata' && <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />}
-                      {pm === 'Split' && <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />}
-                      <span className="truncate max-w-full">{pm === 'Split' ? 'Split / Mixed' : pm}</span>
-                      {isCardDisabled && (
-                        <span className="text-[9px] font-normal text-rose-600">
-                          (Disabled)
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* CASH WORKFLOW & CASH DRAWER INTEGRATION */}
-            {paymentMethod === 'Cash' && (
-              <div className="p-4 bg-[#F0F4F2] rounded-2xl border border-[#DCE3E0] space-y-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-[#17211D]">Cash Received</label>
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="Enter cash received"
-                    value={cashReceived || ''}
-                    onChange={e => setCashReceived(parseFloat(e.target.value) || 0)}
-                    className="w-full p-2.5 text-sm font-bold text-[#17211D] border border-[#DCE3E0] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#197A5A] placeholder:text-[#8A9590] bg-white"
-                  />
-                </div>
-
-                {/* Change Due Indicator */}
-                {cashReceived >= finalWholesaleGrandTotal && (
-                  <div className="p-3 bg-[#DCEDE6] rounded-xl text-xs flex justify-between font-bold text-[#125E45]">
-                    <span>Change Due Customer:</span>
-                    <span className="text-sm font-black">
-                      Rs. {calculatedChange.toLocaleString()}
-                    </span>
+          {/* ============================================================== */}
+          {/* MODAL: Khata Settlement & Payment Modes (Identical to Wholesale, Card Terminal Removed) */}
+          {/* ============================================================== */}
+          <Modal
+            isOpen={isCheckoutOpen}
+            onClose={() => setIsCheckoutOpen(false)}
+            title="Finalize Khata Credit Invoice"
+            description="Confirm billing details, settlement method, and ledger posting status."
+            maxWidth="2xl"
+          >
+            <div className="space-y-4 text-xs select-none">
+              {/* Net Due Header */}
+              <div className="p-3.5 sm:p-4 bg-[#F0F4F2] rounded-2xl border border-[#DCE3E0] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div>
+                  <span className="text-[11px] sm:text-xs text-[#66726D]">Net Amount Due:</span>
+                  <div className="text-xl sm:text-2xl font-black text-[#17211D]">
+                    Rs. {finalKhataGrandTotal.toLocaleString()}
                   </div>
-                )}
-              </div>
-            )}
-
-            {/* BANK TRANSFER DETAILS */}
-            {paymentMethod === 'Bank Transfer' && (
-              <div className="p-4 bg-[#F0F4F2] rounded-2xl border border-[#DCE3E0] space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="font-bold text-[#17211D]">Receiving Bank Account:</span>
-                  <span className="text-[10px] text-[#8A9590]">
-                    Select designated business bank
-                  </span>
                 </div>
+                <div className="text-left sm:text-right">
+                  <span className="bg-[#DCEDE6] text-[#125E45] text-[10px] sm:text-xs font-semibold px-2.5 py-1 rounded-full inline-block mb-1">
+                    Khata Credit Counter
+                  </span>
+                  <div className="text-[11px] text-[#66726D] truncate max-w-full sm:max-w-xs">
+                    {selectedCustomer ? (selectedCustomer.businessName || selectedCustomer.name) : customerName.trim() || 'Select Khata Account'}
+                  </div>
+                </div>
+              </div>
 
-                {bankAccounts.length === 0 ? (
-                  <p className="text-xs text-[#C23D45]">
-                    No bank accounts configured in Store Settings.
-                  </p>
-                ) : bankAccounts.length === 1 ? (
-                  /* Single Bank Account: Show directly as requested */
-                  <div className="p-3 sm:p-3.5 rounded-xl border border-[#125E45] bg-[#DCEDE6]/40 shadow-2xs">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1">
-                      <span className="font-bold text-xs text-[#17211D] flex items-center gap-1.5 min-w-0">
-                        <Building className="w-3.5 h-3.5 text-[#125E45] shrink-0" />
-                        <span className="truncate">{bankAccounts[0].bankName}</span>
-                      </span>
-                      <span className="text-[10px] text-[#66726D] font-medium truncate">
-                        Title: <strong className="text-[#17211D]">{bankAccounts[0].accountTitle}</strong>
-                      </span>
-                    </div>
-                    <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-2 p-2.5 bg-white rounded-lg border border-[#DCE3E0] mt-1.5">
-                      <div className="min-w-0">
-                        <span className="text-[9px] text-[#8A9590] block uppercase font-semibold">
-                          Account Number
-                        </span>
-                        <span className="text-xs font-black font-mono text-[#17211D] tracking-wider select-all break-all">
-                          {bankAccounts[0].accountNumber}
-                        </span>
-                      </div>
+              {/* Payment Method Selector */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-[#17211D] block">
+                  Settlement Method
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
+                  {[
+                    { id: 'Credit/Khata', label: 'Credit / Khata', icon: BookOpen },
+                    { id: 'Cash', label: 'Cash Payment', icon: Banknote },
+                    { id: 'Bank Transfer', label: 'Bank Transfer', icon: Building },
+                    { id: 'Split', label: 'Split / Mixed', icon: Layers },
+                  ].map(m => {
+                    const Icon = m.icon;
+                    const isSelected = paymentMethod === m.id;
+                    return (
                       <button
+                        key={m.id}
                         type="button"
-                        onClick={() => handleCopyAccount(bankAccounts[0].accountNumber, bankAccounts[0].id)}
-                        className="px-2.5 py-1.5 bg-[#F6F8F7] hover:bg-[#DCEDE6] text-[#125E45] border border-[#DCE3E0] rounded-md text-[10px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer shrink-0 self-start xs:self-center"
-                      >
-                        {copiedBankId === bankAccounts[0].id ? (
-                          <>
-                            <Check className="w-3 h-3 text-[#125E45]" />
-                            <span>Copied</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3 h-3" />
-                            <span>Copy</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                    {bankAccounts[0].iban && (
-                      <div className="text-[9px] text-[#8A9590] font-mono mt-1 break-all">
-                        IBAN: {bankAccounts[0].iban}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  /* Multiple Bank Accounts: Dropdown with Bank Names + Selected Bank Account Number */
-                  <div className="space-y-2">
-                    <div>
-                      <label className="text-[10px] font-bold text-[#66726D] block mb-1">
-                        Select Receiving Bank:
-                      </label>
-                      <select
-                        value={selectedBank?.id || bankAccounts[0]?.id || ''}
-                        onChange={e => {
-                          const found = bankAccounts.find(b => b.id === e.target.value);
-                          if (found) setSelectedBank(found);
+                        onClick={() => {
+                          setPaymentMethod(m.id as PaymentMethod);
+                          if (m.id === 'Credit/Khata') {
+                            setCashReceived(0);
+                          } else if (m.id === 'Cash') {
+                            setCashReceived(Math.round(finalKhataGrandTotal));
+                          } else if (m.id === 'Split') {
+                            setSplitMode('CashBank');
+                            setSplitCashInput('');
+                            setSplitBankInput('');
+                            setSplitSecondaryInput('');
+                            setSplitBankSlipVerified(false);
+                            setSplitChequeVerified(false);
+                            setSplitReference('');
+                          }
                         }}
-                        className="w-full p-2 text-xs font-bold text-[#17211D] bg-white border border-[#DCE3E0] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#197A5A] cursor-pointer"
+                        className={`p-2 sm:p-3 rounded-xl border flex flex-col items-center justify-center gap-1 sm:gap-1.5 text-[11px] sm:text-xs font-bold text-center transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-[#DCEDE6] text-[#125E45] border-[#125E45]'
+                            : 'bg-white border-[#DCE3E0] text-[#66726D] hover:bg-[#F0F4F2]'
+                        }`}
                       >
-                        {bankAccounts.map(b => (
-                          <option key={b.id} value={b.id}>
-                            {b.bankName} — {b.accountTitle}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                        <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                        <span className="truncate max-w-full">{m.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
 
-                    {selectedBank && (
-                      <div className="p-3 sm:p-3.5 rounded-xl border border-[#125E45] bg-[#DCEDE6]/40 shadow-2xs">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1">
-                          <span className="font-bold text-xs text-[#17211D] flex items-center gap-1.5 min-w-0">
-                            <Building className="w-3.5 h-3.5 text-[#125E45] shrink-0" />
-                            <span className="truncate">{selectedBank.bankName}</span>
-                          </span>
-                          <span className="text-[10px] text-[#66726D] font-medium truncate">
-                            Title: <strong className="text-[#17211D]">{selectedBank.accountTitle}</strong>
-                          </span>
-                        </div>
-                        <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-2 p-2.5 bg-white rounded-lg border border-[#DCE3E0] mt-1.5">
-                          <div className="min-w-0">
-                            <span className="text-[9px] text-[#8A9590] block uppercase font-semibold">
-                              Account Number
-                            </span>
-                            <span className="text-xs font-black font-mono text-[#17211D] tracking-wider select-all break-all">
-                              {selectedBank.accountNumber}
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleCopyAccount(selectedBank.accountNumber, selectedBank.id)}
-                            className="px-2.5 py-1.5 bg-[#F6F8F7] hover:bg-[#DCEDE6] text-[#125E45] border border-[#DCE3E0] rounded-md text-[10px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer shrink-0 self-start xs:self-center"
-                          >
-                            {copiedBankId === selectedBank.id ? (
-                              <>
-                                <Check className="w-3 h-3 text-[#125E45]" />
-                                <span>Copied</span>
-                              </>
-                            ) : (
-                              <>
-                                <Copy className="w-3 h-3" />
-                                <span>Copy</span>
-                              </>
-                            )}
-                          </button>
-                        </div>
-                        {selectedBank.iban && (
-                          <div className="text-[9px] text-[#8A9590] font-mono mt-1 break-all">
-                            IBAN: {selectedBank.iban}
-                          </div>
-                        )}
-                      </div>
+              {/* CREDIT / KHATA LEDGER WORKFLOW */}
+              {paymentMethod === 'Credit/Khata' && (
+                <div className="p-4 bg-[#F7EEDC] rounded-2xl border border-[#9A6A16]/30 space-y-2">
+                  <div className="font-bold text-[#17211D] flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <BookOpen className="w-4 h-4 text-[#9A6A16]" />
+                      <span>Ledger Credit Charging</span>
+                    </div>
+                    {selectedCustomer && (
+                      <span className="text-[11px] font-mono text-[#9A6A16]">
+                        Current Balance: Rs. {selectedCustomer.currentBalance.toLocaleString()}
+                      </span>
                     )}
                   </div>
-                )}
-
-                <div className="pt-2 border-t border-[#DCE3E0] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <span className="text-xs text-[#66726D]">Transfer Slip Verified:</span>
-                  <button
-                    type="button"
-                    onClick={() => setIsBankPaymentConfirmed(!isBankPaymentConfirmed)}
-                    className={`w-full sm:w-auto px-3 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
-                      isBankPaymentConfirmed
-                        ? 'bg-[#125E45] text-white shadow-2xs'
-                        : 'bg-white border border-[#DCE3E0] text-[#17211D] hover:bg-[#F0F4F2]'
-                    }`}
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                    <span>{isBankPaymentConfirmed ? 'Payment Confirmed' : 'Confirm Slip Received'}</span>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* CARD TERMINAL WORKFLOW */}
-            {paymentMethod === 'Card' && (
-              <div className="p-4 bg-[#F0F4F2] rounded-2xl border border-[#DCE3E0] space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="font-bold text-[#17211D]">Point-of-Sale Card Terminal:</span>
-                  <span className="text-[10px] font-mono text-[#8A9590]">
-                    Status: {cardPaymentState}
-                  </span>
-                </div>
-
-                {cardStatusMessage && (
-                  <p className="text-xs text-[#66726D] p-2.5 bg-white rounded-xl border border-[#DCE3E0]">
-                    {cardStatusMessage}
+                  <p className="text-[11px] text-[#66726D]">
+                    Net invoice amount <strong>Rs. {finalKhataGrandTotal.toLocaleString()}</strong> will be charged directly to the ledger account of{' '}
+                    <strong>{selectedCustomer?.businessName || selectedCustomer?.name || 'Customer'}</strong>.
                   </p>
-                )}
-
-                {cardPaymentState !== 'authorized' ? (
-                  <button
-                    type="button"
-                    onClick={handleStartCardPayment}
-                    disabled={!isWholesaleTerminalEnabled || cardPaymentState === 'processing' || cardPaymentState === 'waiting_card'}
-                    className="w-full bg-[#125E45] hover:bg-[#197A5A] disabled:bg-slate-300 text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-2 transition-colors shadow-2xs cursor-pointer disabled:cursor-not-allowed"
-                  >
-                    <CreditCard className="w-4 h-4" />
-                    <span>{isWholesaleTerminalEnabled ? 'Start Card Terminal Payment' : 'Card Terminal Disabled in Settings'}</span>
-                  </button>
-                ) : (
-                  <div className="p-3 bg-[#DCEDE6] border border-[#125E45]/30 rounded-xl text-[#125E45] font-bold flex items-center justify-between">
-                    <span>Authorized (Ref: {cardTransactionId})</span>
-                    <CheckCircle2 className="w-4 h-4" />
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* CREDIT / KHATA LEDGER WORKFLOW */}
-            {paymentMethod === 'Credit/Khata' && (
-              <div className="p-4 bg-[#F7EEDC] rounded-2xl border border-[#9A6A16]/30 space-y-2">
-                <div className="font-bold text-[#17211D] flex items-center gap-1.5">
-                  <BookOpen className="w-4 h-4 text-[#9A6A16]" />
-                  <span>Ledger Credit Charging</span>
+                  {customerName.trim() && (
+                    <div className="text-[11px] text-[#17211D] bg-white/70 p-2 rounded-lg border border-[#9A6A16]/20">
+                      <span className="text-[#66726D]">Visitor / Bearer picking up: </span>
+                      <strong>{customerName.trim()}</strong>
+                    </div>
+                  )}
+                  {selectedCustomer && selectedCustomer.creditLimit > 0 && (
+                    <div className="pt-2 border-t border-[#9A6A16]/20 flex justify-between text-[11px]">
+                      <span className="text-[#66726D]">Credit Limit: Rs. {selectedCustomer.creditLimit.toLocaleString()}</span>
+                      <span className={`font-semibold ${selectedCustomer.currentBalance + finalKhataGrandTotal > selectedCustomer.creditLimit ? 'text-[#C23D45]' : 'text-[#125E45]'}`}>
+                        Projected: Rs. {(selectedCustomer.currentBalance + finalKhataGrandTotal).toLocaleString()}
+                      </span>
+                    </div>
+                  )}
                 </div>
-                <p className="text-[11px] text-[#66726D]">
-                  Net invoice amount Rs. {wholesaleGrandTotal.toLocaleString()} will be charged directly to the account of{' '}
-                  <strong>{selectedCustomer?.businessName || selectedCustomer?.name}</strong>.
-                </p>
-              </div>
-            )}
+              )}
 
-            {/* SPLIT / MIXED PAYMENT WORKFLOW (Retail Mirror + Cash/Bank + Cheque) */}
-            {paymentMethod === 'Split' && (
-              <div className="space-y-3.5 p-3 sm:p-4 bg-[#F8FAFA] rounded-2xl border border-[#DCE3E0]">
-                {/* Mode Selector (5 Tabs): Cash + Card, Cash + Bank, Cash + Cheque, Bank + Cheque, Cash + Bank + Cheque */}
-                <div className="space-y-1.5">
-                  <div>
-                    <span className="text-xs font-bold text-[#17211D] block mb-1">Split Mode Selection:</span>
+              {/* CASH WORKFLOW & CASH DRAWER INTEGRATION */}
+              {paymentMethod === 'Cash' && (
+                <div className="p-4 bg-[#F0F4F2] rounded-2xl border border-[#DCE3E0] space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-[#17211D]">Cash Received</label>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="Enter cash received"
+                      value={cashReceived || ''}
+                      onChange={e => setCashReceived(parseFloat(e.target.value) || 0)}
+                      className="w-full p-2.5 text-sm font-bold text-[#17211D] border border-[#DCE3E0] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#197A5A] placeholder:text-[#8A9590] bg-white"
+                    />
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-1 sm:gap-1.5 p-1 bg-white rounded-xl border border-[#DCE3E0]">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSplitMode('CashCard');
-                        setSplitCardVerified(false);
-                        setSplitBankSlipVerified(false);
-                        setSplitChequeVerified(false);
-                        setSplitCashInput('');
-                        setSplitBankInput('');
-                        setSplitSecondaryInput('');
-                      }}
-                      className={`px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer text-center ${
-                        splitMode === 'CashCard'
-                          ? 'bg-[#125E45] text-white shadow-2xs'
-                          : 'text-[#66726D] hover:text-[#17211D] hover:bg-[#F0F4F2]'
-                      }`}
-                    >
-                      <CreditCard className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate">Cash + Card</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSplitMode('CashBank');
-                        setSplitCardVerified(false);
-                        setSplitBankSlipVerified(false);
-                        setSplitChequeVerified(false);
-                        setSplitCashInput('');
-                        setSplitBankInput('');
-                        setSplitSecondaryInput('');
-                      }}
-                      className={`px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer text-center ${
-                        splitMode === 'CashBank'
-                          ? 'bg-[#125E45] text-white shadow-2xs'
-                          : 'text-[#66726D] hover:text-[#17211D] hover:bg-[#F0F4F2]'
-                      }`}
-                    >
-                      <Building className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate">Cash + Bank</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSplitMode('CashCheque');
-                        setSplitCardVerified(false);
-                        setSplitBankSlipVerified(false);
-                        setSplitChequeVerified(false);
-                        setSplitCashInput('');
-                        setSplitBankInput('');
-                        setSplitSecondaryInput('');
-                      }}
-                      className={`px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer text-center ${
-                        splitMode === 'CashCheque'
-                          ? 'bg-[#125E45] text-white shadow-2xs'
-                          : 'text-[#66726D] hover:text-[#17211D] hover:bg-[#F0F4F2]'
-                      }`}
-                    >
-                      <Layers className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate">Cash + Cheque</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSplitMode('BankCheque');
-                        setSplitCardVerified(false);
-                        setSplitBankSlipVerified(false);
-                        setSplitChequeVerified(false);
-                        setSplitCashInput('');
-                        setSplitBankInput('');
-                        setSplitSecondaryInput('');
-                      }}
-                      className={`px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer text-center ${
-                        splitMode === 'BankCheque'
-                          ? 'bg-[#125E45] text-white shadow-2xs'
-                          : 'text-[#66726D] hover:text-[#17211D] hover:bg-[#F0F4F2]'
-                      }`}
-                    >
-                      <Building className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate">Bank + Cheque</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSplitMode('CashBankCheque');
-                        setSplitCardVerified(false);
-                        setSplitBankSlipVerified(false);
-                        setSplitChequeVerified(false);
-                        setSplitCashInput('');
-                        setSplitBankInput('');
-                        setSplitSecondaryInput('');
-                      }}
-                      className={`px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer text-center ${
-                        splitMode === 'CashBankCheque'
-                          ? 'bg-[#125E45] text-white shadow-2xs'
-                          : 'text-[#66726D] hover:text-[#17211D] hover:bg-[#F0F4F2]'
-                      }`}
-                    >
-                      <Sparkles className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate">Cash+Bank+Chq</span>
-                    </button>
-                  </div>
+                  {/* Change Due Indicator */}
+                  {cashReceived >= finalKhataGrandTotal && (
+                    <div className="p-3 bg-[#DCEDE6] rounded-xl text-xs flex justify-between font-bold text-[#125E45]">
+                      <span>Change Due Customer:</span>
+                      <span className="text-sm font-black">
+                        Rs. {calculatedChange.toLocaleString()}
+                      </span>
+                    </div>
+                  )}
                 </div>
+              )}
 
-                {/* Amount Inputs: 3-way if CashBankCheque, else dual inputs */}
-                {splitMode === 'CashBankCheque' ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-2.5">
-                    {/* Portion 1: Cash Amount */}
-                    <div className="p-2.5 bg-white rounded-xl border border-[#DCE3E0] space-y-1">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-[#17211D] flex items-center gap-1">
-                          <Banknote className="w-3.5 h-3.5 text-[#125E45]" />
-                          <span>1. Cash (Rs.)</span>
-                        </span>
-                        <span className="text-[9px] text-[#8A9590]">Immediate</span>
-                      </div>
-                      <input
-                        type="number"
-                        min="0"
-                        placeholder="Enter cash amount"
-                        value={splitCashInput}
-                        onChange={e => handleSplit3WayChange('cash', e.target.value)}
-                        className="w-full p-2 text-sm font-bold text-[#17211D] border border-[#DCE3E0] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
-                      />
-                    </div>
-
-                    {/* Portion 2: Bank Transfer Amount */}
-                    <div className="p-2.5 bg-white rounded-xl border border-[#DCE3E0] space-y-1">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-[#17211D] flex items-center gap-1">
-                          <Building className="w-3.5 h-3.5 text-[#125E45]" />
-                          <span>2. Bank (Rs.)</span>
-                        </span>
-                        <span className="text-[9px] text-[#8A9590]">IBFT / Transfer</span>
-                      </div>
-                      <input
-                        type="number"
-                        min="0"
-                        placeholder="Enter bank amount"
-                        value={splitBankInput}
-                        onChange={e => handleSplit3WayChange('bank', e.target.value)}
-                        className="w-full p-2 text-sm font-bold text-[#17211D] border border-[#DCE3E0] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
-                      />
-                    </div>
-
-                    {/* Portion 3: Cheque Amount */}
-                    <div className="p-2.5 bg-white rounded-xl border border-[#DCE3E0] space-y-1">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-[#17211D] flex items-center gap-1">
-                          <FileText className="w-3.5 h-3.5 text-[#125E45]" />
-                          <span>3. Cheque (Rs.)</span>
-                        </span>
-                        <span className="text-[9px] text-amber-600 font-bold">Pending</span>
-                      </div>
-                      <input
-                        type="number"
-                        min="0"
-                        placeholder="Enter cheque amount"
-                        value={splitSecondaryInput}
-                        onChange={e => handleSplit3WayChange('cheque', e.target.value)}
-                        className="w-full p-2 text-sm font-bold text-[#17211D] border border-[#DCE3E0] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
-                      />
-                    </div>
+              {/* BANK TRANSFER DETAILS (Matched to Wholesale POS) */}
+              {paymentMethod === 'Bank Transfer' && (
+                <div className="p-4 bg-[#F0F4F2] rounded-2xl border border-[#DCE3E0] space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-[#17211D] flex items-center gap-1.5">
+                      <Building className="w-4 h-4 text-[#125E45]" />
+                      <span>Bank Transfer Receiving Details</span>
+                    </span>
+                    <span className="text-[10px] text-[#66726D]">Online / IBFT</span>
                   </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {/* Portion 1: Cash or Bank Amount */}
-                    <div className="p-3 bg-white rounded-xl border border-[#DCE3E0] space-y-1.5">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-[#17211D] flex items-center gap-1.5">
-                          {splitMode === 'BankCheque' ? (
+
+                  {bankAccounts.length === 0 ? (
+                    <p className="text-xs text-[#C23D45]">
+                      No bank accounts configured in Store Settings.
+                    </p>
+                  ) : bankAccounts.length === 1 ? (
+                    <div className="p-3 bg-white rounded-xl border border-[#DCE3E0] space-y-1">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                        <span className="font-bold text-xs text-[#17211D] flex items-center gap-1.5 min-w-0">
+                          <Building className="w-3.5 h-3.5 text-[#125E45] shrink-0" />
+                          <span className="truncate">{bankAccounts[0].bankName}</span>
+                        </span>
+                        <span className="text-[10px] text-[#66726D] truncate">{bankAccounts[0].accountTitle}</span>
+                      </div>
+                      <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-2 p-2 bg-[#F6F8F7] rounded-lg border border-[#DCE3E0] mt-1">
+                        <div className="min-w-0">
+                          <span className="text-[9px] text-[#8A9590] block">Account Number for Customer Transfer:</span>
+                          <span className="text-xs font-black font-mono text-[#17211D] tracking-wider select-all break-all">
+                            {bankAccounts[0].accountNumber}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyAccount(bankAccounts[0].accountNumber, bankAccounts[0].id)}
+                          className="px-2 py-1 bg-white hover:bg-[#DCEDE6] text-[#125E45] border border-[#DCE3E0] rounded-md text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer shrink-0 self-start xs:self-center"
+                        >
+                          {copiedBankId === bankAccounts[0].id ? (
                             <>
-                              <Building className="w-3.5 h-3.5 text-[#125E45]" />
-                              <span>1. Bank Transfer Amount (Rs.)</span>
+                              <Check className="w-3 h-3 text-[#125E45]" />
+                              <span>Copied</span>
                             </>
                           ) : (
                             <>
-                              <Banknote className="w-3.5 h-3.5 text-[#125E45]" />
-                              <span>1. Cash Amount (Rs.)</span>
+                              <Copy className="w-3 h-3" />
+                              <span>Copy</span>
                             </>
                           )}
-                        </span>
-                        <span className="text-[10px] text-[#8A9590]">Received Immediately</span>
+                        </button>
                       </div>
-                      <input
-                        type="number"
-                        min="0"
-                        placeholder={splitMode === 'BankCheque' ? 'Enter bank amount' : 'Enter cash amount'}
-                        value={splitCashInput}
-                        onChange={e => handleSplitCashChange(e.target.value)}
-                        className="w-full p-2 text-sm font-bold text-[#17211D] border border-[#DCE3E0] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
-                      />
                     </div>
-
-                    {/* Portion 2: Card, Bank, or Cheque Amount */}
-                    <div className="p-3 bg-white rounded-xl border border-[#DCE3E0] space-y-1.5">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-[#17211D] flex items-center gap-1.5">
-                          {splitMode === 'CashCard' && (
-                            <>
-                              <CreditCard className="w-3.5 h-3.5 text-[#125E45]" />
-                              <span>2. Card Amount (Rs.)</span>
-                            </>
-                          )}
-                          {splitMode === 'CashBank' && (
-                            <>
-                              <Building className="w-3.5 h-3.5 text-[#125E45]" />
-                              <span>2. Bank Transfer Amount (Rs.)</span>
-                            </>
-                          )}
-                          {(splitMode === 'CashCheque' || splitMode === 'BankCheque') && (
-                            <>
-                              <FileText className="w-3.5 h-3.5 text-[#125E45]" />
-                              <span>2. Cheque Amount (Rs.)</span>
-                            </>
-                          )}
-                        </span>
-                        <span className="text-[10px] text-[#8A9590]">
-                          {splitMode === 'CashCheque' || splitMode === 'BankCheque' ? 'Pending Clearance' : 'Secondary Portion'}
-                        </span>
-                      </div>
-                      <input
-                        type="number"
-                        min="0"
-                        placeholder={splitMode === 'CashCard' ? 'Enter card amount' : splitMode === 'CashBank' ? 'Enter bank amount' : 'Enter cheque amount'}
-                        value={splitSecondaryInput}
-                        onChange={e => handleSplitSecondaryChange(e.target.value)}
-                        className="w-full p-2 text-sm font-bold text-[#17211D] border border-[#DCE3E0] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Sub-Workflow 1: Cash + Card */}
-                {splitMode === 'CashCard' && (
-                  <div className="p-3.5 bg-white rounded-xl border border-[#DCE3E0] space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="font-bold text-xs text-[#17211D] flex items-center gap-1.5">
-                        <CreditCard className="w-4 h-4 text-[#125E45]" />
-                        <span>Card Portion{splitSecondaryInput ? `: Rs. ${(parseFloat(splitSecondaryInput) || 0).toLocaleString()}` : ''}</span>
-                      </div>
-                      <span className="text-[10px] text-[#66726D]">POS Terminal Swipe</span>
-                    </div>
-
-                    {!isWholesaleTerminalEnabled ? (
-                      <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs space-y-1.5">
-                        <div className="font-bold text-rose-900">Card Terminal Disabled in Settings</div>
-                        <p className="text-[11px] text-rose-700">
-                          Integrated terminal is disabled. Enter external machine auth code or enable in settings:
-                        </p>
-                        <div className="pt-1">
-                          <label className="text-[10px] font-bold text-[#66726D] block mb-1">
-                            External Terminal Card Auth / Ref #:
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="e.g. AUTH-84920"
-                            value={splitManualCardRef}
-                            onChange={e => setSplitManualCardRef(e.target.value)}
-                            className="w-full p-1.5 text-xs border border-rose-300 rounded-md bg-white focus:outline-none"
-                          />
-                        </div>
-                      </div>
-                    ) : (
+                  ) : (
+                    <div className="space-y-2">
                       <div>
-                        {splitCardAuth ? (
-                          <div className="p-2.5 bg-[#DCEDE6] border border-[#125E45]/30 rounded-lg text-xs font-bold text-[#125E45] flex items-center justify-between">
-                            <span className="flex items-center gap-1.5">
-                              <CheckCircle2 className="w-4 h-4" />
-                              <span>Card Authorized (Ref: {splitCardAuth.transactionId})</span>
-                            </span>
-                            <span>Rs. {(parseFloat(splitSecondaryInput) || 0).toLocaleString()}</span>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => setIsSplitCardTerminalModalOpen(true)}
-                            className="w-full py-2 px-3 bg-[#125E45] hover:bg-[#197A5A] text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-2xs"
-                          >
-                            <CreditCard className="w-3.5 h-3.5" />
-                            <span>Authorize Card Terminal for Rs. {(parseFloat(splitSecondaryInput) || 0).toLocaleString()}</span>
-                          </button>
-                        )}
+                        <label className="text-[10px] font-bold text-[#66726D] block mb-1">
+                          Select Receiving Bank:
+                        </label>
+                        <select
+                          value={selectedBank?.id || bankAccounts[0]?.id || ''}
+                          onChange={e => {
+                            const found = bankAccounts.find(b => b.id === e.target.value);
+                            if (found) setSelectedBank(found);
+                          }}
+                          className="w-full p-2 text-xs font-bold text-[#17211D] bg-white border border-[#DCE3E0] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#197A5A] cursor-pointer"
+                        >
+                          {bankAccounts.map(b => (
+                            <option key={b.id} value={b.id}>
+                              {b.bankName} — {b.accountTitle}
+                            </option>
+                          ))}
+                        </select>
                       </div>
-                    )}
 
-                    <label
-                      className={`flex items-start gap-2.5 p-2.5 rounded-lg border transition-all cursor-pointer ${
-                        splitCardVerified
-                          ? 'bg-[#DCEDE6] border-[#125E45]'
-                          : 'bg-[#F6F8F7] border-[#DCE3E0] hover:bg-[#F0F4F2]'
+                      {selectedBank && (
+                        <div className="p-3 bg-white rounded-xl border border-[#DCE3E0] space-y-1">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                            <span className="font-bold text-xs text-[#17211D] flex items-center gap-1.5 min-w-0">
+                              <Building className="w-3.5 h-3.5 text-[#125E45] shrink-0" />
+                              <span className="truncate">{selectedBank.bankName}</span>
+                            </span>
+                            <span className="text-[10px] text-[#66726D] truncate">{selectedBank.accountTitle}</span>
+                          </div>
+                          <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-2 p-2 bg-[#F6F8F7] rounded-lg border border-[#DCE3E0] mt-1">
+                            <div className="min-w-0">
+                              <span className="text-[9px] text-[#8A9590] block">Account Number for Customer Transfer:</span>
+                              <span className="text-xs font-black font-mono text-[#17211D] tracking-wider select-all break-all">
+                                {selectedBank.accountNumber}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyAccount(selectedBank.accountNumber, selectedBank.id)}
+                              className="px-2 py-1 bg-white hover:bg-[#DCEDE6] text-[#125E45] border border-[#DCE3E0] rounded-md text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer shrink-0 self-start xs:self-center"
+                            >
+                              {copiedBankId === selectedBank.id ? (
+                                <>
+                                  <Check className="w-3 h-3 text-[#125E45]" />
+                                  <span>Copied</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3 h-3" />
+                                  <span>Copy</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <input
+                    type="text"
+                    placeholder="Bank Transfer Slip # / Sender Details (Optional)"
+                    value={splitReference}
+                    onChange={e => setSplitReference(e.target.value)}
+                    className="w-full p-2 text-xs border border-[#DCE3E0] rounded-lg bg-white focus:outline-none"
+                  />
+
+                  <div className="pt-2 border-t border-[#DCE3E0] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <span className="text-xs text-[#66726D]">Transfer Slip Verified:</span>
+                    <button
+                      type="button"
+                      onClick={() => setIsBankPaymentConfirmed(!isBankPaymentConfirmed)}
+                      className={`w-full sm:w-auto px-3 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
+                        isBankPaymentConfirmed
+                          ? 'bg-[#125E45] text-white shadow-2xs'
+                          : 'bg-white border border-[#DCE3E0] text-[#17211D] hover:bg-[#F0F4F2]'
                       }`}
                     >
-                      <input
-                        type="checkbox"
-                        checked={splitCardVerified}
-                        onChange={e => setSplitCardVerified(e.target.checked)}
-                        className="mt-0.5 w-4 h-4 text-[#125E45] rounded accent-[#125E45] cursor-pointer shrink-0"
-                      />
-                      <div className="text-xs text-[#17211D]">
-                        <span className="font-bold">
-                          Cash (Rs. {(parseFloat(splitCashInput) || 0).toLocaleString()}) Received & Card (Rs. {(parseFloat(splitSecondaryInput) || 0).toLocaleString()}) Authorized
-                        </span>
-                        <span className="block text-[10px] text-[#66726D]">
-                          Confirmed cash collected at counter and card transaction processed.
-                        </span>
-                      </div>
-                    </label>
+                      <Check className="w-3.5 h-3.5" />
+                      <span>{isBankPaymentConfirmed ? 'Payment Confirmed' : 'Confirm Slip Received'}</span>
+                    </button>
                   </div>
-                )}
+                </div>
+              )}
 
-                {/* Sub-Workflow 2: Cash + Bank Transfer OR Cash + Bank + Cheque (Bank Portion) */}
-                {(splitMode === 'CashBank' || splitMode === 'CashBankCheque') && (
-                  <div className="p-3.5 bg-white rounded-xl border border-[#DCE3E0] space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="font-bold text-xs text-[#17211D] flex items-center gap-1.5">
-                        <Building className="w-4 h-4 text-[#125E45]" />
-                        <span>Bank Transfer Portion{splitMode === 'CashBankCheque' ? (splitBankInput ? `: Rs. ${(parseFloat(splitBankInput) || 0).toLocaleString()}` : '') : (splitSecondaryInput ? `: Rs. ${(parseFloat(splitSecondaryInput) || 0).toLocaleString()}` : '')}</span>
-                      </div>
-                      <span className="text-[10px] text-[#66726D]">Online / IBFT</span>
+              {/* SPLIT / MIXED WORKFLOW (4 Modes: Cash+Bank, Cash+Cheque, Bank+Cheque, Cash+Bank+Cheque - NO CARD) */}
+              {paymentMethod === 'Split' && (
+                <div className="space-y-3.5 p-3 sm:p-4 bg-[#F8FAFA] rounded-2xl border border-[#DCE3E0]">
+                  {/* Mode Selector (4 Tabs) */}
+                  <div className="space-y-1.5">
+                    <div>
+                      <span className="text-xs font-bold text-[#17211D] block mb-1">Split Mode Selection:</span>
                     </div>
 
-                    {bankAccounts.length === 0 ? (
-                      <p className="text-xs text-[#C23D45]">
-                        No bank accounts configured in Store Settings.
-                      </p>
-                    ) : bankAccounts.length === 1 ? (
-                      <div className="p-3 bg-[#F6F8F7] rounded-xl border border-[#DCE3E0] space-y-1">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                          <span className="font-bold text-xs text-[#17211D] flex items-center gap-1.5 min-w-0">
-                            <Building className="w-3.5 h-3.5 text-[#125E45] shrink-0" />
-                            <span className="truncate">{bankAccounts[0].bankName}</span>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 sm:gap-1.5 p-1 bg-white rounded-xl border border-[#DCE3E0]">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSplitMode('CashBank');
+                          setSplitBankSlipVerified(false);
+                          setSplitChequeVerified(false);
+                          setSplitCashInput('');
+                          setSplitBankInput('');
+                          setSplitSecondaryInput('');
+                        }}
+                        className={`px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer text-center ${
+                          splitMode === 'CashBank'
+                            ? 'bg-[#125E45] text-white shadow-2xs'
+                            : 'text-[#66726D] hover:text-[#17211D] hover:bg-[#F0F4F2]'
+                        }`}
+                      >
+                        <Building className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">Cash + Bank</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSplitMode('CashCheque');
+                          setSplitBankSlipVerified(false);
+                          setSplitChequeVerified(false);
+                          setSplitCashInput('');
+                          setSplitBankInput('');
+                          setSplitSecondaryInput('');
+                        }}
+                        className={`px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer text-center ${
+                          splitMode === 'CashCheque'
+                            ? 'bg-[#125E45] text-white shadow-2xs'
+                            : 'text-[#66726D] hover:text-[#17211D] hover:bg-[#F0F4F2]'
+                        }`}
+                      >
+                        <Layers className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">Cash + Cheque</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSplitMode('BankCheque');
+                          setSplitBankSlipVerified(false);
+                          setSplitChequeVerified(false);
+                          setSplitCashInput('');
+                          setSplitBankInput('');
+                          setSplitSecondaryInput('');
+                        }}
+                        className={`px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer text-center ${
+                          splitMode === 'BankCheque'
+                            ? 'bg-[#125E45] text-white shadow-2xs'
+                            : 'text-[#66726D] hover:text-[#17211D] hover:bg-[#F0F4F2]'
+                        }`}
+                      >
+                        <Building className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">Bank + Cheque</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSplitMode('CashBankCheque');
+                          setSplitBankSlipVerified(false);
+                          setSplitChequeVerified(false);
+                          setSplitCashInput('');
+                          setSplitBankInput('');
+                          setSplitSecondaryInput('');
+                        }}
+                        className={`px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer text-center ${
+                          splitMode === 'CashBankCheque'
+                            ? 'bg-[#125E45] text-white shadow-2xs'
+                            : 'text-[#66726D] hover:text-[#17211D] hover:bg-[#F0F4F2]'
+                        }`}
+                      >
+                        <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">Cash+Bank+Chq</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Amount Inputs: 3-way if CashBankCheque, else dual inputs */}
+                  {splitMode === 'CashBankCheque' ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-2.5">
+                      {/* Portion 1: Cash Amount */}
+                      <div className="p-2.5 bg-white rounded-xl border border-[#DCE3E0] space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-bold text-[#17211D] flex items-center gap-1">
+                            <Banknote className="w-3.5 h-3.5 text-[#125E45] shrink-0" />
+                            <span>1. Cash (Rs.)</span>
                           </span>
-                          <span className="text-[10px] text-[#66726D] truncate">{bankAccounts[0].accountTitle}</span>
+                          <span className="text-[9px] text-[#8A9590]">Immediate</span>
                         </div>
-                        <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-2 p-2 bg-white rounded-lg border border-[#DCE3E0] mt-1">
-                          <div className="min-w-0">
-                            <span className="text-[9px] text-[#8A9590] block">Account Number for Customer Transfer:</span>
-                            <span className="text-xs font-black font-mono text-[#17211D] tracking-wider select-all break-all">
-                              {bankAccounts[0].accountNumber}
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleCopyAccount(bankAccounts[0].accountNumber, bankAccounts[0].id)}
-                            className="px-2 py-1 bg-[#F6F8F7] hover:bg-[#DCEDE6] text-[#125E45] border border-[#DCE3E0] rounded-md text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer shrink-0 self-start xs:self-center"
-                          >
-                            {copiedBankId === bankAccounts[0].id ? (
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder="Enter cash amount"
+                          value={splitCashInput}
+                          onChange={e => handleSplit3WayChange('cash', e.target.value)}
+                          className="w-full p-2 text-sm font-bold text-[#17211D] border border-[#DCE3E0] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
+                        />
+                      </div>
+
+                      {/* Portion 2: Bank Transfer Amount */}
+                      <div className="p-2.5 bg-white rounded-xl border border-[#DCE3E0] space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-bold text-[#17211D] flex items-center gap-1">
+                            <Building className="w-3.5 h-3.5 text-[#125E45] shrink-0" />
+                            <span>2. Bank (Rs.)</span>
+                          </span>
+                          <span className="text-[9px] text-[#8A9590]">IBFT / Transfer</span>
+                        </div>
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder="Enter bank amount"
+                          value={splitBankInput}
+                          onChange={e => handleSplit3WayChange('bank', e.target.value)}
+                          className="w-full p-2 text-sm font-bold text-[#17211D] border border-[#DCE3E0] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
+                        />
+                      </div>
+
+                      {/* Portion 3: Cheque Amount */}
+                      <div className="p-2.5 bg-white rounded-xl border border-[#DCE3E0] space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-bold text-[#17211D] flex items-center gap-1">
+                            <FileText className="w-3.5 h-3.5 text-[#125E45] shrink-0" />
+                            <span>3. Cheque (Rs.)</span>
+                          </span>
+                          <span className="text-[9px] text-amber-600 font-bold">Pending</span>
+                        </div>
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder="Enter cheque amount"
+                          value={splitSecondaryInput}
+                          onChange={e => handleSplit3WayChange('cheque', e.target.value)}
+                          className="w-full p-2 text-sm font-bold text-[#17211D] border border-[#DCE3E0] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+                      {/* Portion 1: Cash or Bank Amount */}
+                      <div className="p-3 bg-white rounded-xl border border-[#DCE3E0] space-y-1.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-bold text-[#17211D] flex items-center gap-1.5">
+                            {splitMode === 'BankCheque' ? (
                               <>
-                                <Check className="w-3 h-3 text-[#125E45]" />
-                                <span>Copied</span>
+                                <Building className="w-3.5 h-3.5 text-[#125E45]" />
+                                <span>1. Bank Transfer Amount (Rs.)</span>
                               </>
                             ) : (
                               <>
-                                <Copy className="w-3 h-3" />
-                                <span>Copy</span>
+                                <Banknote className="w-3.5 h-3.5 text-[#125E45]" />
+                                <span>1. Cash Amount (Rs.)</span>
                               </>
                             )}
-                          </button>
+                          </span>
+                          <span className="text-[10px] text-[#8A9590]">Received Immediately</span>
                         </div>
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder={splitMode === 'BankCheque' ? 'Enter bank amount' : 'Enter cash amount'}
+                          value={splitCashInput}
+                          onChange={e => handleSplitCashChange(e.target.value)}
+                          className="w-full p-2 text-sm font-bold text-[#17211D] border border-[#DCE3E0] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
+                        />
                       </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <div>
-                          <label className="text-[10px] font-bold text-[#66726D] block mb-1">
-                            Select Receiving Bank:
-                          </label>
-                          <select
-                            value={selectedBank?.id || bankAccounts[0]?.id || ''}
-                            onChange={e => {
-                              const found = bankAccounts.find(b => b.id === e.target.value);
-                              if (found) setSelectedBank(found);
-                            }}
-                            className="w-full p-2 text-xs font-bold text-[#17211D] bg-white border border-[#DCE3E0] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#197A5A] cursor-pointer"
-                          >
-                            {bankAccounts.map(b => (
-                              <option key={b.id} value={b.id}>
-                                {b.bankName} — {b.accountTitle}
-                              </option>
-                            ))}
-                          </select>
+
+                      {/* Portion 2: Bank or Cheque Amount */}
+                      <div className="p-3 bg-white rounded-xl border border-[#DCE3E0] space-y-1.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-bold text-[#17211D] flex items-center gap-1.5">
+                            {splitMode === 'CashBank' && (
+                              <>
+                                <Building className="w-3.5 h-3.5 text-[#125E45]" />
+                                <span>2. Bank Transfer Amount (Rs.)</span>
+                              </>
+                            )}
+                            {(splitMode === 'CashCheque' || splitMode === 'BankCheque') && (
+                              <>
+                                <FileText className="w-3.5 h-3.5 text-[#125E45]" />
+                                <span>2. Cheque Amount (Rs.)</span>
+                              </>
+                            )}
+                          </span>
+                          <span className="text-[10px] text-[#8A9590]">
+                            {splitMode === 'CashCheque' || splitMode === 'BankCheque' ? 'Pending Clearance' : 'Secondary Portion'}
+                          </span>
                         </div>
-
-                        {selectedBank && (
-                          <div className="p-3 bg-[#F6F8F7] rounded-xl border border-[#DCE3E0] space-y-1">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                              <span className="font-bold text-xs text-[#17211D] flex items-center gap-1.5 min-w-0">
-                                <Building className="w-3.5 h-3.5 text-[#125E45] shrink-0" />
-                                <span className="truncate">{selectedBank.bankName}</span>
-                              </span>
-                              <span className="text-[10px] text-[#66726D] truncate">{selectedBank.accountTitle}</span>
-                            </div>
-                            <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-2 p-2 bg-white rounded-lg border border-[#DCE3E0] mt-1">
-                              <div className="min-w-0">
-                                <span className="text-[9px] text-[#8A9590] block">Account Number for Customer Transfer:</span>
-                                <span className="text-xs font-black font-mono text-[#17211D] tracking-wider select-all break-all">
-                                  {selectedBank.accountNumber}
-                                </span>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => handleCopyAccount(selectedBank.accountNumber, selectedBank.id)}
-                                className="px-2 py-1 bg-[#F6F8F7] hover:bg-[#DCEDE6] text-[#125E45] border border-[#DCE3E0] rounded-md text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer shrink-0 self-start xs:self-center"
-                              >
-                                {copiedBankId === selectedBank.id ? (
-                                  <>
-                                    <Check className="w-3 h-3 text-[#125E45]" />
-                                    <span>Copied</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Copy className="w-3 h-3" />
-                                    <span>Copy</span>
-                                  </>
-                                )}
-                              </button>
-                            </div>
-                          </div>
-                        )}
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder={splitMode === 'CashBank' ? 'Enter bank amount' : 'Enter cheque amount'}
+                          value={splitSecondaryInput}
+                          onChange={e => handleSplitSecondaryChange(e.target.value)}
+                          className="w-full p-2 text-sm font-bold text-[#17211D] border border-[#DCE3E0] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
+                        />
                       </div>
-                    )}
-
-                    <input
-                      type="text"
-                      placeholder="Bank Transfer Slip # / Sender Details (Optional)"
-                      value={splitReference}
-                      onChange={e => setSplitReference(e.target.value)}
-                      className="w-full p-2 text-xs border border-[#DCE3E0] rounded-lg bg-white focus:outline-none"
-                    />
-
-                    <label
-                      className={`flex items-start gap-2.5 p-2.5 rounded-lg border transition-all cursor-pointer ${
-                        splitBankSlipVerified
-                          ? 'bg-[#DCEDE6] border-[#125E45]'
-                          : 'bg-[#F6F8F7] border-[#DCE3E0] hover:bg-[#F0F4F2]'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={splitBankSlipVerified}
-                        onChange={e => setSplitBankSlipVerified(e.target.checked)}
-                        className="mt-0.5 w-4 h-4 text-[#125E45] rounded accent-[#125E45] cursor-pointer shrink-0"
-                      />
-                      <div className="text-xs text-[#17211D]">
-                        <span className="font-bold">
-                          Cash (Rs. {(parseFloat(splitCashInput) || 0).toLocaleString()}) Received & Bank Slip (Rs. {(parseFloat(splitMode === 'CashBankCheque' ? splitBankInput : splitSecondaryInput) || 0).toLocaleString()}) Verified
-                        </span>
-                        <span className="block text-[10px] text-[#66726D]">
-                          Confirmed cash received in drawer and bank slip confirmed.
-                        </span>
-                      </div>
-                    </label>
-                  </div>
-                )}
-
-                {/* Sub-Workflow 3, 4 & 5: Cheque Details (Pending Clearance) */}
-                {(splitMode === 'CashCheque' || splitMode === 'BankCheque' || splitMode === 'CashBankCheque') && (
-                  <div className="p-3.5 bg-white rounded-xl border border-[#DCE3E0] space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="font-bold text-xs text-[#17211D] flex items-center gap-1.5">
-                        <FileText className="w-4 h-4 text-[#125E45]" />
-                        <span>Cheque Details (Pending Clearance)</span>
-                      </div>
-                      <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full">
-                        {splitSecondaryInput ? `Rs. ${(parseFloat(splitSecondaryInput) || 0).toLocaleString()}` : 'Enter cheque amount'}
-                      </span>
                     </div>
+                  )}
 
-                    {/* Bank transfer info if Bank + Cheque (not 3-way since 3-way already shows bank above) */}
-                    {splitMode === 'BankCheque' && (
-                      <div className="p-2.5 bg-[#F6F8F7] rounded-xl border border-[#DCE3E0] space-y-2">
-                        {bankAccounts.length === 0 ? (
-                          <p className="text-xs text-[#C23D45]">
-                            No bank accounts configured in Store Settings.
-                          </p>
-                        ) : bankAccounts.length === 1 ? (
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="font-bold text-[#17211D] flex items-center gap-1.5">
-                              <Building className="w-3.5 h-3.5 text-[#125E45]" />
-                              <span>{bankAccounts[0].bankName}</span>
+                  {/* Sub-Workflow: Bank Transfer Receiving Info (when Cash+Bank or Cash+Bank+Cheque) */}
+                  {(splitMode === 'CashBank' || splitMode === 'CashBankCheque') && (
+                    <div className="p-3.5 bg-white rounded-xl border border-[#DCE3E0] space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="font-bold text-xs text-[#17211D] flex items-center gap-1.5">
+                          <Building className="w-4 h-4 text-[#125E45]" />
+                          <span>Bank Transfer Portion{splitMode === 'CashBankCheque' ? (splitBankInput ? `: Rs. ${(parseFloat(splitBankInput) || 0).toLocaleString()}` : '') : (splitSecondaryInput ? `: Rs. ${(parseFloat(splitSecondaryInput) || 0).toLocaleString()}` : '')}</span>
+                        </div>
+                        <span className="text-[10px] text-[#66726D]">Online / IBFT</span>
+                      </div>
+
+                      {bankAccounts.length === 0 ? (
+                        <p className="text-xs text-[#C23D45]">
+                          No bank accounts configured in Store Settings.
+                        </p>
+                      ) : bankAccounts.length === 1 ? (
+                        <div className="p-3 bg-[#F6F8F7] rounded-xl border border-[#DCE3E0] space-y-1">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                            <span className="font-bold text-xs text-[#17211D] flex items-center gap-1.5 min-w-0">
+                              <Building className="w-3.5 h-3.5 text-[#125E45] shrink-0" />
+                              <span className="truncate">{bankAccounts[0].bankName}</span>
                             </span>
-                            <span className="text-[10px] text-[#66726D] font-mono">{bankAccounts[0].accountNumber}</span>
+                            <span className="text-[10px] text-[#66726D] truncate">{bankAccounts[0].accountTitle}</span>
                           </div>
-                        ) : (
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-[#66726D] block">
+                          <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-2 p-2 bg-white rounded-lg border border-[#DCE3E0] mt-1">
+                            <div className="min-w-0">
+                              <span className="text-[9px] text-[#8A9590] block">Account Number for Customer Transfer:</span>
+                              <span className="text-xs font-black font-mono text-[#17211D] tracking-wider select-all break-all">
+                                {bankAccounts[0].accountNumber}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyAccount(bankAccounts[0].accountNumber, bankAccounts[0].id)}
+                              className="px-2 py-1 bg-[#F6F8F7] hover:bg-[#DCEDE6] text-[#125E45] border border-[#DCE3E0] rounded-md text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer shrink-0 self-start xs:self-center"
+                            >
+                              {copiedBankId === bankAccounts[0].id ? (
+                                <>
+                                  <Check className="w-3 h-3 text-[#125E45]" />
+                                  <span>Copied</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3 h-3" />
+                                  <span>Copy</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <div>
+                            <label className="text-[10px] font-bold text-[#66726D] block mb-1">
                               Select Receiving Bank:
                             </label>
                             <select
@@ -2493,7 +2312,7 @@ export default function WholesalePOSPage() {
                                 const found = bankAccounts.find(b => b.id === e.target.value);
                                 if (found) setSelectedBank(found);
                               }}
-                              className="w-full p-1.5 text-xs font-bold text-[#17211D] bg-white border border-[#DCE3E0] rounded-lg focus:outline-none"
+                              className="w-full p-2 text-xs font-bold text-[#17211D] bg-white border border-[#DCE3E0] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#197A5A] cursor-pointer"
                             >
                               {bankAccounts.map(b => (
                                 <option key={b.id} value={b.id}>
@@ -2501,179 +2320,57 @@ export default function WholesalePOSPage() {
                                 </option>
                               ))}
                             </select>
-                            {selectedBank && (
-                              <div className="text-[10px] text-[#125E45] font-bold font-mono">
-                                Acc: {selectedBank.accountNumber}
-                              </div>
-                            )}
                           </div>
-                        )}
-                        <input
-                          type="text"
-                          placeholder="Bank Transfer Reference / Slip # (Optional)"
-                          value={splitReference}
-                          onChange={e => setSplitReference(e.target.value)}
-                          className="w-full p-1.5 text-xs border border-[#DCE3E0] rounded-lg bg-white focus:outline-none"
-                        />
-                      </div>
-                    )}
 
-                    {/* Multiple Cheques List & Management */}
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <label className="text-xs font-bold text-[#17211D] flex items-center gap-1.5">
-                          <span>Client Cheque(s) Details</span>
-                          <span className="bg-[#DCEDE6] text-[#125E45] font-bold text-[10px] px-2 py-0.5 rounded-full">
-                            {chequeEntries.length} {chequeEntries.length === 1 ? 'Cheque' : 'Cheques'}
-                          </span>
-                        </label>
-                        <button
-                          type="button"
-                          onClick={handleAddCheque}
-                          className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-lg bg-[#DCEDE6] hover:bg-[#c2e4d7] text-[#125E45] border border-[#125E45]/30 transition-all cursor-pointer shadow-2xs"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>Add Another Cheque</span>
-                        </button>
-                      </div>
-
-                      {/* Cheque Cards */}
-                      <div className="space-y-2.5">
-                        {chequeEntries.map((cheque, index) => (
-                          <div
-                            key={cheque.id}
-                            className="p-3 bg-white rounded-xl border border-[#DCE3E0] shadow-2xs space-y-2.5 relative"
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="text-[11px] font-bold text-[#125E45] bg-[#F0F4F2] px-2 py-0.5 rounded-md border border-[#DCE3E0]">
-                                Cheque #{index + 1}
-                              </span>
-                              {chequeEntries.length > 1 && (
+                          {selectedBank && (
+                            <div className="p-3 bg-[#F6F8F7] rounded-xl border border-[#DCE3E0] space-y-1">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                                <span className="font-bold text-xs text-[#17211D] flex items-center gap-1.5 min-w-0">
+                                  <Building className="w-3.5 h-3.5 text-[#125E45] shrink-0" />
+                                  <span className="truncate">{selectedBank.bankName}</span>
+                                </span>
+                                <span className="text-[10px] text-[#66726D] truncate">{selectedBank.accountTitle}</span>
+                              </div>
+                              <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-2 p-2 bg-white rounded-lg border border-[#DCE3E0] mt-1">
+                                <div className="min-w-0">
+                                  <span className="text-[9px] text-[#8A9590] block">Account Number for Customer Transfer:</span>
+                                  <span className="text-xs font-black font-mono text-[#17211D] tracking-wider select-all break-all">
+                                    {selectedBank.accountNumber}
+                                  </span>
+                                </div>
                                 <button
                                   type="button"
-                                  onClick={() => handleRemoveCheque(cheque.id)}
-                                  className="text-[10px] text-rose-600 hover:text-rose-800 font-bold flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-rose-50 transition-colors cursor-pointer"
-                                  title="Remove this cheque"
+                                  onClick={() => handleCopyAccount(selectedBank.accountNumber, selectedBank.id)}
+                                  className="px-2 py-1 bg-[#F6F8F7] hover:bg-[#DCEDE6] text-[#125E45] border border-[#DCE3E0] rounded-md text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer shrink-0 self-start xs:self-center"
                                 >
-                                  <Trash2 className="w-3 h-3" />
-                                  <span>Remove</span>
+                                  {copiedBankId === selectedBank.id ? (
+                                    <>
+                                      <Check className="w-3 h-3 text-[#125E45]" />
+                                      <span>Copied</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Copy className="w-3 h-3" />
+                                      <span>Copy</span>
+                                    </>
+                                  )}
                                 </button>
-                              )}
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              <div>
-                                <label className="text-[10px] font-semibold text-[#66726D] block mb-1">
-                                  Cheque Bank Name <span className="text-rose-500">*</span>
-                                </label>
-                                <input
-                                  type="text"
-                                  placeholder="e.g. Meezan Bank / HBL"
-                                  value={cheque.bankName}
-                                  onChange={e => handleUpdateCheque(cheque.id, 'bankName', e.target.value)}
-                                  list="pk-banks-list"
-                                  className="w-full p-2 text-xs font-bold border border-[#DCE3E0] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
-                                  required
-                                />
-                              </div>
-
-                              <div>
-                                <label className="text-[10px] font-semibold text-[#66726D] block mb-1">
-                                  Cheque Amount (PKR) <span className="text-rose-500">*</span>
-                                </label>
-                                <input
-                                  type="number"
-                                  placeholder="Cheque Amount"
-                                  value={cheque.amount}
-                                  onChange={e => handleUpdateCheque(cheque.id, 'amount', e.target.value)}
-                                  className="w-full p-2 text-xs font-black text-[#17211D] border border-[#DCE3E0] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
-                                  required
-                                />
                               </div>
                             </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
-                              <div>
-                                <label className="text-[10px] font-semibold text-[#66726D] flex items-center gap-1 mb-1">
-                                  <Calendar className="w-3 h-3 text-[#125E45]" />
-                                  <span>Scheduled Passing Date & Month <span className="text-rose-500">*</span></span>
-                                </label>
-                                <input
-                                  type="date"
-                                  value={cheque.clearingDate}
-                                  onChange={e => handleUpdateCheque(cheque.id, 'clearingDate', e.target.value)}
-                                  className="w-full p-1.5 text-xs font-bold border border-[#DCE3E0] rounded-lg bg-[#F8FAFA] focus:outline-none focus:ring-1 focus:ring-[#197A5A] cursor-pointer"
-                                  required
-                                />
-                              </div>
-
-                              <div>
-                                <label className="text-[10px] font-semibold text-[#66726D] block mb-1">
-                                  Cheque / Leaf # (Optional)
-                                </label>
-                                <input
-                                  type="text"
-                                  placeholder="e.g. CHQ-92810"
-                                  value={cheque.chequeNumber}
-                                  onChange={e => handleUpdateCheque(cheque.id, 'chequeNumber', e.target.value)}
-                                  className="w-full p-1.5 text-xs font-mono border border-[#DCE3E0] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      <datalist id="pk-banks-list">
-                        <option value="Meezan Bank" />
-                        <option value="Habib Bank Limited (HBL)" />
-                        <option value="MCB Bank" />
-                        <option value="Allied Bank Limited (ABL)" />
-                        <option value="United Bank Limited (UBL)" />
-                        <option value="Bank Alfalah" />
-                        <option value="Askari Bank" />
-                        <option value="Faysal Bank" />
-                        <option value="Bank Al Habib" />
-                        <option value="Dubai Islamic Bank" />
-                      </datalist>
-
-                      {/* Add Another Cheque Button */}
-                      <button
-                        type="button"
-                        onClick={handleAddCheque}
-                        className="w-full py-2 border-2 border-dashed border-[#125E45]/40 hover:border-[#125E45] bg-[#DCEDE6]/30 hover:bg-[#DCEDE6]/60 text-[#125E45] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                      >
-                        <Plus className="w-4 h-4" />
-                        <span>+ Add Another Cheque for This Invoice</span>
-                      </button>
-
-                      {/* Cheques Summary Box */}
-                      {chequeEntries.length > 1 && (
-                        <div className="p-2.5 bg-[#DCEDE6]/50 rounded-lg border border-[#125E45]/20 flex items-center justify-between text-xs font-bold text-[#125E45]">
-                          <span>Total Cheques ({chequeEntries.length}):</span>
-                          <span className="text-sm font-black">
-                            Rs. {chequeEntries.reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0).toLocaleString()}
-                          </span>
+                          )}
                         </div>
                       )}
 
-                      <p className="text-[10px] text-[#66726D] leading-relaxed">
-                        Notifications will alert Admin & Wholesale Cashier on each cheque&apos;s scheduled passing date. Cheque amounts will <strong>NOT</strong> be deducted from client balance until marked &quot;Pass Cheque (OK)&quot;.
-                      </p>
-                    </div>
+                      <input
+                        type="text"
+                        placeholder="Bank Transfer Slip # / Sender Details (Optional)"
+                        value={splitReference}
+                        onChange={e => setSplitReference(e.target.value)}
+                        className="w-full p-2 text-xs border border-[#DCE3E0] rounded-lg bg-white focus:outline-none"
+                      />
 
-                    {/* Important Account Ledger Notice */}
-                    <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2">
-                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                      <div className="text-[11px] leading-relaxed">
-                        Client ledger will reflect the full purchase of Rs. {finalWholesaleGrandTotal.toLocaleString()}. Only the immediate {splitMode === 'CashBankCheque' ? 'Cash & Bank' : splitMode === 'BankCheque' ? 'Bank' : 'Cash'} portion (Rs. {((parseFloat(splitCashInput) || 0) + (splitMode === 'CashBankCheque' ? (parseFloat(splitBankInput) || 0) : 0)).toLocaleString()}) will be credited now. The cheque portion (Rs. {(parseFloat(splitSecondaryInput) || 0).toLocaleString()}) remains in client ledger until passed.
-                      </div>
-                    </div>
-
-                    {/* Checkbox for Bank Slip if Bank + Cheque */}
-                    {splitMode === 'BankCheque' && (
                       <label
-                        className={`flex items-start gap-2.5 p-2 rounded-lg border transition-all cursor-pointer ${
+                        className={`flex items-start gap-2.5 p-2.5 rounded-lg border transition-all cursor-pointer ${
                           splitBankSlipVerified
                             ? 'bg-[#DCEDE6] border-[#125E45]'
                             : 'bg-[#F6F8F7] border-[#DCE3E0] hover:bg-[#F0F4F2]'
@@ -2685,389 +2382,473 @@ export default function WholesalePOSPage() {
                           onChange={e => setSplitBankSlipVerified(e.target.checked)}
                           className="mt-0.5 w-4 h-4 text-[#125E45] rounded accent-[#125E45] cursor-pointer shrink-0"
                         />
-                        <span className="text-xs font-semibold text-[#17211D]">
-                          Bank transfer portion (Rs. {(parseFloat(splitCashInput) || 0).toLocaleString()}) slip verified.
-                        </span>
+                        <div className="text-xs text-[#17211D]">
+                          <span className="font-bold">
+                            Cash (Rs. {(parseFloat(splitCashInput) || 0).toLocaleString()}) Received & Bank Slip (Rs. {(parseFloat(splitMode === 'CashBankCheque' ? splitBankInput : splitSecondaryInput) || 0).toLocaleString()}) Verified
+                          </span>
+                          <span className="block text-[10px] text-[#66726D]">
+                            Confirmed cash received in drawer and bank slip confirmed.
+                          </span>
+                        </div>
                       </label>
-                    )}
+                    </div>
+                  )}
 
-                    {/* Cheque Verified Checkbox */}
-                    <label
-                      className={`flex items-start gap-2.5 p-2.5 rounded-lg border transition-all cursor-pointer ${
-                        splitChequeVerified
-                          ? 'bg-[#DCEDE6] border-[#125E45]'
-                          : 'bg-[#F6F8F7] border-[#DCE3E0] hover:bg-[#F0F4F2]'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={splitChequeVerified}
-                        onChange={e => setSplitChequeVerified(e.target.checked)}
-                        className="mt-0.5 w-4 h-4 text-[#125E45] rounded accent-[#125E45] cursor-pointer shrink-0"
-                      />
-                      <div className="text-xs text-[#17211D]">
-                        <span className="font-bold">
-                          Physical Cheque & Signature Verified
-                        </span>
-                        <span className="block text-[10px] text-[#66726D]">
-                          Confirmed physical cheque details for Rs. {(parseFloat(splitSecondaryInput) || 0).toLocaleString()} payable to store.
+                  {/* Sub-Workflow: Cheque Details (when Cash+Cheque, Bank+Cheque, or Cash+Bank+Cheque) */}
+                  {(splitMode === 'CashCheque' || splitMode === 'BankCheque' || splitMode === 'CashBankCheque') && (
+                    <div className="p-3.5 bg-white rounded-xl border border-[#DCE3E0] space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="font-bold text-xs text-[#17211D] flex items-center gap-1.5">
+                          <FileText className="w-4 h-4 text-[#125E45]" />
+                          <span>Cheque Details (Pending Clearance)</span>
+                        </div>
+                        <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full">
+                          {splitSecondaryInput ? `Rs. ${(parseFloat(splitSecondaryInput) || 0).toLocaleString()}` : 'Enter cheque amount'}
                         </span>
                       </div>
-                    </label>
-                  </div>
-                )}
-              </div>
-            )}
 
-            {/* Pandi Name / Carrier Loader Autocomplete */}
-            <PandiSelectInput
-              value={pandiName}
-              onChange={(name, obj) => {
-                setPandiName(name);
-                setSelectedPandi(obj || null);
-              }}
-              label="Pandi Name"
-              placeholder="Type or select Pandi name..."
-            />
+                      {/* Bank transfer info if Bank + Cheque (not 3-way since 3-way already shows bank above) */}
+                      {splitMode === 'BankCheque' && (
+                        <div className="p-2.5 bg-[#F6F8F7] rounded-xl border border-[#DCE3E0] space-y-2">
+                          {bankAccounts.length === 0 ? (
+                            <p className="text-xs text-[#C23D45]">
+                              No bank accounts configured in Store Settings.
+                            </p>
+                          ) : bankAccounts.length === 1 ? (
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="font-bold text-[#17211D] flex items-center gap-1.5">
+                                <Building className="w-3.5 h-3.5 text-[#125E45]" />
+                                <span>{bankAccounts[0].bankName}</span>
+                              </span>
+                              <span className="text-[10px] text-[#66726D] font-mono">{bankAccounts[0].accountNumber}</span>
+                            </div>
+                          ) : (
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-[#66726D] block">
+                                Select Receiving Bank:
+                              </label>
+                              <select
+                                value={selectedBank?.id || bankAccounts[0]?.id || ''}
+                                onChange={e => {
+                                  const found = bankAccounts.find(b => b.id === e.target.value);
+                                  if (found) setSelectedBank(found);
+                                }}
+                                className="w-full p-1.5 text-xs font-bold text-[#17211D] bg-white border border-[#DCE3E0] rounded-lg focus:outline-none"
+                              >
+                                {bankAccounts.map(b => (
+                                  <option key={b.id} value={b.id}>
+                                    {b.bankName} — {b.accountTitle}
+                                  </option>
+                                ))}
+                              </select>
+                              {selectedBank && (
+                                <div className="text-[10px] text-[#125E45] font-bold font-mono">
+                                  Acc: {selectedBank.accountNumber}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          <input
+                            type="text"
+                            placeholder="Bank Transfer Reference / Slip # (Optional)"
+                            value={splitReference}
+                            onChange={e => setSplitReference(e.target.value)}
+                            className="w-full p-1.5 text-xs border border-[#DCE3E0] rounded-lg bg-white focus:outline-none"
+                          />
+                        </div>
+                      )}
 
-            {/* Notes / PO Reference */}
-            <div className="space-y-1">
-              <label className="block text-xs font-semibold text-[#17211D]">
-                Client PO # / Vehicle Dispatch Builty Reference
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. Dispatched via Bilal Cargo Builty # 4920"
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-                className="w-full px-3 py-2 border border-[#DCE3E0] rounded-xl text-xs bg-white focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
-              />
-            </div>
+                      {/* Multiple Cheques List & Management */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold text-[#17211D] flex items-center gap-1.5">
+                            <span>Client Cheque(s) Details</span>
+                            <span className="bg-[#DCEDE6] text-[#125E45] font-bold text-[10px] px-2 py-0.5 rounded-full">
+                              {chequeEntries.length} {chequeEntries.length === 1 ? 'Cheque' : 'Cheques'}
+                            </span>
+                          </label>
+                          <button
+                            type="button"
+                            onClick={handleAddCheque}
+                            className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-lg bg-[#DCEDE6] hover:bg-[#c2e4d7] text-[#125E45] border border-[#125E45]/30 transition-all cursor-pointer shadow-2xs"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Add Another Cheque</span>
+                          </button>
+                        </div>
 
-            {/* Actions */}
-            <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-3 border-t border-[#DCE3E0]">
-              <Button variant="outline" size="md" onClick={() => setIsCheckoutOpen(false)} className="w-full sm:w-auto">
-                Cancel
-              </Button>
-              <button
-                type="button"
-                onClick={handleCompleteWholesaleSale}
-                className="w-full sm:w-auto inline-flex items-center justify-center font-bold rounded-xl px-5 py-2.5 text-xs text-white bg-[#125E45] hover:bg-[#197A5A] active:scale-[0.98] transition-all shadow-2xs cursor-pointer gap-2"
-              >
-                <CheckCircle2 className="w-4 h-4 text-white" />
-                <span>Complete Sale & Save Invoice</span>
-              </button>
-            </div>
-          </div>
-        </Modal>
+                        {/* Cheque Cards */}
+                        <div className="space-y-2.5">
+                          {chequeEntries.map((cheque, index) => (
+                            <div
+                              key={cheque.id}
+                              className="p-3 bg-white rounded-xl border border-[#DCE3E0] shadow-2xs space-y-2.5 relative"
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="text-[11px] font-bold text-[#125E45] bg-[#F0F4F2] px-2 py-0.5 rounded-md border border-[#DCE3E0]">
+                                  Cheque #{index + 1}
+                                </span>
+                                {chequeEntries.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveCheque(cheque.id)}
+                                    className="text-[10px] text-rose-600 hover:text-rose-800 font-bold flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-rose-50 transition-colors cursor-pointer"
+                                    title="Remove this cheque"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                    <span>Remove</span>
+                                  </button>
+                                )}
+                              </div>
 
-        {/* MODAL: Printable A4 Commercial Invoice Preview */}
-        <Modal
-          isOpen={isInvoiceModalOpen}
-          onClose={() => setIsInvoiceModalOpen(false)}
-          title="Commercial Wholesale Invoice"
-          maxWidth="4xl"
-        >
-          {completedBill && (
-            <WholesaleInvoicePrint
-              bill={completedBill}
-              onClose={() => setIsInvoiceModalOpen(false)}
-            />
-          )}
-        </Modal>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <div>
+                                  <label className="text-[10px] font-semibold text-[#66726D] block mb-1">
+                                    Cheque Bank Name <span className="text-rose-500">*</span>
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. Meezan Bank / HBL"
+                                    value={cheque.bankName}
+                                    onChange={e => handleUpdateCheque(cheque.id, 'bankName', e.target.value)}
+                                    list="pk-banks-list-khata"
+                                    className="w-full p-2 text-xs font-bold border border-[#DCE3E0] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
+                                    required
+                                  />
+                                </div>
 
-        {/* MODAL: Keyboard Shortcuts */}
-        <WholesaleKeyboardShortcutsModal
-          isOpen={isShortcutsModalOpen}
-          onClose={() => setIsShortcutsModalOpen(false)}
-        />
+                                <div>
+                                  <label className="text-[10px] font-semibold text-[#66726D] block mb-1">
+                                    Cheque Amount (PKR) <span className="text-rose-500">*</span>
+                                  </label>
+                                  <input
+                                    type="number"
+                                    placeholder="Cheque Amount"
+                                    value={cheque.amount}
+                                    onChange={e => handleUpdateCheque(cheque.id, 'amount', e.target.value)}
+                                    className="w-full p-2 text-xs font-black text-[#17211D] border border-[#DCE3E0] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
+                                    required
+                                  />
+                                </div>
+                              </div>
 
-        {/* MODAL: Two Independent Bill Searches */}
-        <WholesaleBillSearchModal
-          isOpen={isBillSearchOpen}
-          onClose={() => setIsBillSearchOpen(false)}
-          onViewBill={bill => {
-            setCompletedBill(bill);
-            setIsBillSearchOpen(false);
-            setIsInvoiceModalOpen(true);
-          }}
-          onSelectPrint={bill => {
-            setCompletedBill(bill);
-            setIsBillSearchOpen(false);
-            setIsInvoiceModalOpen(true);
-          }}
-          onSelectReturn={bill => {
-            setBillForAction(bill);
-            setIsBillSearchOpen(false);
-            setIsReturnModalOpen(true);
-          }}
-          onSelectExchange={bill => {
-            setBillForAction(bill);
-            setIsBillSearchOpen(false);
-            setIsExchangeModalOpen(true);
-          }}
-        />
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
+                                <div>
+                                  <label className="text-[10px] font-semibold text-[#66726D] flex items-center gap-1 mb-1">
+                                    <Calendar className="w-3 h-3 text-[#125E45]" />
+                                    <span>Scheduled Passing Date & Month <span className="text-rose-500">*</span></span>
+                                  </label>
+                                  <input
+                                    type="date"
+                                    value={cheque.clearingDate}
+                                    onChange={e => handleUpdateCheque(cheque.id, 'clearingDate', e.target.value)}
+                                    className="w-full p-1.5 text-xs font-bold border border-[#DCE3E0] rounded-lg bg-[#F8FAFA] focus:outline-none focus:ring-1 focus:ring-[#197A5A] cursor-pointer"
+                                    required
+                                  />
+                                </div>
 
-        {/* MODAL: Wholesale Return Workflow */}
-        <WholesaleReturnModal
-          isOpen={isReturnModalOpen}
-          onClose={() => setIsReturnModalOpen(false)}
-          bill={billForAction}
-          onReturnCompleted={(retTx, updatedBill) => {
-            setCompletedReturn(retTx);
-            setBillForAction(updatedBill);
-            setIsReturnPrintOpen(true);
-            setProducts(productsService.getAll());
-          }}
-        />
+                                <div>
+                                  <label className="text-[10px] font-semibold text-[#66726D] block mb-1">
+                                    Cheque / Leaf # (Optional)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. CHQ-92810"
+                                    value={cheque.chequeNumber}
+                                    onChange={e => handleUpdateCheque(cheque.id, 'chequeNumber', e.target.value)}
+                                    className="w-full p-1.5 text-xs font-mono border border-[#DCE3E0] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
 
-        {/* MODAL: Wholesale Exchange Workflow */}
-        <WholesaleExchangeModal
-          isOpen={isExchangeModalOpen}
-          onClose={() => setIsExchangeModalOpen(false)}
-          bill={billForAction}
-          onExchangeCompleted={(excTx, updatedBill) => {
-            setCompletedExchange(excTx);
-            setBillForAction(updatedBill);
-            setIsExchangePrintOpen(true);
-            setProducts(productsService.getAll());
-          }}
-        />
+                        <datalist id="pk-banks-list-khata">
+                          <option value="Meezan Bank" />
+                          <option value="Habib Bank Limited (HBL)" />
+                          <option value="MCB Bank" />
+                          <option value="Allied Bank Limited (ABL)" />
+                          <option value="United Bank Limited (UBL)" />
+                          <option value="Bank Alfalah" />
+                          <option value="Askari Bank" />
+                          <option value="Faysal Bank" />
+                          <option value="Bank Al Habib" />
+                          <option value="Dubai Islamic Bank" />
+                        </datalist>
 
-        {/* MODAL: Return Slip Print */}
-        <Modal
-          isOpen={isReturnPrintOpen}
-          onClose={() => setIsReturnPrintOpen(false)}
-          title="Print Wholesale Return Voucher"
-          maxWidth="2xl"
-        >
-          {completedReturn && (
-            <PrintableWholesaleReturn
-              returnTx={completedReturn}
-              bill={billForAction}
-              onClose={() => setIsReturnPrintOpen(false)}
-            />
-          )}
-        </Modal>
+                        {/* Add Another Cheque Button */}
+                        <button
+                          type="button"
+                          onClick={handleAddCheque}
+                          className="w-full py-2 border-2 border-dashed border-[#125E45]/40 hover:border-[#125E45] bg-[#DCEDE6]/30 hover:bg-[#DCEDE6]/60 text-[#125E45] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>+ Add Another Cheque for This Invoice</span>
+                        </button>
 
-        {/* MODAL: Exchange Slip Print */}
-        <Modal
-          isOpen={isExchangePrintOpen}
-          onClose={() => setIsExchangePrintOpen(false)}
-          title="Print Wholesale Exchange Voucher"
-          maxWidth="2xl"
-        >
-          {completedExchange && (
-            <PrintableWholesaleExchange
-              exchangeTx={completedExchange}
-              bill={billForAction}
-              onClose={() => setIsExchangePrintOpen(false)}
-            />
-          )}
-        </Modal>
+                        {/* Cheques Summary Box */}
+                        {chequeEntries.length > 1 && (
+                          <div className="p-2.5 bg-[#DCEDE6]/50 rounded-lg border border-[#125E45]/20 flex items-center justify-between text-xs font-bold text-[#125E45]">
+                            <span>Total Cheques ({chequeEntries.length}):</span>
+                            <span className="text-sm font-black">
+                              Rs. {chequeEntries.reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0).toLocaleString()}
+                            </span>
+                          </div>
+                        )}
 
-        {/* MODAL: Card Terminal (Split Mode) */}
-        <CardTerminalModal
-          isOpen={isSplitCardTerminalModalOpen}
-          onClose={() => setIsSplitCardTerminalModalOpen(false)}
-          grandTotal={parseFloat(splitSecondaryInput) || 0}
-          onPaymentSuccess={authData => {
-            setSplitCardAuth(authData);
-            setSplitCardVerified(true);
-            setIsSplitCardTerminalModalOpen(false);
-            toast({
-              title: 'Card Payment Approved',
-              description: `Split card portion of Rs. ${(parseFloat(splitSecondaryInput) || 0).toLocaleString()} authorized.`,
-              type: 'success',
-            });
-          }}
-        />
+                        <p className="text-[10px] text-[#66726D] leading-relaxed">
+                          Notification will alert Admin on each cheque&apos;s scheduled passing date. Cheque amounts will <strong>NOT</strong> be deducted from client balance until marked &quot;Pass Cheque (OK)&quot;.
+                        </p>
+                      </div>
 
-        {/* MODAL: Wholesale Pending Cheques Management */}
-        <Modal
-          isOpen={isPendingChequesModalOpen}
-          onClose={() => setIsPendingChequesModalOpen(false)}
-          title="Wholesale Uncleared & Pending Cheques"
-          description="Manage client cheques awaiting bank clearance. Pass cheques to deduct from client ledgers on today's date."
-          maxWidth="4xl"
-        >
-          <div className="space-y-4 text-xs select-none">
-            {/* Category Origin Tabs: All, Wholesale, Khata/Credit POS */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-[#F0F4F2] rounded-2xl border border-[#DCE3E0]">
-              <div className="flex items-center gap-1.5 p-1 bg-white rounded-xl border border-[#DCE3E0]">
-                <button
-                  type="button"
-                  onClick={() => setPendingOriginFilter('All')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    pendingOriginFilter === 'All'
-                      ? 'bg-[#125E45] text-white shadow-2xs'
-                      : 'text-[#66726D] hover:text-[#17211D]'
-                  }`}
-                >
-                  All ({pendingCheques.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPendingOriginFilter('Wholesale')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    pendingOriginFilter === 'Wholesale'
-                      ? 'bg-[#125E45] text-white shadow-2xs'
-                      : 'text-[#66726D] hover:text-[#17211D]'
-                  }`}
-                >
-                  Wholesale ({pendingCheques.filter(p => p.originType === 'Wholesale').length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPendingOriginFilter('Khata')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    pendingOriginFilter === 'Khata'
-                      ? 'bg-[#125E45] text-white shadow-2xs'
-                      : 'text-[#66726D] hover:text-[#17211D]'
-                  }`}
-                >
-                  Khata / Credit POS ({pendingCheques.filter(p => p.originType === 'Khata').length})
-                </button>
-              </div>
+                      {/* Important Account Ledger Notice */}
+                      <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                        <div className="text-[11px] leading-relaxed">
+                          Client ledger will reflect the full purchase of Rs. {finalKhataGrandTotal.toLocaleString()}. Only the immediate {splitMode === 'CashBankCheque' ? 'Cash & Bank' : splitMode === 'BankCheque' ? 'Bank' : 'Cash'} portion (Rs. {((parseFloat(splitCashInput) || 0) + (splitMode === 'CashBankCheque' ? (parseFloat(splitBankInput) || 0) : 0)).toLocaleString()}) will be credited now. The cheque portion (Rs. {(parseFloat(splitSecondaryInput) || 0).toLocaleString()}) remains in client ledger until passed.
+                        </div>
+                      </div>
 
-              <div className="relative flex-1 max-w-xs">
-                <Search className="w-3.5 h-3.5 text-[#8A9590] absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Filter by customer, bank, or invoice..."
-                  value={pendingChequesSearch}
-                  onChange={e => setPendingChequesSearch(e.target.value)}
-                  className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-[#DCE3E0] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
-                />
-              </div>
-            </div>
-
-            {/* Cheques Table */}
-            <div className="overflow-x-auto border border-[#DCE3E0] rounded-2xl bg-white">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="bg-[#F8FAFA] border-b border-[#DCE3E0] text-[10px] font-bold text-[#8A9590] uppercase tracking-wider">
-                    <th className="py-2.5 px-3">Client / Customer</th>
-                    <th className="py-2.5 px-3">Invoice #</th>
-                    <th className="py-2.5 px-3">Cheque Details</th>
-                    <th className="py-2.5 px-3 text-right">Amount</th>
-                    <th className="py-2.5 px-3">Scheduled Date</th>
-                    <th className="py-2.5 px-3">Status</th>
-                    <th className="py-2.5 px-3 text-center">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#DCE3E0]/60">
-                  {pendingCheques
-                    .filter(item => {
-                      if (pendingOriginFilter === 'Wholesale' && item.originType !== 'Wholesale') return false;
-                      if (pendingOriginFilter === 'Khata' && item.originType !== 'Khata') return false;
-                      if (!pendingChequesSearch.trim()) return true;
-                      const q = pendingChequesSearch.toLowerCase();
-                      return (
-                        item.customerName.toLowerCase().includes(q) ||
-                        (item.cheque.chequeNumber || '').toLowerCase().includes(q) ||
-                        (item.cheque.bankName || '').toLowerCase().includes(q) ||
-                        (item.cheque.invoiceNumber || '').toLowerCase().includes(q)
-                      );
-                    })
-                    .map(item => {
-                      return (
-                        <tr
-                          key={`${item.collectionId}-${item.cheque.id}`}
-                          className={`hover:bg-[#F0F4F2]/50 transition-colors ${
-                            item.isDueToday
-                              ? 'bg-amber-50/50'
-                              : item.isOverdue
-                              ? 'bg-rose-50/40'
-                              : ''
+                      {/* Checkbox for Bank Slip if Bank + Cheque */}
+                      {splitMode === 'BankCheque' && (
+                        <label
+                          className={`flex items-start gap-2.5 p-2 rounded-lg border transition-all cursor-pointer ${
+                            splitBankSlipVerified
+                              ? 'bg-[#DCEDE6] border-[#125E45]'
+                              : 'bg-[#F6F8F7] border-[#DCE3E0] hover:bg-[#F0F4F2]'
                           }`}
                         >
-                          <td className="py-3 px-3">
-                            <div className="font-bold text-[#17211D]">{item.customerName}</div>
-                            {item.customerPhone && (
-                              <div className="text-[10px] text-[#8A9590]">{item.customerPhone}</div>
-                            )}
-                          </td>
-                          <td className="py-3 px-3 font-mono font-bold text-[#125E45]">
-                            {item.cheque.invoiceNumber || item.receiptNumber.replace('CHQ-', '')}
-                          </td>
-                          <td className="py-3 px-3">
-                            <div className="font-mono font-bold text-[#17211D]">
-                              {item.cheque.chequeNumber || 'N/A'}
-                            </div>
-                            <div className="text-[10px] text-[#66726D]">{item.cheque.bankName || 'Bank'}</div>
-                          </td>
-                          <td className="py-3 px-3 text-right font-black text-sm text-[#17211D]">
-                            Rs. {item.cheque.chequeAmount.toLocaleString()}
-                          </td>
-                          <td className="py-3 px-3">
-                            <div className="font-bold text-[#17211D]">
-                              {item.cheque.clearingDate
-                                ? new Date(item.cheque.clearingDate).toLocaleDateString('en-GB', {
-                                    day: 'numeric',
-                                    month: 'short',
-                                    year: 'numeric',
-                                  })
-                                : 'N/A'}
-                            </div>
-                          </td>
-                          <td className="py-3 px-3">
-                            {item.isDueToday ? (
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1 w-fit">
-                                <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse" />
-                                Due Today
-                              </span>
-                            ) : item.isOverdue ? (
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300 w-fit inline-block">
-                                Overdue
-                              </span>
-                            ) : (
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#DCEDE6] text-[#125E45] border border-[#125E45]/30 w-fit inline-block">
-                                Scheduled
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-3 px-3 text-center">
-                            <button
-                              type="button"
-                              onClick={() => handlePassCheque(item.collectionId, item.cheque.id)}
-                              className="px-3 py-1.5 bg-[#125E45] hover:bg-[#197A5A] text-white rounded-lg text-xs font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-                              title="Click to pass cheque and deduct from client statement today"
-                            >
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span>Pass Cheque (OK)</span>
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                          <input
+                            type="checkbox"
+                            checked={splitBankSlipVerified}
+                            onChange={e => setSplitBankSlipVerified(e.target.checked)}
+                            className="mt-0.5 w-4 h-4 text-[#125E45] rounded accent-[#125E45] cursor-pointer shrink-0"
+                          />
+                          <span className="text-xs font-semibold text-[#17211D]">
+                            Bank transfer portion (Rs. {(parseFloat(splitCashInput) || 0).toLocaleString()}) slip verified.
+                          </span>
+                        </label>
+                      )}
 
-                  {pendingCheques.length === 0 && (
-                    <tr>
-                      <td colSpan={7} className="py-8 text-center text-[#8A9590] text-xs">
-                        No pending or uncleared wholesale cheques at this time.
-                      </td>
-                    </tr>
+                      {/* Cheque Verified Checkbox */}
+                      <label
+                        className={`flex items-start gap-2.5 p-2.5 rounded-lg border transition-all cursor-pointer ${
+                          splitChequeVerified
+                            ? 'bg-[#DCEDE6] border-[#125E45]'
+                            : 'bg-[#F6F8F7] border-[#DCE3E0] hover:bg-[#F0F4F2]'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={splitChequeVerified}
+                          onChange={e => setSplitChequeVerified(e.target.checked)}
+                          className="mt-0.5 w-4 h-4 text-[#125E45] rounded accent-[#125E45] cursor-pointer shrink-0"
+                        />
+                        <div className="text-xs text-[#17211D]">
+                          <span className="font-bold">
+                            Physical Cheque & Signature Verified
+                          </span>
+                          <span className="block text-[10px] text-[#66726D]">
+                            Confirmed physical cheque details for Rs. {(parseFloat(splitSecondaryInput) || 0).toLocaleString()} payable to store.
+                          </span>
+                        </div>
+                      </label>
+                    </div>
                   )}
-                </tbody>
-              </table>
-            </div>
+                </div>
+              )}
 
-            {/* Explanatory footer note */}
-            <div className="p-3 bg-[#F0F4F2] rounded-xl border border-[#DCE3E0] text-[11px] text-[#66726D] flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-[#125E45] shrink-0" />
-              <span>
-                Clicking <strong>&quot;Pass Cheque (OK)&quot;</strong> clears the cheque on today&apos;s date and automatically posts a CREDIT transaction to the client&apos;s ledger on today&apos;s statement, whether passed before, on, or after the scheduled date.
-              </span>
-            </div>
+              {/* Pandi Name / Carrier Loader Autocomplete */}
+              <PandiSelectInput
+                value={pandiName}
+                onChange={(name, obj) => {
+                  setPandiName(name);
+                  setSelectedPandi(obj || null);
+                }}
+                label="Pandi Name / Delivery Loader"
+                placeholder="Type or select Pandi name..."
+              />
 
-            <div className="flex justify-end pt-2">
-              <Button variant="outline" size="md" onClick={() => setIsPendingChequesModalOpen(false)}>
-                Close
-              </Button>
+              {/* Notes / PO Reference */}
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-[#17211D]">
+                  Khata Reference / Gate Pass / Builty Reference
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Sent via loader Haji Bashir, gate pass # 410"
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  className="w-full px-3 py-2 border border-[#DCE3E0] rounded-xl text-xs bg-white focus:outline-none focus:ring-1 focus:ring-[#197A5A]"
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-3 border-t border-[#DCE3E0]">
+                <Button variant="outline" size="md" onClick={() => setIsCheckoutOpen(false)} className="w-full sm:w-auto">
+                  Cancel
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => handleFinalizeSale(paymentMethod)}
+                  disabled={
+                    isCashInsufficient ||
+                    (paymentMethod === 'Bank Transfer' && (!isBankPaymentConfirmed || !selectedBank)) ||
+                    (paymentMethod === 'Split' && (
+                      splitMode === 'CashBankCheque'
+                        ? ((parseFloat(splitCashInput) || 0) + (parseFloat(splitBankInput) || 0) + (parseFloat(splitSecondaryInput) || 0)) < finalKhataGrandTotal
+                        : ((parseFloat(splitCashInput) || 0) + (parseFloat(splitSecondaryInput) || 0)) < finalKhataGrandTotal
+                    ))
+                  }
+                  className={`w-full sm:w-auto inline-flex items-center justify-center font-bold rounded-xl px-5 py-2.5 text-xs text-white bg-[#125E45] hover:bg-[#197A5A] active:scale-[0.98] transition-all shadow-2xs cursor-pointer gap-2 disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed`}
+                >
+                  <CheckCircle2 className="w-4 h-4 text-white" />
+                  <span>Complete Sale & Save Invoice</span>
+                </button>
+              </div>
             </div>
-          </div>
-        </Modal>
+          </Modal>
+
+          {/* ============================================================== */}
+          {/* SEARCH BILLS & HISTORICAL RETURNS MODAL */}
+          {/* ============================================================== */}
+          <WholesaleBillSearchModal
+            isOpen={isBillSearchOpen}
+            onClose={() => setIsBillSearchOpen(false)}
+            onViewBill={bill => {
+              setCompletedBill(bill);
+              setIsBillSearchOpen(false);
+              setIsInvoiceModalOpen(true);
+            }}
+            onSelectPrint={bill => {
+              setCompletedBill(bill);
+              setIsBillSearchOpen(false);
+              setIsInvoiceModalOpen(true);
+            }}
+            onSelectReturn={bill => {
+              setBillForAction(bill);
+              setIsBillSearchOpen(false);
+              setIsReturnModalOpen(true);
+            }}
+            onSelectExchange={bill => {
+              setBillForAction(bill);
+              setIsBillSearchOpen(false);
+              setIsExchangeModalOpen(true);
+            }}
+          />
+
+          {/* Return Modal */}
+          {billForAction && (
+            <WholesaleReturnModal
+              isOpen={isReturnModalOpen}
+              onClose={() => {
+                setIsReturnModalOpen(false);
+                setBillForAction(null);
+              }}
+              bill={billForAction}
+              onReturnCompleted={(retTx, updatedBill) => {
+                setCompletedReturn(retTx);
+                setBillForAction(updatedBill);
+                setIsReturnPrintOpen(true);
+                setProducts(productsService.getAll());
+              }}
+            />
+          )}
+
+          {/* Exchange Modal */}
+          {billForAction && (
+            <WholesaleExchangeModal
+              isOpen={isExchangeModalOpen}
+              onClose={() => {
+                setIsExchangeModalOpen(false);
+                setBillForAction(null);
+              }}
+              bill={billForAction}
+              onExchangeCompleted={(excTx, updatedBill) => {
+                setCompletedExchange(excTx);
+                setBillForAction(updatedBill);
+                setIsExchangePrintOpen(true);
+                setProducts(productsService.getAll());
+              }}
+            />
+          )}
+
+          {/* Return Print Modal */}
+          {completedReturn && (
+            <Modal
+              isOpen={isReturnPrintOpen}
+              onClose={() => {
+                setIsReturnPrintOpen(false);
+                setCompletedReturn(null);
+              }}
+              title={`Return Slip #${completedReturn.id}`}
+              maxWidth="4xl"
+            >
+              <PrintableWholesaleReturn
+                returnTx={completedReturn}
+                bill={billForAction}
+                onClose={() => {
+                  setIsReturnPrintOpen(false);
+                  setCompletedReturn(null);
+                }}
+              />
+            </Modal>
+          )}
+
+          {/* Exchange Print Modal */}
+          {completedExchange && (
+            <Modal
+              isOpen={isExchangePrintOpen}
+              onClose={() => {
+                setIsExchangePrintOpen(false);
+                setCompletedExchange(null);
+              }}
+              title={`Exchange Voucher #${completedExchange.id}`}
+              maxWidth="4xl"
+            >
+              <PrintableWholesaleExchange
+                exchangeTx={completedExchange}
+                bill={billForAction}
+                onClose={() => {
+                  setIsExchangePrintOpen(false);
+                  setCompletedExchange(null);
+                }}
+              />
+            </Modal>
+          )}
+
+          {/* Completed Sale Invoice Print Modal */}
+          <Modal
+            isOpen={isInvoiceModalOpen}
+            onClose={() => setIsInvoiceModalOpen(false)}
+            title={`Invoice #${completedBill?.invoiceNumber || ''}`}
+            maxWidth="4xl"
+          >
+            {completedBill && (
+              <WholesaleInvoicePrint
+                bill={completedBill}
+                onClose={() => setIsInvoiceModalOpen(false)}
+              />
+            )}
+          </Modal>
+
+          {/* Khata Statement Modal */}
+          {selectedCustomer && (
+            <Modal
+              isOpen={isStatementModalOpen}
+              onClose={() => setIsStatementModalOpen(false)}
+              title={`${selectedCustomer.name} - Khata Statement`}
+              maxWidth="4xl"
+            >
+              <KhataStatementPrint
+                customer={selectedCustomer}
+                transactions={customersService.getKhataTransactions(selectedCustomer.id)}
+                onClose={() => setIsStatementModalOpen(false)}
+              />
+            </Modal>
+          )}
+        </div>
       </AppShell>
     </ProtectedRoute>
   );

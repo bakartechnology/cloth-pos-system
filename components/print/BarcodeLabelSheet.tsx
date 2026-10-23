@@ -10,6 +10,7 @@ interface BarcodeLabelSheetProps {
   type: 'retail' | 'wholesale';
   count?: number;
   initialPriceMode?: 'with-rs' | 'none';
+  targetUnit?: 'box' | 'suit';
   onClose?: () => void;
 }
 
@@ -18,22 +19,32 @@ export function BarcodeLabelSheet({
   type,
   count = 12,
   initialPriceMode = 'with-rs',
+  targetUnit = 'box',
   onClose,
 }: BarcodeLabelSheetProps) {
+  const isBoxProduct = product.packagingConfig?.type === 'box';
+  const [activeUnit, setActiveUnit] = useState<'box' | 'suit'>(targetUnit);
   const [priceMode, setPriceMode] = useState<'with-rs' | 'none'>(initialPriceMode);
 
   const handlePrint = () => {
     window.print();
   };
 
-  const barcodeValue = type === 'retail' ? product.barcode : product.wholesaleBarcode;
-  const price = type === 'retail' ? product.retailPrice : product.wholesalePrice;
-  const tagType = type === 'retail' ? 'RETAIL' : 'WHOLESALE';
+  const isPrintingSuit = isBoxProduct && activeUnit === 'suit';
+  const barcodeValue = isPrintingSuit
+    ? (product.suitBarcode || product.barcode || '')
+    : (type === 'retail' ? product.barcode : (product.wholesaleBarcode || product.barcode)) || product.barcode || '';
+
+  const price = isPrintingSuit
+    ? (product.packagingConfig?.retailPricePerSuit || product.packagingConfig?.pricePerSuit || (product.packagingConfig?.suitsPerBox ? Math.round(product.retailPrice / product.packagingConfig.suitsPerBox) : product.retailPrice))
+    : (type === 'retail' ? product.retailPrice : product.wholesalePrice);
+
+  const tagType = isPrintingSuit ? 'SUIT' : (type === 'retail' ? (isBoxProduct ? 'BOX' : 'RETAIL') : 'PRODUCT');
 
   const labels = Array.from({ length: count });
 
   // Generate deterministic bar widths from barcode string
-  const bars = barcodeValue
+  const bars = (barcodeValue || '896400000000')
     .split('')
     .map(char => (parseInt(char, 10) % 3) + 1);
 
@@ -45,12 +56,40 @@ export function BarcodeLabelSheet({
           <ArrowLeft className="w-4 h-4" /> Back to Barcode Studio
         </Button>
         <div className="flex flex-wrap items-center gap-3">
+          {/* Box vs Suit Selector for Box products */}
+          {isBoxProduct && (
+            <div className="flex items-center p-1 bg-slate-100 rounded-lg text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setActiveUnit('box')}
+                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                  activeUnit === 'box'
+                    ? 'bg-white text-blue-900 shadow-2xs font-bold'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                📦 Box ({product.barcode})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveUnit('suit')}
+                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                  activeUnit === 'suit'
+                    ? 'bg-white text-indigo-900 shadow-2xs font-bold'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                👗 Individual Suit ({product.suitBarcode || 'Suit'})
+              </button>
+            </div>
+          )}
+
           {/* Price display selector */}
           <div className="flex items-center p-1 bg-slate-100 rounded-lg text-xs font-semibold">
             <button
               type="button"
               onClick={() => setPriceMode('with-rs')}
-              className={`px-3 py-1 rounded-md transition-all ${
+              className={`px-3 py-1 rounded-md transition-all cursor-pointer ${
                 priceMode === 'with-rs'
                   ? 'bg-white text-slate-900 shadow-2xs font-bold'
                   : 'text-slate-500 hover:text-slate-700'
@@ -61,7 +100,7 @@ export function BarcodeLabelSheet({
             <button
               type="button"
               onClick={() => setPriceMode('none')}
-              className={`px-3 py-1 rounded-md transition-all ${
+              className={`px-3 py-1 rounded-md transition-all cursor-pointer ${
                 priceMode === 'none'
                   ? 'bg-white text-slate-900 shadow-2xs font-bold'
                   : 'text-slate-500 hover:text-slate-700'

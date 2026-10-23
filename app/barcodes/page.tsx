@@ -30,6 +30,7 @@ export default function BarcodesPage() {
   const [labelCount, setLabelCount] = useState<number>(12);
   const [includePrice, setIncludePrice] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [boxPrintUnit, setBoxPrintUnit] = useState<'box' | 'suit'>('box');
   const [copied, setCopied] = useState(false);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
@@ -43,15 +44,19 @@ export default function BarcodesPage() {
 
   const selectedProduct = products.find(p => p.id === selectedProductId) || products[0];
 
-  const barcodeValue =
-    selectedProduct && barcodeType === 'retail'
-      ? selectedProduct.barcode
-      : selectedProduct?.wholesaleBarcode || '';
+  const isBoxProduct = selectedProduct?.packagingConfig?.type === 'box';
 
-  const priceValue =
-    selectedProduct && barcodeType === 'retail'
-      ? selectedProduct.retailPrice
-      : selectedProduct?.wholesalePrice || 0;
+  const barcodeValue = selectedProduct
+    ? (isBoxProduct && boxPrintUnit === 'suit'
+        ? (selectedProduct.suitBarcode || selectedProduct.barcode)
+        : selectedProduct.barcode)
+    : '';
+
+  const priceValue = selectedProduct
+    ? (isBoxProduct && boxPrintUnit === 'suit'
+        ? (selectedProduct.packagingConfig?.retailPricePerSuit || selectedProduct.packagingConfig?.pricePerSuit || (selectedProduct.packagingConfig?.suitsPerBox ? Math.round(selectedProduct.retailPrice / selectedProduct.packagingConfig.suitsPerBox) : selectedProduct.retailPrice))
+        : selectedProduct.retailPrice)
+    : 0;
 
   const handleCopyBarcode = () => {
     if (!barcodeValue) return;
@@ -158,28 +163,38 @@ export default function BarcodesPage() {
                       </p>
                     </div>
 
-                    {/* Barcode Type Toggle */}
-                    <div className="flex items-center p-1 bg-slate-100 rounded-lg text-xs font-semibold">
-                      <button
-                        onClick={() => setBarcodeType('retail')}
-                        className={`px-3 py-1 rounded-md transition-colors ${
-                          barcodeType === 'retail'
-                            ? 'bg-white text-blue-700 shadow-2xs font-bold'
-                            : 'text-slate-600'
-                        }`}
-                      >
-                        Retail Tag
-                      </button>
-                      <button
-                        onClick={() => setBarcodeType('wholesale')}
-                        className={`px-3 py-1 rounded-md transition-colors ${
-                          barcodeType === 'wholesale'
-                            ? 'bg-white text-cyan-700 shadow-2xs font-bold'
-                            : 'text-slate-600'
-                        }`}
-                      >
-                        Wholesale Tag
-                      </button>
+                    {/* Barcode Tag Badge / Unit Selector for Box */}
+                    <div className="flex items-center gap-2">
+                      {isBoxProduct ? (
+                        <div className="flex items-center p-1 bg-slate-100 rounded-lg text-xs font-semibold">
+                          <button
+                            type="button"
+                            onClick={() => setBoxPrintUnit('box')}
+                            className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                              boxPrintUnit === 'box'
+                                ? 'bg-white text-blue-900 shadow-2xs font-bold'
+                                : 'text-slate-500 hover:text-slate-700'
+                            }`}
+                          >
+                            📦 Box Barcode
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setBoxPrintUnit('suit')}
+                            className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                              boxPrintUnit === 'suit'
+                                ? 'bg-white text-indigo-900 shadow-2xs font-bold'
+                                : 'text-slate-500 hover:text-slate-700'
+                            }`}
+                          >
+                            👗 Suit Barcode / QR
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="px-3 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold shadow-2xs">
+                          Product Barcode Tag
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -188,7 +203,7 @@ export default function BarcodesPage() {
                     <div className="flex items-center justify-between w-full text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">
                       <span>AL-NOOR FABRICS</span>
                       <span className="bg-slate-200 px-1.5 py-0.5 rounded text-slate-800">
-                        {barcodeType.toUpperCase()}
+                        {isBoxProduct ? (boxPrintUnit === 'suit' ? 'SUIT TAG' : 'BOX TAG') : 'BARCODE TAG'}
                       </span>
                     </div>
 
@@ -281,6 +296,7 @@ export default function BarcodesPage() {
               type={barcodeType}
               count={labelCount}
               initialPriceMode="with-rs"
+              targetUnit={boxPrintUnit}
               onClose={() => setIsPrintModalOpen(false)}
             />
           )}

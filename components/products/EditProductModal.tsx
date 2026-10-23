@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Badge } from '@/components/ui/Badge';
-import { Lock, Save, ChevronDown, Check } from 'lucide-react';
+import { Lock, Save, ChevronDown, Check, Package } from 'lucide-react';
 import { productsService } from '@/services/productsService';
 import { inventoryService } from '@/services/inventoryService';
 import { useAuth } from '@/context/AuthContext';
@@ -45,6 +45,16 @@ export function EditProductModal({
   const [taxRate, setTaxRate] = useState<number>(0);
   const [stock, setStock] = useState<number>(0);
   const [minStockAlert, setMinStockAlert] = useState<number>(5);
+
+  // Box specific states for wholesale & retail
+  const [wholesaleBoxes, setWholesaleBoxes] = useState<number>(0);
+  const [suitsPerBox, setSuitsPerBox] = useState<number>(16);
+  const [wholesaleMinStockAlert, setWholesaleMinStockAlert] = useState<number>(5);
+
+  const [retailBoxes, setRetailBoxes] = useState<number>(0);
+  const [retailSuitsPerBox, setRetailSuitsPerBox] = useState<number>(16);
+  const [retailMinStockAlert, setRetailMinStockAlert] = useState<number>(5);
+
   const [supplier, setSupplier] = useState('');
   const [description, setDescription] = useState('');
 
@@ -74,14 +84,27 @@ export function EditProductModal({
       setSubcategory(product.subcategory || '');
       setUnit(product.unit || 'Unstitched Box');
       setRetailPrice(product.retailPrice || 0);
-      setWholesalePrice(product.wholesalePrice || 0);
-      setKhataPrice(product.khataPrice ?? (product.wholesalePrice ? Math.round(product.wholesalePrice * 1.05) : 0));
+      const initialWholesale = product.wholesalePrice || product.khataPrice || 0;
+      const initialWholesaleDisc = product.wholesaleDiscount || product.khataDiscount || 0;
+      setWholesalePrice(initialWholesale);
+      setKhataPrice(initialWholesale);
       setRetailDiscount(product.retailDiscount || 0);
-      setWholesaleDiscount(product.wholesaleDiscount || 0);
-      setKhataDiscount(product.khataDiscount || 0);
+      setWholesaleDiscount(initialWholesaleDisc);
+      setKhataDiscount(initialWholesaleDisc);
       setTaxRate(product.taxRate || 0);
       setStock(product.stock || 0);
       setMinStockAlert(product.minStockAlert || 5);
+
+      const isBox = product.packagingConfig?.type === 'box' || (product.unit && product.unit.toLowerCase().includes('box'));
+      const defaultSpb = product.packagingConfig?.suitsPerBox || 16;
+      setWholesaleBoxes(product.packagingConfig?.wholesaleBoxes ?? (isBox ? Math.floor(product.stock / defaultSpb) : 0));
+      setSuitsPerBox(defaultSpb);
+      setWholesaleMinStockAlert(product.packagingConfig?.wholesaleMinStockAlert || product.wholesaleMinStockAlert || product.minStockAlert || 5);
+
+      setRetailBoxes(product.packagingConfig?.retailBoxes ?? 0);
+      setRetailSuitsPerBox(product.packagingConfig?.retailSuitsPerBox || defaultSpb);
+      setRetailMinStockAlert(product.packagingConfig?.retailMinStockAlert || product.retailMinStockAlert || product.minStockAlert || 5);
+
       setSupplier(product.supplier || '');
       setDescription(product.description || '');
     }, 0);
@@ -93,6 +116,7 @@ export function EditProductModal({
   const finalRetail = Math.max(0, retailPrice - retailDiscount);
   const finalWholesale = Math.max(0, wholesalePrice - wholesaleDiscount);
   const finalKhata = Math.max(0, khataPrice - khataDiscount);
+  const isBoxUnit = Boolean(unit && (unit.toLowerCase().includes('box') || unit.toLowerCase().includes('dabba')));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,18 +141,42 @@ export function EditProductModal({
       return;
     }
 
-    if (khataPrice <= 0) {
+    if (wholesalePrice <= 0 && retailPrice <= 0) {
       toast({
         title: 'Validation Error',
-        description: 'Khata Sale Price must be greater than zero.',
+        description: 'Please enter a valid price for Retail or Wholesale / Credit.',
         type: 'error',
       });
       return;
     }
 
+    const isBox = unit && (unit.toLowerCase().includes('box') || unit.toLowerCase().includes('dabba'));
     const previousStock = product.stock;
-    const newStock = Math.max(0, stock);
-    const stockDiff = newStock - previousStock;
+    const computedStock = isBox
+      ? (wholesaleBoxes * suitsPerBox) + (retailBoxes * retailSuitsPerBox)
+      : Math.max(0, stock);
+    const stockDiff = computedStock - previousStock;
+
+    const packagingConfig = isBox ? {
+      ...product.packagingConfig,
+      type: 'box' as const,
+      totalBoxes: wholesaleBoxes + retailBoxes,
+      wholesaleBoxes,
+      retailBoxes,
+      suitsPerBox,
+      retailSuitsPerBox,
+      wholesaleMinStockAlert,
+      retailMinStockAlert,
+      pricePerSuit: Math.round(wholesalePrice / suitsPerBox),
+      retailPricePerSuit: Math.round(retailPrice / retailSuitsPerBox),
+      boxRetailPrice: retailPrice,
+      boxWholesalePrice: wholesalePrice,
+    } : product.packagingConfig;
+
+    const hasRetail = isBox ? (retailBoxes > 0 || retailPrice > 0) : retailPrice > 0;
+    const hasWholesale = isBox ? (wholesaleBoxes > 0 || wholesalePrice > 0) : wholesalePrice > 0;
+    const determinedChannel: 'Retail' | 'Wholesale' | 'Both' =
+      hasRetail && hasWholesale ? 'Both' : hasWholesale ? 'Wholesale' : 'Retail';
 
     // Update product strictly keeping the same ID and barcode
     const updated = productsService.update(product.id, {
@@ -138,17 +186,21 @@ export function EditProductModal({
       seasonCategory,
       subcategory: subcategory.trim(),
       unit,
+      channel: determinedChannel,
       retailPrice: Math.max(0, retailPrice),
       wholesalePrice: Math.max(0, wholesalePrice),
-      khataPrice: Math.max(0, khataPrice),
+      khataPrice: Math.max(0, wholesalePrice),
       retailDiscount: Math.max(0, retailDiscount),
       wholesaleDiscount: Math.max(0, wholesaleDiscount),
-      khataDiscount: Math.max(0, khataDiscount),
+      khataDiscount: Math.max(0, wholesaleDiscount),
       taxRate: Math.max(0, taxRate),
-      stock: newStock,
-      minStockAlert: Math.max(1, minStockAlert),
+      stock: computedStock,
+      minStockAlert: isBox ? Math.max(1, retailMinStockAlert || wholesaleMinStockAlert || 5) : Math.max(1, minStockAlert),
+      wholesaleMinStockAlert: isBox ? wholesaleMinStockAlert : undefined,
+      retailMinStockAlert: isBox ? retailMinStockAlert : undefined,
       supplier: supplier.trim(),
       description: description.trim(),
+      packagingConfig,
       // Barcode and wholesaleBarcode remain unchanged (handled inside update)
     });
 
@@ -162,9 +214,9 @@ export function EditProductModal({
           movementType: stockDiff > 0 ? 'Restock' : 'Adjustment',
           quantityChange: stockDiff,
           previousStock,
-          newStock,
+          newStock: computedStock,
           staffName: currentStaff?.name || 'Stock Manager',
-          notes: `Stock updated via Edit Product (${previousStock} -> ${newStock})`,
+          notes: `Stock updated via Edit Product (${previousStock} -> ${computedStock})`,
         });
       }
 
@@ -329,51 +381,169 @@ export function EditProductModal({
         </div>
 
         {/* Stock & Reorder */}
-        <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
-          <div className="flex items-center justify-between">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-              Stock & Inventory Quantity
-            </h4>
-            <span className="text-[11px] text-slate-500">
-              Currently held: <strong className="text-slate-900">{product.stock}</strong> {product.unit}(s)
-            </span>
-          </div>
+        {isBoxUnit ? (
+          <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-3">
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                  <Package className="w-4 h-4 text-emerald-600" />
+                  Box Stock Management (Wholesale & Retail)
+                </h4>
+                <p className="text-[11px] text-slate-500">
+                  Update wholesale and retail boxes independently.
+                </p>
+              </div>
+              <div className="text-left sm:text-right bg-white px-3 py-1.5 rounded-lg border border-slate-200">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Total Combined Suits</span>
+                <span className="text-xs font-black text-slate-800">
+                  {(wholesaleBoxes * suitsPerBox) + (retailBoxes * retailSuitsPerBox)} Suits ({(wholesaleBoxes + retailBoxes)} Boxes)
+                </span>
+              </div>
+            </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <Input
-                label={`Available Stock Quantity (${unit}) *`}
-                type="number"
-                min="0"
-                value={stock}
-                onChange={e => setStock(parseInt(e.target.value, 10) || 0)}
-                required
-              />
-              <span className="text-[10px] text-slate-500 mt-1 block">
-                {stock <= 0 ? (
-                  <span className="text-rose-600 font-bold">Will show as Out of Stock</span>
-                ) : stock <= minStockAlert ? (
-                  <span className="text-amber-600 font-bold">Will show as Low Stock</span>
-                ) : (
-                  <span className="text-emerald-600 font-bold">Will show as In Stock</span>
-                )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Wholesale Box Stock */}
+              <div className="p-3.5 bg-blue-50/60 border border-blue-200 rounded-xl space-y-3">
+                <div className="flex items-center justify-between border-b border-blue-100 pb-2">
+                  <span className="text-xs font-bold text-blue-900 uppercase tracking-wider">Wholesale Stock</span>
+                  <span className="text-[11px] font-bold text-blue-700 bg-blue-100 px-2.5 py-0.5 rounded-full">
+                    {wholesaleBoxes * suitsPerBox} Suits ({wholesaleBoxes} Boxes)
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Available Boxes *
+                    </label>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={wholesaleBoxes}
+                      onChange={e => setWholesaleBoxes(parseInt(e.target.value, 10) || 0)}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Suits Per Box
+                    </label>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={suitsPerBox}
+                      onChange={e => setSuitsPerBox(parseInt(e.target.value, 10) || 1)}
+                      required
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Min Stock Warning Alert (Boxes)
+                  </label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={wholesaleMinStockAlert}
+                    onChange={e => setWholesaleMinStockAlert(parseInt(e.target.value, 10) || 1)}
+                  />
+                </div>
+              </div>
+
+              {/* Retail Box Stock */}
+              <div className="p-3.5 bg-emerald-50/60 border border-emerald-200 rounded-xl space-y-3">
+                <div className="flex items-center justify-between border-b border-emerald-100 pb-2">
+                  <span className="text-xs font-bold text-emerald-900 uppercase tracking-wider">Retail Stock</span>
+                  <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full">
+                    {retailBoxes * retailSuitsPerBox} Suits ({retailBoxes} Boxes)
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Available Boxes *
+                    </label>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={retailBoxes}
+                      onChange={e => setRetailBoxes(parseInt(e.target.value, 10) || 0)}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Suits Per Box
+                    </label>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={retailSuitsPerBox}
+                      onChange={e => setRetailSuitsPerBox(parseInt(e.target.value, 10) || 1)}
+                      required
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Min Stock Warning Alert (Boxes)
+                  </label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={retailMinStockAlert}
+                    onChange={e => setRetailMinStockAlert(parseInt(e.target.value, 10) || 1)}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                Stock & Inventory Quantity
+              </h4>
+              <span className="text-[11px] text-slate-500">
+                Currently held: <strong className="text-slate-900">{product.stock}</strong> {product.unit}(s)
               </span>
             </div>
 
-            <div>
-              <Input
-                label={`Minimum Stock Warning Alert (${unit})`}
-                type="number"
-                min="1"
-                value={minStockAlert}
-                onChange={e => setMinStockAlert(parseInt(e.target.value, 10) || 1)}
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <Input
+                  label={`Available Stock Quantity (${unit}) *`}
+                  type="number"
+                  min="0"
+                  value={stock}
+                  onChange={e => setStock(parseInt(e.target.value, 10) || 0)}
+                  required
+                />
+                <span className="text-[10px] text-slate-500 mt-1 block">
+                  {stock <= 0 ? (
+                    <span className="text-rose-600 font-bold">Will show as Out of Stock</span>
+                  ) : stock <= minStockAlert ? (
+                    <span className="text-amber-600 font-bold">Will show as Low Stock</span>
+                  ) : (
+                    <span className="text-emerald-600 font-bold">Will show as In Stock</span>
+                  )}
+                </span>
+              </div>
+
+              <div>
+                <Input
+                  label={`Minimum Stock Warning Alert (${unit})`}
+                  type="number"
+                  min="1"
+                  value={minStockAlert}
+                  onChange={e => setMinStockAlert(parseInt(e.target.value, 10) || 1)}
+                />
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* Pricing & Discounts (Fixed Rs amounts, No Cost Price!) */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Pricing & Discounts (Retail & Wholesale/Credit Channels) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Retail Section */}
           <div className="p-4 rounded-xl border border-blue-100 bg-blue-50/30 space-y-3">
             <div className="flex items-center justify-between">
@@ -414,10 +584,10 @@ export function EditProductModal({
           <div className="p-4 rounded-xl border border-cyan-100 bg-cyan-50/30 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-cyan-900 uppercase tracking-wider">
-                Wholesale B2B Pricing
+                Wholesale Pricing
               </span>
               <Badge variant="secondary" size="sm" className="bg-cyan-100 text-cyan-800">
-                Wholesale POS
+                Wholesale / Credit POS
               </Badge>
             </div>
 
@@ -426,7 +596,11 @@ export function EditProductModal({
               type="number"
               min="0"
               value={wholesalePrice}
-              onChange={e => setWholesalePrice(parseFloat(e.target.value) || 0)}
+              onChange={e => {
+                const val = parseFloat(e.target.value) || 0;
+                setWholesalePrice(val);
+                setKhataPrice(val);
+              }}
               required
             />
 
@@ -435,49 +609,17 @@ export function EditProductModal({
               type="number"
               min="0"
               value={wholesaleDiscount}
-              onChange={e => setWholesaleDiscount(parseFloat(e.target.value) || 0)}
+              onChange={e => {
+                const val = parseFloat(e.target.value) || 0;
+                setWholesaleDiscount(val);
+                setKhataDiscount(val);
+              }}
             />
 
             <div className="pt-2 border-t border-cyan-200/60 flex items-center justify-between text-xs">
               <span className="text-slate-600">Final Wholesale Price:</span>
               <span className="font-black text-cyan-700 font-mono text-sm">
                 Rs. {finalWholesale.toLocaleString()}
-              </span>
-            </div>
-          </div>
-
-          {/* Khata Section */}
-          <div className="p-4 rounded-xl border border-amber-200 bg-amber-50/40 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-amber-950 uppercase tracking-wider">
-                Khata Credit Pricing
-              </span>
-              <Badge variant="secondary" size="sm" className="bg-amber-100 text-amber-800">
-                Khata POS
-              </Badge>
-            </div>
-
-            <Input
-              label="Khata Sale Price (Rs.) *"
-              type="number"
-              min="0"
-              value={khataPrice}
-              onChange={e => setKhataPrice(parseFloat(e.target.value) || 0)}
-              required
-            />
-
-            <Input
-              label="Khata Sale Discount (Rs.)"
-              type="number"
-              min="0"
-              value={khataDiscount}
-              onChange={e => setKhataDiscount(parseFloat(e.target.value) || 0)}
-            />
-
-            <div className="pt-2 border-t border-amber-200/60 flex items-center justify-between text-xs">
-              <span className="text-slate-600">Final Khata Rate:</span>
-              <span className="font-black text-amber-800 font-mono text-sm">
-                Rs. {finalKhata.toLocaleString()}
               </span>
             </div>
           </div>

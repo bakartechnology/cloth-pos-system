@@ -5,19 +5,21 @@ import { AppShell } from '@/components/layout/AppShell';
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
-import { Truck, ArrowLeft, Printer } from 'lucide-react';
+import { BookOpen, ArrowLeft, Printer } from 'lucide-react';
 import Link from 'next/link';
-import { salesService } from '@/services/salesService';
-import { Bill } from '@/types';
+import { customersService } from '@/services/customersService';
+import { Customer } from '@/types';
 
 export default function WholesaleReportsPage() {
-  const [bills, setBills] = useState<Bill[]>([]);
+  const [khataCustomers, setKhataCustomers] = useState<Customer[]>([]);
 
   useEffect(() => {
-    setBills(salesService.getBillsByType('Wholesale'));
+    setKhataCustomers(customersService.getAll().filter(c => c.type === 'Khata' || c.type === 'Wholesale' || c.currentBalance > 0));
   }, []);
 
-  const totalWholesale = bills.reduce((sum, b) => sum + b.grandTotal, 0);
+  const totalOutstanding = khataCustomers.reduce((sum, c) => sum + c.currentBalance, 0);
+  const totalPurchases = khataCustomers.reduce((sum, c) => sum + c.totalPurchased, 0);
+  const totalRecovered = khataCustomers.reduce((sum, c) => sum + c.totalPaid, 0);
 
   return (
     <ProtectedRoute permission="reports_view">
@@ -32,85 +34,88 @@ export default function WholesaleReportsPage() {
               </Link>
               <div>
                 <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
-                  Wholesale & B2B Distribution Reports
+                  Wholesale Business & Receivables Report
                 </h1>
                 <p className="text-xs text-slate-500">
-                  Bulk shipments, trader orders, volume discounts, and outstation logistics.
+                  Wholesale credit risk exposure, outstanding customer balances, and historical recovery ratios.
                 </p>
               </div>
             </div>
             <Button variant="outline" size="md" onClick={() => window.print()} className="gap-2">
-              <Printer className="w-4 h-4" /> Print Wholesale Report
+              <Printer className="w-4 h-4" /> Print Aging Report
             </Button>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Card className="p-4">
               <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                Total Wholesale Orders
+                Total Outstanding Receivables
               </span>
-              <div className="text-2xl font-black text-cyan-700 mt-1">
-                Rs. {totalWholesale.toLocaleString()}
+              <div className="text-2xl font-black text-rose-600 mt-1">
+                Rs. {totalOutstanding.toLocaleString()}
               </div>
-              <div className="text-xs text-slate-500 mt-1">{bills.length} commercial tax invoices</div>
+              <div className="text-xs text-slate-500 mt-1">Due from {khataCustomers.length} active ledger clients</div>
             </Card>
 
             <Card className="p-4">
               <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                Average Wholesale Ticket
+                Total Cleared & Recovered
+              </span>
+              <div className="text-2xl font-black text-emerald-600 mt-1">
+                Rs. {totalRecovered.toLocaleString()}
+              </div>
+              <div className="text-xs text-slate-500 mt-1">
+                {Math.round((totalRecovered / (totalPurchases || 1)) * 100)}% recovery clearance rate
+              </div>
+            </Card>
+
+            <Card className="p-4">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                Lifetime Credit Granted
               </span>
               <div className="text-2xl font-black text-slate-900 mt-1">
-                Rs.{' '}
-                {bills.length > 0
-                  ? Math.round(totalWholesale / bills.length).toLocaleString()
-                  : 0}
+                Rs. {totalPurchases.toLocaleString()}
               </div>
-              <div className="text-xs text-slate-500 mt-1">Commercial order average</div>
-            </Card>
-
-            <Card className="p-4">
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                Top Dispatch Destination
-              </span>
-              <div className="text-2xl font-black text-slate-900 mt-1">Karachi & Faisalabad</div>
-              <div className="text-xs text-slate-500 mt-1">Major textile trade hubs</div>
+              <div className="text-xs text-slate-500 mt-1">Total credit turnover across ledgers</div>
             </Card>
           </div>
 
           <Card className="overflow-hidden">
             <CardHeader>
-              <CardTitle className="text-sm font-bold">Wholesale Tax Invoices</CardTitle>
+              <CardTitle className="text-sm font-bold">Client Ledger Balances & Credit Exposure</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50/75 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
-                      <th className="py-3 px-4">Invoice #</th>
-                      <th className="py-3 px-4">Date</th>
-                      <th className="py-3 px-4">Wholesale Client</th>
-                      <th className="py-3 px-4">Business Title</th>
-                      <th className="py-3 px-4">Settlement</th>
-                      <th className="py-3 px-4 text-right">Invoice Total</th>
-                      <th className="py-3 px-4">Sales Officer</th>
+                      <th className="py-3 px-4">Client Name</th>
+                      <th className="py-3 px-4">Shop / Business</th>
+                      <th className="py-3 px-4">City</th>
+                      <th className="py-3 px-4 text-right">Credit Limit</th>
+                      <th className="py-3 px-4 text-right">Lifetime Debits</th>
+                      <th className="py-3 px-4 text-right">Lifetime Credits</th>
+                      <th className="py-3 px-4 text-right">Current Balance Owed</th>
+                      <th className="py-3 px-4">Last Transaction</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {bills.map(b => (
-                      <tr key={b.id} className="hover:bg-slate-50/60 transition-colors">
-                        <td className="py-3 px-4 font-mono font-bold text-cyan-700">
-                          #{b.invoiceNumber}
+                    {khataCustomers.map(c => (
+                      <tr key={c.id} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="py-3 px-4 font-bold text-slate-900">{c.name}</td>
+                        <td className="py-3 px-4 text-slate-600">{c.businessName || '—'}</td>
+                        <td className="py-3 px-4 text-slate-500">{c.city}</td>
+                        <td className="py-3 px-4 text-right font-mono">Rs. {c.creditLimit.toLocaleString()}</td>
+                        <td className="py-3 px-4 text-right font-medium">Rs. {c.totalPurchased.toLocaleString()}</td>
+                        <td className="py-3 px-4 text-right font-medium text-emerald-700">
+                          Rs. {c.totalPaid.toLocaleString()}
                         </td>
-                        <td className="py-3 px-4 font-mono text-slate-500">
-                          {new Date(b.date).toLocaleDateString()}
+                        <td className="py-3 px-4 text-right font-black text-rose-600 text-sm">
+                          Rs. {c.currentBalance.toLocaleString()}
                         </td>
-                        <td className="py-3 px-4 font-bold text-slate-900">{b.customerName}</td>
-                        <td className="py-3 px-4 text-slate-600">{b.customerBusiness || '—'}</td>
-                        <td className="py-3 px-4 font-semibold">{b.paymentMethod}</td>
-                        <td className="py-3 px-4 text-right font-black text-slate-900">
-                          Rs. {b.grandTotal.toLocaleString()}
+                        <td className="py-3 px-4 text-slate-500 font-mono text-[11px]">
+                          {c.lastTransactionDate || '—'}
                         </td>
-                        <td className="py-3 px-4 text-slate-600">{b.staffName}</td>
                       </tr>
                     ))}
                   </tbody>

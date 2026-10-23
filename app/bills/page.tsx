@@ -37,17 +37,14 @@ export default function BillHistoryPage() {
   // Determine allowed channels for active staff
   const allowedChannels: SaleType[] = useMemo(() => {
     if (isAdmin) {
-      return ['Retail', 'Wholesale', 'Khata'];
+      return ['Retail', 'Wholesale'];
     }
     const list: SaleType[] = [];
     if (hasPermission('pos_retail') || currentStaff?.role === 'Retail Cashier') {
       list.push('Retail');
     }
-    if (hasPermission('pos_wholesale') || currentStaff?.role === 'Wholesale Cashier') {
+    if (hasPermission('pos_wholesale') || hasPermission('pos_khata') || currentStaff?.role === 'Wholesale Cashier' || currentStaff?.role === 'Khata Staff') {
       list.push('Wholesale');
-    }
-    if (hasPermission('pos_khata') || currentStaff?.role === 'Khata Staff') {
-      list.push('Khata');
     }
     if (list.length === 0) {
       list.push('Retail');
@@ -55,10 +52,10 @@ export default function BillHistoryPage() {
     return list;
   }, [isAdmin, currentStaff, hasPermission]);
 
-  // Channel tabs: Admin sees All, Retail, Wholesale, Khata. Non-admin only sees their allowed channel(s)
+  // Channel tabs: Admin sees All, Retail, Wholesale. Non-admin only sees their allowed channel(s)
   const channelOptions = useMemo(() => {
     if (isAdmin) {
-      return ['All', 'Retail', 'Wholesale', 'Khata'] as const;
+      return ['All', 'Retail', 'Wholesale'] as const;
     }
     return allowedChannels;
   }, [isAdmin, allowedChannels]);
@@ -114,7 +111,12 @@ export default function BillHistoryPage() {
       return false;
     }
 
-    const matchesType = typeFilter === 'All' ? true : b.saleType === typeFilter;
+    const matchesType =
+      typeFilter === 'All'
+        ? true
+        : typeFilter === 'Wholesale'
+        ? b.saleType === 'Wholesale' || b.saleType === 'Khata'
+        : b.saleType === typeFilter;
     if (!matchesType) return false;
 
     const q = searchQuery.toLowerCase().trim();
@@ -189,7 +191,7 @@ export default function BillHistoryPage() {
                       typeFilter === t ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    {t}
+                    {t === 'Wholesale' ? 'Wholesale POS' : t}
                   </button>
                 ))}
               </div>
@@ -260,12 +262,10 @@ export default function BillHistoryPage() {
                               variant={
                                 bill.saleType === 'Retail'
                                   ? 'default'
-                                  : bill.saleType === 'Wholesale'
-                                  ? 'cyan'
-                                  : 'warning'
+                                  : 'cyan'
                               }
                             >
-                              {bill.saleType === 'Khata' ? 'Khata Credit POS' : bill.saleType}
+                              {bill.saleType === 'Retail' ? 'Retail' : 'Wholesale POS'}
                             </Badge>
                           </td>
 

@@ -18,9 +18,29 @@ export const productsService = {
     return products.find(
       p =>
         (p.barcode || '').toLowerCase() === clean ||
+        (p.suitBarcode || '').toLowerCase() === clean ||
         (p.wholesaleBarcode || '').toLowerCase() === clean ||
         (p.sku || '').toLowerCase() === clean
     );
+  },
+
+  getBarcodeScanResult(query: string): { product: Product; scanUnit: 'Box' | 'Suit' | 'Standard' } | undefined {
+    const clean = query.trim().toLowerCase();
+    if (!clean) return undefined;
+    const products = storageService.getProducts();
+    for (const p of products) {
+      if ((p.suitBarcode || '').toLowerCase() === clean) {
+        return { product: p, scanUnit: 'Suit' };
+      }
+      if ((p.barcode || '').toLowerCase() === clean) {
+        const isBox = Boolean(p.unit && (p.unit.toLowerCase().includes('box') || p.unit.toLowerCase().includes('dabba')));
+        return { product: p, scanUnit: isBox ? 'Box' : 'Standard' };
+      }
+      if ((p.wholesaleBarcode || '').toLowerCase() === clean || (p.sku || '').toLowerCase() === clean) {
+        return { product: p, scanUnit: 'Standard' };
+      }
+    }
+    return undefined;
   },
 
   search(query: string, category?: string): Product[] {
@@ -38,6 +58,7 @@ export const productsService = {
         (p.name || '').toLowerCase().includes(clean) ||
         (p.sku || '').toLowerCase().includes(clean) ||
         (p.barcode || '').toLowerCase().includes(clean) ||
+        (p.suitBarcode || '').toLowerCase().includes(clean) ||
         (p.wholesaleBarcode || '').toLowerCase().includes(clean) ||
         (p.category || '').toLowerCase().includes(clean) ||
         (p.subcategory || '').toLowerCase().includes(clean)
@@ -67,6 +88,7 @@ export const productsService = {
     const allowedUpdates = { ...updates };
     delete allowedUpdates.id;
     delete allowedUpdates.barcode;
+    delete allowedUpdates.suitBarcode;
     delete allowedUpdates.wholesaleBarcode;
     delete allowedUpdates.createdAt;
 
@@ -75,6 +97,7 @@ export const productsService = {
       ...allowedUpdates,
       id: products[index].id,
       barcode: products[index].barcode,
+      suitBarcode: products[index].suitBarcode,
       wholesaleBarcode: products[index].wholesaleBarcode,
       updatedAt: new Date().toISOString().split('T')[0],
     };
@@ -95,9 +118,9 @@ export const productsService = {
     let count = 0;
     const updatedProducts: Product[] = [];
     const isAll = params.saleType === 'All';
-    const isKhata = isAll || params.saleType === 'Khata' || params.saleType === 'Khata Sale';
     const isRetail = isAll || params.saleType === 'Retail';
-    const isWholesale = isAll || params.saleType === 'Wholesale';
+    const isWholesale = isAll || params.saleType === 'Wholesale' || (params.saleType as string) === 'Khata' || (params.saleType as string) === 'Khata Sale';
+    const isKhata = isWholesale;
 
     const updated = products.map(p => {
       // If productId is provided, only update that product

@@ -12,6 +12,7 @@ export type UnitType =
   | '1-Piece / Kurti'
   | 'Suit Packet (Standard 4.5m / 4.0m)'
   | 'Suit (4.5m)'
+  | 'Men Suit'
   | 'Thaan (Roll: 20m - 40m)'
   | 'Thaan (Roll: 30m - 40m)'
   | 'Meter (Running Yardage)'
@@ -69,6 +70,7 @@ export interface Product {
   seasonCategory?: SeasonCategory;
   subcategory: string;
   unit: UnitType;
+  channel?: 'Retail' | 'Wholesale' | 'Both';
   retailPrice: number;
   wholesalePrice: number;
   khataPrice?: number;
@@ -79,11 +81,52 @@ export interface Product {
   khataDiscount?: number;
   stock: number;
   minStockAlert: number;
+  wholesaleMinStockAlert?: number;
+  retailMinStockAlert?: number;
   supplier: string;
   description: string;
   barcode: string;
-  wholesaleBarcode: string;
+  wholesaleBarcode?: string;
+  suitBarcode?: string;
   image?: string;
+  packagingConfig?: {
+    type?: 'box' | 'thaan' | 'suit';
+    suitsPerBox?: number;
+    totalBoxes?: number;
+    wholesaleBoxes?: number;
+    retailBoxes?: number;
+    retailSuitsPerBox?: number;
+    wholesaleMinStockAlert?: number;
+    retailMinStockAlert?: number;
+    pricePerSuit?: number;
+    retailPricePerSuit?: number;
+    boxRetailPrice?: number;
+    boxWholesalePrice?: number;
+    thaanMeasurement?: 'Meter' | 'Yard';
+    retailThaanMeasurement?: 'Meter' | 'Yard';
+    thaanType?: 'Single' | '3Thaan' | 'Sets';
+    retailThaanType?: 'Single' | '3Thaan' | 'Sets';
+    thaanLengthMode?: 'Equal' | 'Individual';
+    thaanEqualLength?: number;
+    retailThaanEqualLength?: number;
+    thaanKameezLength?: number;
+    thaanShalwarLength?: number;
+    thaanDupattaLength?: number;
+    totalLength?: number;
+    totalRolls?: number;
+    retailTotalRolls?: number;
+    perUnitRate?: number;
+    retailPerUnitRate?: number;
+    thaanRetailRollPrice?: number;
+    thaanSetsCount?: number;
+    retailThaanSetsCount?: number;
+    thaanSetType?: string;
+    retailThaanSetType?: string;
+    thaanSuitsPerSet?: number;
+    retailThaanSuitsPerSet?: number;
+    thaanSetWholesaleRate?: number;
+    thaanSetRetailRate?: number;
+  };
   createdAt: string;
   updatedAt: string;
 }
@@ -203,6 +246,7 @@ export interface CartItem {
   product: Product;
   quantity: number;
   price: number; // retailPrice or wholesalePrice depending on POS mode
+  selectedUnit?: 'Box' | 'Suit' | string; // For Box products sold as full Box or single Suit
   discountPerUnit?: number; // fixed discount in Rs per unit (catalog discount)
   discountPercent: number; // percentage discount (for retail or backwards compatibility)
   extraDiscountRupees?: number; // fixed manual extra discount in Rs. per unit
@@ -214,6 +258,7 @@ export interface BillItem {
   productName: string;
   sku: string;
   unit: UnitType;
+  selectedUnit?: 'Box' | 'Suit' | string;
   quantity: number;
   price: number;
   discountPerUnit?: number;
@@ -503,6 +548,8 @@ export interface CardTerminalConfig {
   autoPrintSlip?: boolean;
 }
 
+export type StoreBusinessMode = 'Retail' | 'Wholesale' | 'Both';
+
 export interface StoreSettings {
   storeName: string;
   storeTagline: string;
@@ -522,6 +569,7 @@ export interface StoreSettings {
   wholesaleCardTerminal?: CardTerminalConfig;
   khataCardTerminal?: CardTerminalConfig;
   defaultFabricGender?: 'Male' | 'Female' | 'Both';
+  storeBusinessMode?: StoreBusinessMode;
 }
 
 export interface WholesaleSessionDraft {

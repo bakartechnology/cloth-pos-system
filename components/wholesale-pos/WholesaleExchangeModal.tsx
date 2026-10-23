@@ -76,7 +76,8 @@ export function WholesaleExchangeModal({
     return (
       p.name.toLowerCase().includes(q) ||
       p.sku.toLowerCase().includes(q) ||
-      p.wholesaleBarcode.includes(q)
+      p.barcode.includes(q) ||
+      (p.wholesaleBarcode && p.wholesaleBarcode.includes(q))
     );
   });
 

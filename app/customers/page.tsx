@@ -98,12 +98,12 @@ export default function CustomersCRMPage() {
       city: newCity.trim(),
       type: newType,
       businessName: newBusiness.trim() || undefined,
-      creditLimit: newType === 'Khata' ? newCreditLimit : 0,
+      creditLimit: (newType === 'Khata' || (newType as string) === 'Wholesale') ? newCreditLimit : 0,
     });
 
     toast({
       title: 'Customer Registered',
-      description: `${created.name} (${created.type}) has been added to the system.`,
+      description: `${created.name} (${created.type === 'Retail' ? 'Retail' : 'Wholesale POS'}) has been added to the system.`,
       type: 'success',
     });
 
@@ -117,7 +117,12 @@ export default function CustomersCRMPage() {
   };
 
   const filteredCustomers = customers.filter(c => {
-    const matchesType = typeFilter === 'All' || c.type === typeFilter;
+    const matchesType =
+      typeFilter === 'All'
+        ? true
+        : typeFilter === 'Khata' || (typeFilter as string) === 'Wholesale'
+        ? c.type === 'Khata' || c.type === 'Wholesale'
+        : c.type === 'Retail';
     const q = searchQuery.toLowerCase().trim();
     const matchesQuery =
       !q ||
@@ -146,7 +151,7 @@ export default function CustomersCRMPage() {
                 </span>
               </div>
               <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
-                Customer Relations & Khata Accounts
+                Customer Relations & Wholesale Accounts
               </h1>
             </div>
 
@@ -172,28 +177,28 @@ export default function CustomersCRMPage() {
                 Rs. {totalOutstanding.toLocaleString()}
               </div>
               <div className="text-xs text-slate-500 mt-1">
-                Across {customers.filter(c => c.currentBalance > 0).length} active khata credit ledgers
+                Across {customers.filter(c => c.currentBalance > 0).length} active wholesale credit accounts
               </div>
             </Card>
 
             <Card className="p-4">
               <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                Wholesale Textile Hubs
+                Wholesale POS Accounts
               </span>
               <div className="text-2xl font-black text-cyan-600 mt-1">
-                {customers.filter(c => c.type === 'Wholesale').length} Clients
+                {customers.filter(c => c.type === 'Khata' || c.type === 'Wholesale').length} Accounts
               </div>
-              <div className="text-xs text-slate-500 mt-1">Karachi, Faisalabad, Peshawar & Quetta</div>
+              <div className="text-xs text-slate-500 mt-1">Wholesale traders with active ledger access</div>
             </Card>
 
             <Card className="p-4">
               <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                Khata Credit Accounts
+                Retail Walk-in Customers
               </span>
-              <div className="text-2xl font-black text-amber-600 mt-1">
-                {customers.filter(c => c.type === 'Khata').length} Accounts
+              <div className="text-2xl font-black text-emerald-600 mt-1">
+                {customers.filter(c => c.type === 'Retail').length} Customers
               </div>
-              <div className="text-xs text-slate-500 mt-1">Approved for flexible credit billing</div>
+              <div className="text-xs text-slate-500 mt-1">Counter walk-in shoppers and cash buyers</div>
             </Card>
           </div>
 
@@ -213,19 +218,39 @@ export default function CustomersCRMPage() {
 
               {/* Type Filter Buttons */}
               <div className="flex items-center gap-1.5 text-xs font-semibold">
-                {(['All', 'Khata', 'Wholesale', 'Retail'] as const).map(t => (
-                  <button
-                    key={t}
-                    onClick={() => setTypeFilter(t)}
-                    className={`px-3 py-1.5 rounded-lg transition-colors ${
-                      typeFilter === t
-                        ? 'bg-slate-900 text-white shadow-2xs font-bold'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    {t === 'All' ? 'All Accounts' : t}
-                  </button>
-                ))}
+                <button
+                  type="button"
+                  onClick={() => setTypeFilter('All')}
+                  className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                    typeFilter === 'All'
+                      ? 'bg-slate-900 text-white shadow-2xs font-bold'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  All Accounts
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTypeFilter('Wholesale')}
+                  className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                    typeFilter === 'Khata' || (typeFilter as string) === 'Wholesale'
+                      ? 'bg-cyan-700 text-white shadow-2xs font-bold'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  Wholesale POS
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTypeFilter('Retail')}
+                  className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                    typeFilter === 'Retail'
+                      ? 'bg-slate-900 text-white shadow-2xs font-bold'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  Retail
+                </button>
               </div>
             </div>
           </Card>
@@ -304,10 +329,10 @@ export default function CustomersCRMPage() {
                               <Badge
                                 size="sm"
                                 variant={
-                                  c.type === 'Khata' ? 'warning' : c.type === 'Wholesale' ? 'cyan' : 'secondary'
+                                  c.type === 'Khata' || c.type === 'Wholesale' ? 'cyan' : 'secondary'
                                 }
                               >
-                                {c.type}
+                                {c.type === 'Khata' || c.type === 'Wholesale' ? 'Wholesale POS' : 'Retail'}
                               </Badge>
                             </td>
 
@@ -334,10 +359,10 @@ export default function CustomersCRMPage() {
                             </td>
 
                             <td className="py-3 px-4 text-right">
-                              {c.type === 'Khata' ? (
+                              {c.type === 'Khata' || c.type === 'Wholesale' || c.creditLimit > 0 ? (
                                 <Link href={`/customers/khata?id=${c.id}`} prefetch={false}>
                                   <Button size="sm" variant="outline" className="gap-1 text-[11px] h-7">
-                                    <BookOpen className="w-3 h-3" /> Ledger
+                                    <BookOpen className="w-3 h-3" /> Wholesale Ledger
                                   </Button>
                                 </Link>
                               ) : (
@@ -360,7 +385,7 @@ export default function CustomersCRMPage() {
           isOpen={isAddModalOpen}
           onClose={() => setIsAddModalOpen(false)}
           title="Register New Customer"
-          description="Create a client record for Retail walk-ins, Wholesale traders, or Khata credit accounts."
+          description="Create a client record for Retail walk-ins or Wholesale POS credit accounts."
           maxWidth="lg"
         >
           <form onSubmit={handleAddCustomer} className="space-y-4 text-xs">
@@ -400,8 +425,7 @@ export default function CustomersCRMPage() {
                   onChange={e => setNewType(e.target.value as CustomerType)}
                 >
                   <option value="Retail">Retail Customer (Cash / Walk-in)</option>
-                  <option value="Wholesale">Wholesale Trader (Commercial B2B)</option>
-                  <option value="Khata">Khata Customer (Ledger Credit Account)</option>
+                  <option value="Wholesale">Wholesale POS Customer (B2B Credit Ledger)</option>
                 </Select>
               </div>
 
@@ -414,10 +438,10 @@ export default function CustomersCRMPage() {
                 />
               </div>
 
-              {newType === 'Khata' && (
+              {(newType === 'Khata' || (newType as string) === 'Wholesale') && (
                 <div className="sm:col-span-2">
                   <Input
-                    label="Approved Khata Credit Ceiling (Rs.) *"
+                    label="Approved Wholesale Credit Ceiling (Rs.) *"
                     type="number"
                     min="10000"
                     step="10000"

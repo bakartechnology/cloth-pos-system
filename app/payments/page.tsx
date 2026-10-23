@@ -48,8 +48,8 @@ export default function PaymentCollectionPage() {
   const [receiptRecord, setReceiptRecord] = useState<PaymentCollectionRecord | null>(null);
 
   useEffect(() => {
-    setCollections(paymentsService.getCollectionsByType('Khata'));
-    const clients = customersService.getAll().filter(c => c.type === 'Khata' || c.currentBalance > 0);
+    setCollections(paymentsService.getAllCollections());
+    const clients = customersService.getAll().filter(c => c.type === 'Khata' || c.type === 'Wholesale' || c.currentBalance > 0);
     setKhataCustomers(clients);
     if (clients.length > 0) {
       setSelectedCustomerId(clients[0].id);
@@ -176,8 +176,8 @@ export default function PaymentCollectionPage() {
       setCashAmount(0);
       setCheques([]);
       setNotes('');
-      setCollections(paymentsService.getCollectionsByType('Khata'));
-      setKhataCustomers(customersService.getAll().filter(c => c.type === 'Khata' || c.currentBalance > 0));
+      setCollections(paymentsService.getAllCollections());
+      setKhataCustomers(customersService.getAll().filter(c => c.type === 'Khata' || c.type === 'Wholesale' || c.currentBalance > 0));
     }
   };
 
@@ -207,15 +207,15 @@ export default function PaymentCollectionPage() {
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <span className="p-1 rounded bg-emerald-50 text-emerald-700 font-mono text-[10px] font-bold uppercase">
-                  Field Finance
+                  Receivables Management
                 </span>
-                <span className="text-xs text-slate-500 font-medium">Outstation Client Recovery</span>
+                <span className="text-xs text-slate-500 font-medium">Outstation & Market Client Recovery</span>
               </div>
               <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
-                Payment Collection & Field Recovery
+                Wholesale Recovery
               </h1>
               <p className="text-xs text-slate-500">
-                Authorized field recovery desk for recording outstation client payments and auto-reducing Khata balances.
+                Authorized recovery desk for recording client collections and auto-reducing Wholesale POS balances.
               </p>
             </div>
 

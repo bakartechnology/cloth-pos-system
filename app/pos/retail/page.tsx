@@ -11,6 +11,7 @@ import {
   Barcode as BarcodeIcon,
   Trash2,
   Plus,
+  Minus,
   CreditCard,
   Banknote,
   User,
@@ -56,6 +57,8 @@ export default function RetailPOSPage() {
   const {
     retailCart,
     addToRetailCart,
+    toggleRetailCartItemUnit,
+    setRetailCartItemUnit,
     removeFromRetailCart,
     updateRetailQuantity,
     updateRetailDiscount,
@@ -195,11 +198,11 @@ export default function RetailPOSPage() {
     const settings = storageService.getSettings();
     setIsCardTerminalEnabled(Boolean(settings.retailCardTerminal?.enabled));
     const banks = (settings.bankAccounts || []).filter(
-      b => b.isActive !== false && (!b.channels || b.channels.length === 0 || b.channels.includes('Retail'))
+      (b: BankAccount) => b.isActive !== false && (!b.channels || b.channels.length === 0 || b.channels.includes('Retail'))
     );
     setBankAccounts(banks);
     if (banks.length > 0) {
-      setSelectedBank(prev => (prev && banks.some(b => b.id === prev.id)) ? prev : banks[0]);
+      setSelectedBank(prev => (prev && banks.some((b: BankAccount) => b.id === prev.id)) ? prev : banks[0]);
     } else {
       setSelectedBank(null);
     }
@@ -273,7 +276,15 @@ export default function RetailPOSPage() {
 
   // Filter Real Products
   const filteredProducts = useMemo(() => {
-    let list = [...products];
+    // Only display products intended for Retail POS (skip Wholesale-only items)
+    let list = products.filter(p => {
+      if (p.channel === 'Wholesale') return false;
+      if (p.channel === 'Retail' || p.channel === 'Both') return true;
+      if (p.packagingConfig?.type === 'box') {
+        return (p.packagingConfig.retailBoxes ?? 0) > 0 || (p.retailPrice > 0 && (p.packagingConfig.wholesaleBoxes ?? 0) === 0);
+      }
+      return p.retailPrice > 0;
+    });
 
     if (selectedCategory !== 'All') {
       list = list.filter(p => p.category.toLowerCase() === selectedCategory.toLowerCase());
@@ -319,9 +330,21 @@ export default function RetailPOSPage() {
     const query = barcodeInput.trim();
     if (!query) return;
 
-    const matched = productsService.getByBarcodeOrSku(query);
+    const scanResult = productsService.getBarcodeScanResult(query);
 
-    if (matched) {
+    if (scanResult) {
+      const { product: matched, scanUnit } = scanResult;
+
+      if (matched.channel === 'Wholesale') {
+        barcodeScannerService.playErrorBeep();
+        toast({
+          title: 'Wholesale Only Product',
+          description: `"${matched.name}" is designated for Wholesale POS only and cannot be sold in Retail POS.`,
+          type: 'error',
+        });
+        return;
+      }
+
       if (matched.stock <= 0) {
         barcodeScannerService.playErrorBeep();
         toast({
@@ -330,8 +353,20 @@ export default function RetailPOSPage() {
           type: 'error',
         });
       } else {
-        addToRetailCart(matched, 1);
+        const prefUnit = scanUnit === 'Suit' ? 'Suit' : scanUnit === 'Box' ? 'Box' : undefined;
+        addToRetailCart(matched, 1, prefUnit);
         barcodeScannerService.playSuccessBeep();
+
+        const unitLabel = prefUnit === 'Suit' ? '1 Loose Suit' : prefUnit === 'Box' ? '1 Full Box' : '1 Item';
+        const priceLabel = prefUnit === 'Suit'
+          ? `Rs. ${(matched.packagingConfig?.retailPricePerSuit || matched.retailPrice).toLocaleString()}`
+          : `Rs. ${matched.retailPrice.toLocaleString()}`;
+
+        toast({
+          title: `${unitLabel} Scanned`,
+          description: `${matched.name} (${priceLabel}) added to invoice.`,
+          type: 'success',
+        });
       }
       setBarcodeInput('');
     } else {
@@ -869,7 +904,11 @@ export default function RetailPOSPage() {
               {/* Row 5: Real Products Grid (Cards using actual user suit/cloth data) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
                 {displayedProducts.map(prod => {
-                  const isOutOfStock = prod.stock <= 0;
+                  const isBoxProduct = prod.packagingConfig?.type === 'box';
+                  const retailAvailableStock = isBoxProduct && prod.packagingConfig?.retailBoxes !== undefined
+                    ? prod.packagingConfig.retailBoxes * (prod.packagingConfig.retailSuitsPerBox || prod.packagingConfig.suitsPerBox || 1)
+                    : prod.stock;
+                  const isOutOfStock = retailAvailableStock <= 0;
                   const seasonTag = prod.seasonCategory
                     ? `${prod.seasonCategory} '26`
                     : prod.subcategory || 'Standard';
@@ -895,7 +934,7 @@ export default function RetailPOSPage() {
                                 isOutOfStock ? 'bg-rose-500' : 'bg-[#16835B]'
                               }`}
                             />
-                            {prod.stock > 0 ? `${prod.stock} available` : 'Out of stock'}
+                            {retailAvailableStock > 0 ? `${retailAvailableStock} available` : 'Out of stock'}
                           </span>
                         </div>
 
@@ -916,16 +955,28 @@ export default function RetailPOSPage() {
                       </div>
 
                       {/* Bottom Price & Add Button */}
-                      <div className="flex items-center justify-between mt-4 pt-3 border-t border-[#DCE3E0]/60">
-                        <div className="text-base font-bold text-[#17211D]">
-                          Rs {prod.retailPrice.toLocaleString()}
-                        </div>
+                      <div className="flex items-center justify-between mt-4 pt-3 border-t border-[#DCE3E0]/60 gap-2">
+                        {isBoxProduct ? (
+                          <div className="min-w-0">
+                            <div className="text-sm font-bold text-[#17211D] leading-tight">
+                              Rs {(prod.packagingConfig?.retailPricePerSuit || Math.round(prod.retailPrice / (prod.packagingConfig?.suitsPerBox || 1))).toLocaleString()}
+                              <span className="text-[10px] font-normal text-[#66726D]"> / suit</span>
+                            </div>
+                            <div className="text-[11px] font-semibold text-[#125E45] mt-0.5">
+                              Rs {prod.retailPrice.toLocaleString()} / box
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-base font-bold text-[#17211D]">
+                            Rs {prod.retailPrice.toLocaleString()}
+                          </div>
+                        )}
 
                         <button
                           type="button"
-                          onClick={() => !isOutOfStock && addToRetailCart(prod, 1)}
+                          onClick={() => !isOutOfStock && addToRetailCart(prod, 1, 'Suit')}
                           disabled={isOutOfStock}
-                          className="w-8 h-8 rounded-lg bg-[#125E45] hover:bg-[#197A5A] disabled:bg-slate-300 text-white flex items-center justify-center font-bold text-lg transition-colors shadow-2xs cursor-pointer active:scale-95 disabled:cursor-not-allowed"
+                          className="w-8 h-8 rounded-lg bg-[#125E45] hover:bg-[#197A5A] disabled:bg-slate-300 text-white flex items-center justify-center font-bold text-lg transition-colors shadow-2xs cursor-pointer active:scale-95 disabled:cursor-not-allowed shrink-0"
                           title={`Add ${prod.name} to cart`}
                         >
                           <Plus className="w-4 h-4" />
@@ -1055,7 +1106,7 @@ export default function RetailPOSPage() {
                   ) : (
                     retailCart.map(item => (
                       <div
-                        key={item.product.id}
+                        key={`${item.product.id}-${item.selectedUnit || ''}`}
                         className="space-y-1.5 pb-3 border-b border-[#DCE3E0]/60 last:border-b-0"
                       >
                         {/* Line 1: Title + Red Trash Button */}
@@ -1076,38 +1127,83 @@ export default function RetailPOSPage() {
                         {/* Line 2: Spec / SKU & Unit Rate */}
                         <div className="flex items-center justify-between text-[11px] text-[#66726D]">
                           <span>
-                            {item.product.sku} · {item.quantity} {item.product.unit}
+                            {item.product.sku} · {item.quantity} {item.selectedUnit || item.product.unit}
                           </span>
                           <span className="text-[#8A9590] text-[10px]">
-                            Rs {item.price.toLocaleString()}
+                            Rs {item.price.toLocaleString()} / {item.selectedUnit ? item.selectedUnit.toLowerCase() : 'unit'}
                           </span>
                         </div>
 
-                        {/* Line 3: Quantity Controls + Rs Discount Input + Line Total */}
+                        {/* Line 3: Minimal Quantity, Discount, Unit Controls + Line Total */}
                         <div className="flex items-center justify-between pt-1 gap-2">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <div className="border border-[#DCE3E0] rounded-lg flex items-center gap-2 px-2.5 h-7 text-xs text-[#17211D] bg-white shadow-2xs">
+                          <div className="flex items-center gap-1.5">
+                            {/* Perfectly Centered Minimal Quantity Stepper */}
+                            <div className="border border-[#DCE3E0] rounded-md flex items-center bg-white h-6 overflow-hidden">
                               <button
                                 type="button"
-                                onClick={() => updateRetailQuantity(item.product.id, item.quantity - 1)}
-                                className="text-[#66726D] hover:text-[#17211D] font-bold text-sm cursor-pointer px-0.5"
+                                onClick={() => updateRetailQuantity(item.product.id, Math.max(0.5, item.quantity - 1))}
+                                className="w-5.5 h-full flex items-center justify-center text-[#8A9590] hover:text-[#17211D] hover:bg-[#F0F4F2] cursor-pointer transition-colors shrink-0"
+                                title="Decrease quantity"
                               >
-                                −
+                                <Minus className="w-3 h-3" />
                               </button>
-                              <span className="font-bold min-w-[14px] text-center font-mono">
-                                {item.quantity}
-                              </span>
+                              <input
+                                type="number"
+                                step="any"
+                                min="0.1"
+                                value={item.quantity}
+                                onChange={e => {
+                                  const val = parseFloat(e.target.value);
+                                  if (!isNaN(val) && val > 0) {
+                                    updateRetailQuantity(item.product.id, val);
+                                  }
+                                }}
+                                className="w-8 text-center font-mono font-bold text-xs bg-transparent border-0 focus:outline-none p-0 m-0 text-[#17211D] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                title="Quantity / Length"
+                              />
                               <button
                                 type="button"
                                 onClick={() => updateRetailQuantity(item.product.id, item.quantity + 1)}
-                                className="text-[#66726D] hover:text-[#17211D] font-bold text-sm cursor-pointer px-0.5"
+                                className="w-5.5 h-full flex items-center justify-center text-[#8A9590] hover:text-[#17211D] hover:bg-[#F0F4F2] cursor-pointer transition-colors shrink-0"
+                                title="Increase quantity"
                               >
-                                +
+                                <Plus className="w-3 h-3" />
                               </button>
                             </div>
 
-                            <div className="border border-[#DCE3E0] rounded-lg flex items-center overflow-hidden bg-white h-7 focus-within:border-[#197A5A] focus-within:ring-1 focus-within:ring-[#197A5A]/30 transition-all shadow-2xs" title="Discount in Rupees per unit">
-                              <span className="bg-[#F0F4F2] text-[#66726D] text-[10px] font-bold px-2 h-full flex items-center border-r border-[#DCE3E0] select-none tracking-tight">
+                            {/* Minimal Unit Selector (BEFORE Discount) */}
+                            {(item.product.packagingConfig?.type === 'thaan' || item.product.packagingConfig?.type === 'box') && (
+                              <div className="border border-[#DCE3E0] rounded-md flex items-center bg-white h-6 px-1.5 text-xs focus-within:border-[#197A5A] transition-colors" title="Select Selling Unit">
+                                <select
+                                  value={
+                                    item.selectedUnit ||
+                                    (item.product.packagingConfig?.type === 'box'
+                                      ? 'Suit'
+                                      : item.product.packagingConfig?.retailThaanMeasurement || item.product.packagingConfig?.thaanMeasurement || 'Meter')
+                                  }
+                                  onChange={e => setRetailCartItemUnit(item.product.id, e.target.value)}
+                                  className="text-xs font-bold text-[#17211D] bg-transparent border-0 focus:outline-none cursor-pointer py-0 pr-0.5"
+                                >
+                                  {item.product.packagingConfig?.type === 'box' ? (
+                                    <>
+                                      <option value="Suit">Suit</option>
+                                      <option value="Box">Box</option>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <option value={item.product.packagingConfig?.retailThaanMeasurement || item.product.packagingConfig?.thaanMeasurement || 'Meter'}>
+                                        {item.product.packagingConfig?.retailThaanMeasurement || item.product.packagingConfig?.thaanMeasurement || 'Meter'}
+                                      </option>
+                                      <option value="Roll">Roll</option>
+                                    </>
+                                  )}
+                                </select>
+                              </div>
+                            )}
+
+                            {/* Minimal Discount Input */}
+                            <div className="border border-[#DCE3E0] rounded-md flex items-center bg-white h-6 px-1.5 text-xs focus-within:border-[#197A5A] transition-colors" title="Discount in Rs">
+                              <span className="text-[10px] text-[#8A9590] select-none font-medium mr-1">
                                 Disc Rs
                               </span>
                               <input
@@ -1119,12 +1215,12 @@ export default function RetailPOSPage() {
                                   const val = parseFloat(e.target.value) || 0;
                                   updateRetailExtraDiscount(item.product.id, val);
                                 }}
-                                className="w-14 px-2 text-xs font-bold font-mono text-center text-[#16835B] bg-transparent focus:outline-none placeholder:text-[#8A9590] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                className="w-8 text-center text-xs font-bold font-mono text-[#16835B] bg-transparent focus:outline-none placeholder:text-[#8A9590] p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                               />
                             </div>
                           </div>
 
-                          <div className="font-bold text-sm text-[#17211D] shrink-0">
+                          <div className="font-bold text-xs text-[#17211D] shrink-0 font-mono">
                             Rs {item.lineTotal.toLocaleString()}
                           </div>
                         </div>

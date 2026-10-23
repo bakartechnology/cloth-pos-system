@@ -48,10 +48,7 @@ export default function AddStaffPage() {
       setCounter('Counter 01 (Retail)');
     } else if (newRole === 'Wholesale Cashier') {
       setSelectedPermissions(['pos_wholesale', 'bills_view', 'customers_view']);
-      setCounter('Counter 02 (Wholesale)');
-    } else if (newRole === 'Khata Staff') {
-      setSelectedPermissions(['pos_khata', 'customers_view', 'bills_view']);
-      setCounter('Accounts Desk');
+      setCounter('Counter 02 (Wholesale POS)');
     } else if (newRole === 'Stock Manager') {
       setSelectedPermissions(['stock_view', 'stock_add', 'barcode_view']);
       setCounter('Warehouse Terminal');
@@ -183,7 +180,6 @@ export default function AddStaffPage() {
                     >
                       <option value="Retail Cashier">Retail Cashier</option>
                       <option value="Wholesale Cashier">Wholesale Cashier</option>
-                      <option value="Khata Staff">Khata Staff</option>
                       <option value="Stock Manager">Stock Manager</option>
                       <option value="Payment Collection Staff">Payment Collection Staff</option>
                       <option value="Admin">Admin (Universal Access)</option>

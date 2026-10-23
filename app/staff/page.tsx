@@ -281,7 +281,6 @@ export default function StaffPage() {
                     >
                       <option value="Retail Cashier">Retail Cashier</option>
                       <option value="Wholesale Cashier">Wholesale Cashier</option>
-                      <option value="Khata Staff">Khata Staff</option>
                       <option value="Stock Manager">Stock Manager</option>
                       <option value="Payment Collection Staff">Payment Collection Staff</option>
                       <option value="Admin">Admin</option>

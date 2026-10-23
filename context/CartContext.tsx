@@ -8,7 +8,9 @@ import { useToast } from './ToastContext';
 interface CartContextType {
   // Retail
   retailCart: CartItem[];
-  addToRetailCart: (product: Product, quantity?: number) => void;
+  addToRetailCart: (product: Product, quantity?: number, preferredUnit?: 'Box' | 'Suit') => void;
+  toggleRetailCartItemUnit: (productId: string) => void;
+  setRetailCartItemUnit: (productId: string, unit: 'Box' | 'Suit' | string) => void;
   removeFromRetailCart: (productId: string) => void;
   updateRetailQuantity: (productId: string, quantity: number) => void;
   updateRetailDiscount: (productId: string, discountPercent: number) => void;
@@ -71,31 +73,99 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     return Math.max(0, Math.round(baseTotal - manualDiscount));
   };
 
+  // Helper to resolve unit price for Box vs Suit or Thaan Roll vs Meter/Yard
+  const getProductRetailUnitPrice = (product: Product, unitType?: 'Box' | 'Suit' | string) => {
+    const isBox = product.packagingConfig?.type === 'box';
+    const isThaan = product.packagingConfig?.type === 'thaan';
+
+    if (isBox) {
+      if (unitType === 'Suit') {
+        return (
+          product.packagingConfig?.retailPricePerSuit ||
+          product.packagingConfig?.pricePerSuit ||
+          (product.packagingConfig?.suitsPerBox
+            ? Math.round(product.retailPrice / product.packagingConfig.suitsPerBox)
+            : product.retailPrice)
+        );
+      }
+      // Default or Box
+      return product.packagingConfig?.boxRetailPrice || product.retailPrice;
+    }
+
+    if (isThaan) {
+      const isRoll = unitType === 'Roll' || unitType === 'Box' || unitType === 'Thaan';
+      if (isRoll) {
+        return (
+          product.packagingConfig?.thaanRetailRollPrice ||
+          ((product.packagingConfig?.retailPerUnitRate || product.packagingConfig?.perUnitRate) && (product.packagingConfig?.retailThaanEqualLength || product.packagingConfig?.totalLength)
+            ? Math.round((product.packagingConfig?.retailPerUnitRate || product.packagingConfig?.perUnitRate || 0) * (product.packagingConfig?.retailThaanEqualLength || product.packagingConfig?.totalLength || 1))
+            : product.retailPrice)
+        );
+      }
+      // Meter or Yard (per unit loose rate)
+      return product.packagingConfig?.retailPerUnitRate || product.packagingConfig?.perUnitRate || product.retailPrice;
+    }
+
+    return product.retailPrice;
+  };
+
   // ---------------- Retail Cart Operations ----------------
-  const addToRetailCart = (product: Product, quantity = 1) => {
+  const addToRetailCart = (product: Product, quantity = 1, preferredUnit?: 'Box' | 'Suit' | string) => {
     // Always fetch latest product record to avoid stale price or discount
     const freshProduct = productsService.getById(product.id) || product;
 
-    if (freshProduct.stock <= 0) {
+    const isBox = freshProduct.packagingConfig?.type === 'box';
+    const isThaan = freshProduct.packagingConfig?.type === 'thaan';
+    const suitsPerBox = freshProduct.packagingConfig?.suitsPerBox || 1;
+    const rollLength = freshProduct.packagingConfig?.retailThaanEqualLength || freshProduct.packagingConfig?.totalLength || freshProduct.packagingConfig?.thaanEqualLength || 1;
+
+    const retailStockLimit = isBox && freshProduct.packagingConfig?.retailBoxes !== undefined
+      ? freshProduct.packagingConfig.retailBoxes * (freshProduct.packagingConfig.retailSuitsPerBox || suitsPerBox)
+      : freshProduct.stock;
+
+    if (retailStockLimit <= 0) {
       toast({
         title: 'Out of Stock',
-        description: `${freshProduct.name} is currently out of stock!`,
+        description: `${freshProduct.name} is currently out of retail stock!`,
         type: 'error',
       });
       return;
     }
 
+    const defaultUnit: string = isBox
+      ? 'Suit'
+      : isThaan
+      ? (freshProduct.packagingConfig?.retailThaanMeasurement || freshProduct.packagingConfig?.thaanMeasurement || 'Meter')
+      : (freshProduct.unit || 'Standard');
+
+    const selectedUnit: 'Box' | 'Suit' | string = preferredUnit || defaultUnit;
+    const effectivePrice = getProductRetailUnitPrice(freshProduct, selectedUnit);
     const unitDiscount = freshProduct.retailDiscount || 0;
-    const existingIndex = retailCart.findIndex(item => item.product.id === freshProduct.id);
+
+    // Match by ID AND selectedUnit so different units (e.g. loose meter vs whole roll) remain separate or match appropriately
+    const existingIndex = retailCart.findIndex(
+      item => item.product.id === freshProduct.id && ((!isBox && !isThaan) || item.selectedUnit === selectedUnit)
+    );
+
+    const itemsNeeded = selectedUnit === 'Box' && isBox
+      ? quantity * suitsPerBox
+      : (selectedUnit === 'Roll' || selectedUnit === 'Box') && isThaan
+      ? quantity * rollLength
+      : quantity;
 
     if (existingIndex !== -1) {
       const existing = retailCart[existingIndex];
       const newQty = existing.quantity + quantity;
+      const totalNeeded = selectedUnit === 'Box' && isBox
+        ? newQty * suitsPerBox
+        : (selectedUnit === 'Roll' || selectedUnit === 'Box') && isThaan
+        ? newQty * rollLength
+        : newQty;
 
-      if (newQty > freshProduct.stock) {
+      if (totalNeeded > retailStockLimit) {
         toast({
           title: 'Stock Limit Reached',
-          description: `Only ${freshProduct.stock} ${freshProduct.unit}(s) available in stock.`,
+          description: `Only ${retailStockLimit} unit(s) available in stock.`,
           type: 'warning',
         });
         return;
@@ -103,16 +173,19 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
       setRetailCart(prev => {
         const updated = [...prev];
-        const idx = updated.findIndex(item => item.product.id === freshProduct.id);
+        const idx = updated.findIndex(
+          item => item.product.id === freshProduct.id && ((!isBox && !isThaan) || item.selectedUnit === selectedUnit)
+        );
         if (idx !== -1) {
           updated[idx] = {
             ...updated[idx],
             product: freshProduct,
-            price: freshProduct.retailPrice,
+            price: effectivePrice,
+            selectedUnit,
             discountPerUnit: unitDiscount,
             quantity: newQty,
             lineTotal: computeLineTotal(
-              freshProduct.retailPrice,
+              effectivePrice,
               unitDiscount,
               newQty,
               updated[idx].discountPercent,
@@ -123,17 +196,75 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         return updated;
       });
     } else {
+      if (itemsNeeded > retailStockLimit) {
+        toast({
+          title: 'Stock Limit Reached',
+          description: `Only ${retailStockLimit} unit(s) available in stock.`,
+          type: 'warning',
+        });
+        return;
+      }
+
       const item: CartItem = {
         product: freshProduct,
         quantity,
-        price: freshProduct.retailPrice,
+        price: effectivePrice,
+        selectedUnit,
         discountPerUnit: unitDiscount,
         discountPercent: 0,
         extraDiscountRupees: 0,
-        lineTotal: computeLineTotal(freshProduct.retailPrice, unitDiscount, quantity, 0, 0),
+        lineTotal: computeLineTotal(effectivePrice, unitDiscount, quantity, 0, 0),
       };
       setRetailCart(prev => [...prev, item]);
     }
+  };
+
+  const setRetailCartItemUnit = (productId: string, newUnit: 'Box' | 'Suit' | string) => {
+    setRetailCart(prev =>
+      prev.map(item => {
+        if (item.product.id === productId) {
+          if (item.selectedUnit === newUnit) return item;
+          const newPrice = getProductRetailUnitPrice(item.product, newUnit);
+          return {
+            ...item,
+            selectedUnit: newUnit,
+            price: newPrice,
+            lineTotal: computeLineTotal(
+              newPrice,
+              item.discountPerUnit || 0,
+              item.quantity,
+              item.discountPercent || 0,
+              item.extraDiscountRupees || 0
+            ),
+          };
+        }
+        return item;
+      })
+    );
+  };
+
+  const toggleRetailCartItemUnit = (productId: string) => {
+    setRetailCart(prev =>
+      prev.map(item => {
+        if (item.product.id === productId && item.product.packagingConfig?.type === 'box') {
+          const newUnit: 'Box' | 'Suit' = item.selectedUnit === 'Box' ? 'Suit' : 'Box';
+          const newPrice = getProductRetailUnitPrice(item.product, newUnit);
+          return {
+            ...item,
+            selectedUnit: newUnit,
+            price: newPrice,
+            lineTotal: computeLineTotal(
+              newPrice,
+              item.discountPerUnit || 0,
+              item.quantity,
+              item.discountPercent || 0,
+              item.extraDiscountRupees || 0
+            ),
+          };
+        }
+        return item;
+      })
+    );
   };
 
   const removeFromRetailCart = (productId: string) => {
@@ -150,10 +281,14 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     const fresh = productsService.getById(productId) || item?.product;
     const currentStock = fresh?.stock ?? item?.product.stock ?? 9999;
 
-    if (item && quantity > currentStock) {
+    const isBox = item?.product.packagingConfig?.type === 'box';
+    const suitsPerBox = item?.product.packagingConfig?.suitsPerBox || 1;
+    const suitsNeeded = (isBox && item?.selectedUnit === 'Box') ? quantity * suitsPerBox : quantity;
+
+    if (item && suitsNeeded > currentStock) {
       toast({
         title: 'Stock Warning',
-        description: `Requested ${quantity}, but only ${currentStock} available.`,
+        description: `Requested ${quantity} ${item.selectedUnit || 'unit(s)'} (${suitsNeeded} suits), but only ${currentStock} suits available in stock.`,
         type: 'warning',
       });
       return;
@@ -163,7 +298,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       prev.map(item => {
         if (item.product.id === productId) {
           const freshProd = productsService.getById(productId) || item.product;
-          const freshPrice = freshProd.retailPrice;
+          const freshPrice = getProductRetailUnitPrice(freshProd, item.selectedUnit);
           const freshDiscount = freshProd.retailDiscount || 0;
           return {
             ...item,
@@ -439,40 +574,46 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setWholesaleCart(refreshed);
   };
 
-  // ---------------- Khata Cart Operations ----------------
+  // ---------------- Khata / Wholesale Cart Operations ----------------
   const addToKhataCart = (product: Product, quantity = 1) => {
     const freshProduct = productsService.getById(product.id) || product;
+    const resolvedPrice = freshProduct.wholesalePrice || freshProduct.khataPrice || 0;
 
-    // Strict validation: Must have a valid non-zero Khata Sale Price
-    if (freshProduct.khataPrice === undefined || freshProduct.khataPrice === null || freshProduct.khataPrice <= 0) {
+    // Strict validation: Must have a valid non-zero Wholesale Price
+    if (resolvedPrice <= 0) {
       toast({
-        title: 'Khata Sale Price Missing',
-        description: `Cannot add "${freshProduct.name}" to Khata bill. Khata Sale Price is not set. Please configure a Khata price in product catalog.`,
+        title: 'Wholesale Price Missing',
+        description: `Cannot add "${freshProduct.name}" to invoice. Wholesale Price is not set. Please configure price in product catalog.`,
         type: 'error',
       });
       return;
     }
 
-    if (freshProduct.stock <= 0) {
+    const isBox = freshProduct.packagingConfig?.type === 'box';
+    const wholesaleStockLimit = isBox && freshProduct.packagingConfig?.wholesaleBoxes !== undefined
+      ? freshProduct.packagingConfig.wholesaleBoxes * (freshProduct.packagingConfig.suitsPerBox || 1)
+      : freshProduct.stock;
+
+    if (wholesaleStockLimit <= 0) {
       toast({
         title: 'Out of Stock',
-        description: `${freshProduct.name} is currently out of stock.`,
+        description: `${freshProduct.name} is currently out of wholesale stock.`,
         type: 'error',
       });
       return;
     }
 
-    const unitDiscount = freshProduct.khataDiscount || 0;
+    const unitDiscount = freshProduct.wholesaleDiscount || freshProduct.khataDiscount || 0;
     const existingIndex = khataCart.findIndex(item => item.product.id === freshProduct.id);
 
     if (existingIndex !== -1) {
       const existing = khataCart[existingIndex];
       const newQty = existing.quantity + quantity;
 
-      if (newQty > freshProduct.stock) {
+      if (newQty > wholesaleStockLimit) {
         toast({
           title: 'Stock Limit Reached',
-          description: `Only ${freshProduct.stock} ${freshProduct.unit}(s) available in stock.`,
+          description: `Only ${wholesaleStockLimit} ${freshProduct.unit}(s) available in wholesale stock.`,
           type: 'warning',
         });
         return;
@@ -485,11 +626,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           updated[idx] = {
             ...updated[idx],
             product: freshProduct,
-            price: freshProduct.khataPrice!,
+            price: resolvedPrice,
             discountPerUnit: unitDiscount,
             quantity: newQty,
             lineTotal: computeLineTotal(
-              freshProduct.khataPrice!,
+              resolvedPrice,
               unitDiscount,
               newQty,
               updated[idx].discountPercent,
@@ -503,11 +644,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       const item: CartItem = {
         product: freshProduct,
         quantity,
-        price: freshProduct.khataPrice!,
+        price: resolvedPrice,
         discountPerUnit: unitDiscount,
         discountPercent: 0,
         extraDiscountRupees: 0,
-        lineTotal: computeLineTotal(freshProduct.khataPrice!, unitDiscount, quantity, 0, 0),
+        lineTotal: computeLineTotal(resolvedPrice, unitDiscount, quantity, 0, 0),
       };
       setKhataCart(prev => [...prev, item]);
     }
@@ -717,6 +858,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       value={{
         retailCart,
         addToRetailCart,
+        toggleRetailCartItemUnit,
+        setRetailCartItemUnit,
         removeFromRetailCart,
         updateRetailQuantity,
         updateRetailDiscount,
